@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/chmi-radar/:file",
+      "destination": "https://opendata.chmi.cz/meteorology/weather/radar/composite/maxz/png/:file"
+    },
+    {
+      "source": "/chmi-sat/:path*",
+      "destination": "https://opendata.chmi.cz/meteorology/weather/satellite/geo/:path*"
+    },
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}

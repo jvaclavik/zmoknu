@@ -1,0 +1,3979 @@
+:root {
+  color-scheme: dark;
+  --bg-1: #05080f;
+  --bg-2: #0a1120;
+  --card: rgba(255, 255, 255, 0.06);
+  --card-border: rgba(255, 255, 255, 0.1);
+  --text: #eef2fb;
+  --muted: #9aa7c4;
+  --accent: #5bb6ff;
+  --accent-warm: #ffd166;
+  --radius: 18px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #05080f;
+  /* Vypnout „přetažení" (bounce/pull-to-refresh prohlížeče) – vodorovně kvůli
+     day-swipe, svisle kvůli vlastnímu pull-to-refresh a aby hlavička neposkakovala. */
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+  background-attachment: fixed;
+  min-height: 100vh;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background 0.8s ease;
+}
+
+/* Varianty oblohy podle počasí (ztmavené) */
+body[data-sky="clear"] {
+  background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66);
+}
+body[data-sky="cloud"] {
+  background: linear-gradient(160deg, #141b29, #1f2838);
+}
+body[data-sky="rain"] {
+  background: linear-gradient(160deg, #0d141d, #18222e);
+}
+body[data-sky="snow"] {
+  background: linear-gradient(160deg, #182032, #28324d);
+}
+body[data-sky="night"] {
+  background: linear-gradient(160deg, #03060d, #080e1a);
+}
+
+/* Krytí systémové lišty (čas/baterie) na iOS PWA – aby pod ni při scrollu
+   nepodjížděl obsah. Na zařízeních bez insetu (desktop) má nulovou výšku. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #05080f;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+/* Pull-to-refresh indikátor */
+.ptr {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  transform: translate(-50%, calc(var(--pull, 0px) - 46px));
+  z-index: 1500;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(16, 22, 36, 0.96);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: var(--p, 0);
+  pointer-events: none;
+  transition: transform 0.12s ease-out, opacity 0.15s;
+}
+.ptr-spinner {
+  display: flex;
+  color: var(--accent);
+}
+.ptr-spinner svg {
+  transform: rotate(calc(var(--p, 0) * 300deg));
+}
+.ptr.refreshing {
+  transform: translate(-50%, calc(env(safe-area-inset-top, 0px) + 8px));
+}
+.ptr.refreshing .ptr-spinner svg {
+  animation: ptr-spin 0.8s linear infinite;
+}
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app {
+  --page-px: clamp(12px, 3vw, 28px);
+  max-width: 1460px;
+  margin: 0 auto;
+  /* Header je nahoře → žádný horní padding. Boční insety kvůli notchi v landscape. */
+  padding: 0 calc(var(--page-px) + env(safe-area-inset-right)) 40px
+    calc(var(--page-px) + env(safe-area-inset-left));
+}
+
+/* Topbar */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: calc(12px + env(safe-area-inset-top)) var(--page-px) 12px;
+  margin: 0 calc(-1 * var(--page-px)) 12px;
+}
+
+/* Hlavička na dva řádky */
+.hb-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Druhý řádek – věta „předpověď pro [místo] na [den]".
+   Scroll jde až do kraje obrazovky, obsah ale začíná zarovnaný s 1. řádkem. */
+.hb-row2 {
+  margin: 0 calc(-1 * var(--page-px));
+  padding: 0 0 0 var(--page-px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.hb-row2::-webkit-scrollbar {
+  display: none;
+}
+.hb-row2 .hb-text {
+  display: inline-block;
+  padding-right: var(--page-px);
+  white-space: nowrap;
+}
+.hb-brand {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.hb-brand svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+.hb-logo-img {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+.hb-brandname {
+  flex-shrink: 0;
+  margin: 0 4px 0 0;
+  font-weight: 800;
+  font-size: 1.12rem;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.hb-q {
+  color: var(--accent);
+}
+.hb-text {
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.hb-pick {
+  font: inherit;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  border-radius: 7px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  vertical-align: middle;
+  position: relative;
+  top: -2px;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.hb-place {
+  color: var(--accent);
+  background: rgba(91, 182, 255, 0.16);
+}
+.hb-day {
+  color: var(--tier, var(--accent-warm));
+  background: color-mix(in srgb, var(--tier, var(--accent-warm)) 18%, transparent);
+}
+.hb-day.open {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.hb-day-static {
+  font-weight: 700;
+  color: var(--text);
+}
+.hb-today {
+  margin-left: auto;
+  /* Záporné svislé okraje zajistí, že 34px tlačítko nezvětší výšku řádku
+     (řádek si drží výšku loga ~30px), ať se ikonka zobrazuje nebo ne. */
+  margin-top: -2px;
+  margin-bottom: -2px;
+  flex-shrink: 0;
+  display: grid;
+  grid-auto-flow: column;
+  place-items: center;
+  gap: 6px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.hb-today-label {
+  display: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+/* Na desktopu ukážeme u ikonky hodin i popisek „Dnes". */
+@media (min-width: 641px) {
+  .hb-today {
+    width: auto;
+    padding: 0 12px;
+    height: 32px;
+  }
+  .hb-today-label {
+    display: inline;
+  }
+}
+@media (hover: hover) {
+  .hb-place:hover {
+    background: rgba(91, 182, 255, 0.26);
+  }
+  .hb-day:hover {
+    box-shadow: inset 0 0 0 1.5px currentColor;
+  }
+  .hb-today:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Plovoucí tlačítko radaru vpravo dole */
+.radar-fab {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  /* Nad obsahem/headerem (1100), ale POD modály a aktualizačním popupem
+     (pwa-backdrop 1399, modály 2000+), ať je nepřekrývá. */
+  z-index: 1200;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #05203a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.radar-fab svg {
+  width: 22px;
+  height: 22px;
+}
+/* Zavírací FAB v radaru – na stejném místě jako otevírací tlačítko. */
+@media (hover: hover) {
+  .radar-fab:hover {
+    transform: scale(1.06);
+  }
+}
+/* Ovládací klastr vpravo dole v mapě (nastavení + zavřít), blízko FAB pro otevření */
+.radar-mapctl {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: 12px;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.radar-mapctl .radar-ctl-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(10, 16, 26, 0.72);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.radar-mapctl-close {
+  background: var(--accent) !important;
+  color: #05203a !important;
+  border-color: transparent !important;
+}
+.radar-mapctl .radar-settings-panel {
+  bottom: calc(100% + 8px);
+  top: auto;
+  right: 0;
+}
+/* Pozadí hlavičky přes celou šířku obrazovky (i mimo max-width obsahu). */
+.topbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  z-index: -1;
+  background: rgba(6, 10, 18, 0.68);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.brand em {
+  color: var(--accent);
+  font-style: normal;
+}
+.topbar-ctx {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+  margin-left: auto;
+}
+.favmenu {
+  position: relative;
+  flex-shrink: 0;
+}
+.favmenu-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+.favmenu-btn.open {
+  background: rgba(255, 255, 255, 0.08);
+}
+@media (hover: hover) {
+  .favmenu-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+.favmenu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1100;
+  min-width: 180px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card-solid, #11161f);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.favmenu-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .favmenu-list button:hover {
+    background: rgba(255, 255, 255, 0.07);
+  }
+}
+.favmenu-list button.active {
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+.favmenu-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-warm);
+  flex-shrink: 0;
+}
+.favmenu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Navigace dnů jako spojený buttongroup: ‹ | vybraný den | › */
+.tb-daynav {
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  position: relative;
+  height: 32px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--card);
+  overflow: hidden;
+}
+.tb-dayarrow {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tb-dayarrow:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+.tb-dayarrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tb-daywrap,
+.tb-dayswitch {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.tb-caption {
+  font-size: 0.58rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding-left: 2px;
+  white-space: nowrap;
+}
+.tb-today {
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tb-today:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+.tb-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--tier, var(--accent-warm));
+  width: 9.6em;
+  justify-content: center;
+  white-space: nowrap;
+  border: none;
+  border-left: 1px solid var(--card-border);
+  border-right: 1px solid var(--card-border);
+  background: transparent;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tb-day-label {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (hover: hover) {
+  .tb-day:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+.tb-day.open {
+  background: color-mix(in srgb, var(--tier, var(--accent-warm)) 16%, transparent);
+}
+/* Ikonka radaru v hlavičce */
+.tb-radar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+@media (hover: hover) {
+  .tb-radar:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+.tb-daypanel {
+  position: relative;
+  flex-basis: 100%;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+/* Šipka mířící nahoru k tlačítku s aktuálním dnem */
+.tb-daypanel-arrow {
+  position: absolute;
+  top: -8px;
+  left: var(--arrow-x, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 8px solid var(--tier, var(--accent-warm));
+  pointer-events: none;
+  transition: left 0.12s ease;
+}
+.tb-daypanel .dayselect-wrap {
+  margin: 0;
+}
+.tb-day svg {
+  transition: transform 0.18s;
+}
+.tb-day.open svg {
+  transform: rotate(180deg);
+}
+.favmenu-chevron {
+  transition: transform 0.18s;
+}
+.favmenu-btn.open .favmenu-chevron {
+  transform: rotate(180deg);
+}
+@media (max-width: 560px) {
+  .app {
+    --page-px: 10px;
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .topbar-ctx {
+    min-width: 0;
+    margin-left: auto;
+    gap: 6px;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+  /* Hledání na mobilu jen jako ikona (název skryjeme, šetříme šířku). */
+  .search-trigger {
+    max-width: none;
+    padding: 0 8px;
+  }
+  .search-trigger-name {
+    display: none;
+  }
+  /* Panel hledání ukotvíme k viewportu, ať nevyjede mimo obrazovku. */
+  .search-panel {
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+  }
+  .favmenu,
+  .tb-daynav {
+    flex-shrink: 0;
+  }
+  .tb-day {
+    width: 8.4em;
+  }
+}
+
+/* Search */
+.searchbar {
+  position: relative;
+  flex-shrink: 0;
+}
+.search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  max-width: 200px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .search-trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+.search-trigger > svg:first-child {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.search-trigger-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.search-chevron {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.search-trigger.open .search-chevron {
+  transform: rotate(180deg);
+}
+.search-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1100;
+  width: min(320px, 86vw);
+  padding: 8px;
+  background: var(--card-solid, #11161f);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+/* ── Location picker (výběr místa) ─────────────────────── */
+.locpick {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.locpick-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(3, 6, 13, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+.locpick-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(460px, 100%);
+  max-height: min(80vh, 660px);
+  display: flex;
+  flex-direction: column;
+  background: var(--card-solid, #11161f);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.locpick-head {
+  display: flex;
+  align-items: center;
+  padding: 14px 14px 8px 18px;
+}
+.locpick-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.locpick-close {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+.locpick-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 4px;
+  padding: 0 6px 0 12px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  color: var(--muted);
+}
+.locpick-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 11px 0;
+}
+.locpick-search input::placeholder {
+  color: var(--muted);
+}
+.locpick-clear {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.locpick-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 10px 12px;
+}
+.locpick-section {
+  margin-top: 4px;
+}
+.locpick-label {
+  padding: 10px 8px 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.locpick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.locpick-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.locpick-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 10px;
+  border-radius: 11px;
+  cursor: pointer;
+}
+.locpick-pick > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.locpick-pick.active,
+.locpick-pick.active > svg {
+  color: var(--accent);
+}
+.locpick-rowtext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.locpick-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.locpick-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.locpick-star,
+.locpick-remove {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.locpick-star.on {
+  color: var(--accent-warm);
+}
+.locpick-empty {
+  padding: 12px 10px 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.locpick-locate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 6px 0 2px;
+  padding: 11px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: rgba(91, 182, 255, 0.1);
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.locpick-locate:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+@media (hover: hover) {
+  .locpick-pick:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .locpick-star:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+  }
+  .locpick-star.on:hover {
+    color: var(--accent-warm);
+  }
+  .locpick-remove:hover {
+    background: rgba(255, 80, 80, 0.16);
+    color: #ff6b6b;
+  }
+  .locpick-close:hover,
+  .locpick-clear:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .locpick-locate:hover {
+    background: rgba(91, 182, 255, 0.18);
+  }
+}
+
+/* Favorites bar */
+.favbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+@media (hover: hover) {
+  .fav-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+.fav-toggle.on {
+  color: var(--accent-warm);
+  border-color: rgba(255, 209, 102, 0.4);
+  background: rgba(255, 209, 102, 0.12);
+}
+.fav-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+@media (hover: hover) {
+  .fav-share:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+.fav-share.ok {
+  color: var(--accent);
+  border-color: rgba(91, 182, 255, 0.4);
+  background: rgba(91, 182, 255, 0.12);
+}
+.fav-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex: 1;
+  scrollbar-width: none;
+}
+.fav-chips::-webkit-scrollbar {
+  display: none;
+}
+.fav-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  align-self: center;
+}
+.fav-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.fav-chip.active {
+  border-color: var(--accent);
+  background: rgba(91, 182, 255, 0.14);
+}
+.fav-chip-name {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.fav-chip.editing .fav-chip-name {
+  padding-right: 4px;
+}
+.fav-chip-x {
+  background: rgba(255, 90, 90, 0.16);
+  border: none;
+  color: #ff8a8a;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  margin: 4px 5px 4px 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+@media (hover: hover) {
+  .fav-chip-x:hover {
+    background: rgba(255, 90, 90, 0.32);
+  }
+}
+.fav-edit {
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+.fav-edit.on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(91, 182, 255, 0.12);
+}
+
+/* yr.no hourly */
+/* Segmentový přepínač kroku výhledu (1h / 6h / 24h). */
+.yr-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.yr-seg button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  min-width: 44px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+@media (hover: hover) {
+  .yr-seg button:hover {
+    color: var(--text);
+  }
+}
+.yr-seg button.active {
+  background: var(--accent);
+  color: #05203a;
+}
+
+.yr-head,
+.yr-row {
+  display: grid;
+  grid-template-columns: 60px 44px 64px 1fr 96px;
+  align-items: center;
+  gap: 8px;
+  /* Zvýraznění řádku (výběr/hover) sahá až ke krajům karty. */
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  padding-left: var(--card-px);
+  padding-right: var(--card-px);
+}
+.yr-24 .yr-head,
+.yr-24 .yr-row {
+  grid-template-columns: minmax(110px, 1.4fr) 132px 64px 1fr 92px;
+}
+.yr-24 .yr-icon {
+  gap: 9px;
+}
+.yr-24 .yr-icon svg {
+  flex: 0 0 auto;
+}
+.yr-24 .yr-row {
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+.yr-row.clickable {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .yr-row.clickable:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+.yr-head {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-top: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.yr-24 .yr-time {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.yr-head .ta-r {
+  text-align: right;
+}
+.yr-row {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+@media (hover: hover) {
+  .yr-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+.yr-row.selected {
+  background: rgba(91, 182, 255, 0.12);
+  border-bottom-color: rgba(91, 182, 255, 0.2);
+}
+/* Řádek „teď" – nenápadný žlutý okraj, stejná barva jako „Teď" v grafu. */
+.yr-row.now {
+  box-shadow: inset 3px 0 0 rgba(255, 209, 102, 0.9);
+}
+.yr-dayhead {
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 14px 0 6px;
+  color: var(--text);
+}
+.yr-dayhead.clickable {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .yr-dayhead.clickable:hover {
+    color: var(--accent);
+  }
+}
+.yr-dayhead.today {
+  color: var(--accent-warm);
+}
+.yr-dayhead.selected {
+  color: var(--accent);
+}
+.yr-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.yr-icon {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  padding-right: 8px;
+}
+.yr-head span,
+.yr-dayhead {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.yr-temp {
+  text-align: right;
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+.yr-temp-sep {
+  color: var(--muted);
+  font-weight: 500;
+  opacity: 0.6;
+}
+.yr-precip {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+.yr-precip strong,
+.yr-precip em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+.yr-dry {
+  color: rgba(255, 255, 255, 0.22);
+  width: 100%;
+  text-align: right;
+}
+.yr-wind {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+.yr-wind strong,
+.yr-wind em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.yr-desc {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cards */
+.card {
+  --card-px: 18px;
+  --card-py: 18px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: var(--card-py) var(--card-px);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  margin-bottom: 16px;
+}
+.card-title {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-badge {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.7rem;
+  color: var(--accent-warm);
+  background: rgba(255, 209, 102, 0.14);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Content */
+.content {
+  display: block;
+}
+
+/* Current weather */
+.current-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.loc-name {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.loc-meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.loc-day {
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.14);
+  color: var(--accent-warm);
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+.big-temp-min {
+  font-size: 0.4em;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: 10px;
+  letter-spacing: 0;
+}
+.current-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 4px 0 18px;
+}
+.big-temp {
+  font-size: clamp(3.6rem, 14vw, 5.2rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.current-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.desc-label {
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+.feels {
+  color: var(--muted);
+}
+.current-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 10px;
+}
+.current-stats.comfort {
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 10px;
+}
+.current-stats.comfort .stat {
+  background: rgba(91, 182, 255, 0.1);
+  border: 1px solid rgba(91, 182, 255, 0.18);
+}
+@media (max-width: 560px) {
+  .current-stats.comfort {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.stat {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.stat-label {
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.stat-value {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.stat-sub {
+  font-style: normal;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+/* Hourly */
+.hourly-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.hourly-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.hourly-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+.hour {
+  flex: 0 0 auto;
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  scroll-snap-align: start;
+  position: relative;
+}
+@media (hover: hover) {
+  .hour:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+.hour-time {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.hour-day {
+  position: absolute;
+  top: -2px;
+  right: 6px;
+  font-size: 0.62rem;
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+.hour-temp {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.hour-pop {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.hour-pop.wet {
+  color: var(--accent);
+  font-weight: 700;
+}
+.hour-wind {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Daily */
+.daily-list {
+  display: flex;
+  flex-direction: column;
+}
+.day-row {
+  display: grid;
+  grid-template-columns: 72px 36px minmax(74px, 1fr) 30px 1.4fr 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .day-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+.day-row.active {
+  background: rgba(255, 209, 102, 0.12);
+  box-shadow: inset 3px 0 0 var(--accent-warm);
+}
+.day-row:last-child {
+  border-bottom: none;
+}
+.day-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.day-precip {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.day-mm {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+.day-pop-pct {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.day-dry {
+  color: rgba(255, 255, 255, 0.25);
+}
+.day-min {
+  text-align: right;
+  color: var(--muted);
+  font-weight: 500;
+}
+.day-max {
+  text-align: right;
+  font-weight: 700;
+}
+.day-bar {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+.day-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5bb6ff, #8ce0c0, #ffd166, #ff8a5b);
+}
+
+/* Přepínač dnů */
+.dayselect-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.dayselect-arrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  align-self: center;
+  height: 64px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+@media (hover: hover) {
+  .dayselect-arrow:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}
+.dayselect-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.dayselect {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.dayselect::-webkit-scrollbar {
+  display: none;
+}
+.dayselect-chip {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 72px;
+  padding: 13px 6px 9px;
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  overflow: hidden;
+}
+.dayselect-chip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--tier, var(--accent));
+}
+@media (hover: hover) {
+  .dayselect-chip:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}
+.dayselect-chip.active {
+  border-color: var(--accent);
+  background: rgba(91, 182, 255, 0.16);
+}
+.dayselect-chip.today {
+  border-color: var(--accent-warm);
+  box-shadow: inset 0 0 0 1px var(--accent-warm);
+}
+.dayselect-chip.today .ds-label {
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+.dayselect-chip .ds-temps em {
+  color: var(--tier, var(--text));
+}
+.ds-mm {
+  font-size: 0.66rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+.ds-label {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.ds-date {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.ds-temps {
+  display: flex;
+  gap: 5px;
+  font-size: 0.8rem;
+}
+.ds-temps em {
+  font-style: normal;
+  font-weight: 700;
+}
+.ds-temps i {
+  font-style: normal;
+  color: var(--muted);
+}
+
+/* Co si vzít na sebe */
+.wear-item-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.2;
+}
+.wear-item-note {
+  font-size: 0.68rem;
+  color: var(--wear-accent);
+  font-weight: 500;
+}
+.wear-card {
+  --wear-accent: #5bb6ff;
+}
+.wear-hot {
+  --wear-accent: #ff7a4d;
+}
+.wear-warm {
+  --wear-accent: #ffce5b;
+}
+.wear-mild {
+  --wear-accent: #5bd99a;
+}
+.wear-cool {
+  --wear-accent: #5bb6ff;
+}
+.wear-cold {
+  --wear-accent: #7f9be0;
+}
+.wear-freezing {
+  --wear-accent: #a9d2ff;
+}
+.wear-summary {
+  margin: 16px 0 12px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--wear-accent);
+}
+.wear-feelsnote {
+  margin: -8px 0 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.wear-grid {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  /* Scroll sahá až ke krajům karty (záporné okraje + kompenzační padding). */
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  padding: 0 var(--card-px) 4px;
+  scrollbar-width: none;
+}
+.wear-grid::-webkit-scrollbar {
+  display: none;
+}
+.wear-item {
+  flex: 0 0 auto;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  height: 104px;
+  overflow: hidden;
+  padding: 10px 6px 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  text-align: center;
+}
+.wear-item svg {
+  color: var(--wear-accent);
+}
+
+/* Přepínač aktivity (sedím / chodím / běhám) – kompaktní pilulka */
+.wear-activity {
+  display: inline-flex;
+  gap: 3px;
+  margin: -4px 0 14px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+.wear-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.wear-act svg {
+  width: 16px;
+  height: 16px;
+}
+.wear-act.on {
+  color: var(--wear-accent);
+  background: color-mix(in srgb, var(--wear-accent) 16%, transparent);
+}
+@media (hover: hover) {
+  .wear-act:not(.on):hover {
+    color: var(--text);
+  }
+}
+.dbg-activity {
+  --wear-accent: #5bb6ff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.dbg-activity-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+/* Nejlepší okno na ven – barvy dědí akcent karty „Co si vzít na sebe“ */
+.bestwin {
+  --bw-accent: var(--wear-accent, #5bb6ff);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bw-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bw-accent) 30%, transparent);
+  margin: 0;
+}
+.bestwin-bad {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--card-border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.bestwin-ic {
+  font-size: 1.3rem;
+}
+.bestwin-lead {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+/* Čas + počasí zarovnané doprava */
+.bestwin-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: right;
+}
+.bestwin-right strong {
+  font-size: 1.05rem;
+  color: var(--bw-accent);
+}
+.bestwin-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bestwin-state svg {
+  color: var(--bw-accent);
+}
+.bestwin-sub {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+/* Rozbalovací karta s detaily */
+.details-card {
+  padding: 0;
+  overflow: hidden;
+}
+.details-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.details-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+.details-peek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.details-body {
+  padding: 6px 16px 18px;
+}
+/* Nadpis skupiny detailů */
+.dd-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 12px 2px 8px;
+}
+.dd-group-title:first-child {
+  margin-top: 2px;
+}
+/* Responzivní mřížka dlaždic – stejně široké sloupce (stabilní při přepnutí dnů) */
+.dd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+.dd-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  min-width: 0;
+}
+.dd-tile-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.dd-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.dd-tile-label {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.dd-tile-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dd-tile-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.15;
+}
+.dd-tile-value-sm {
+  font-size: 1rem;
+}
+.dd-tile-sep {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--muted);
+}
+.dd-tile-unit {
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.dd-tile-note {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+/* Pyl uvnitř široké dlaždice */
+.aqi-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #06121f;
+}
+.aqi-good {
+  background: #6ee7a8;
+}
+.aqi-fair {
+  background: #b6e36e;
+}
+.aqi-moderate {
+  background: #ffd166;
+}
+.aqi-poor {
+  background: #ff9f5b;
+}
+.aqi-verypoor {
+  background: #ff7a4d;
+}
+.aqi-extreme {
+  background: #e879f9;
+}
+
+/* Univerzální pilulka úrovně (UV, prach, pyl, ovzduší) */
+.lvl-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #06121f;
+  white-space: nowrap;
+}
+.lvl-good {
+  background: #6ee7a8;
+}
+.lvl-fair {
+  background: #b6e36e;
+}
+.lvl-moderate {
+  background: #ffd166;
+}
+.lvl-poor {
+  background: #ff9f5b;
+}
+.lvl-verypoor {
+  background: #ff7a4d;
+}
+.lvl-extreme {
+  background: #e879f9;
+}
+.lvl-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.details-peek-uv {
+  display: inline-flex;
+  align-items: center;
+}
+/* Meteogram */
+.mg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.mg-head-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mg-head-when {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mg-dataview {
+  position: relative;
+}
+.mg-view-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .mg-view-btn:hover {
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+}
+.mg-view-btn.active {
+  color: var(--accent);
+  border-color: rgba(91, 182, 255, 0.5);
+  background: rgba(91, 182, 255, 0.12);
+}
+.mg-view-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 248px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(16, 22, 36, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.mg-view-days {
+  padding: 8px 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+.mg-view-days-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.mg-view-days-head strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.mg-view-days input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.mg-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px;
+  font-size: 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+.mg-view-toggle input {
+  accent-color: var(--accent);
+}
+.mg-view-hint {
+  padding: 6px 8px 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.mg-view-compare {
+  margin-top: 4px;
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.mg-view-compare-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 24px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mg-view-compare-actions {
+  display: inline-flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.mg-view-clear {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.74rem;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.mg-view-compare-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.mg-view-compare-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+}
+.mg-view-model {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.mg-view-model input {
+  accent-color: var(--accent);
+}
+.mg-view-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+.mg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0 0 12px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.mg-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-legend-line {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+}
+.mg-legend-val {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.mg-legend-note {
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.mg-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.mg-info-btn {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+}
+.mg-info-pop {
+  z-index: 1300;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(12, 18, 32, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+.mg-legend-line.dashed {
+  background-image: none;
+  -webkit-mask: repeating-linear-gradient(
+    90deg,
+    #000 0 4px,
+    transparent 4px 7px
+  );
+  mask: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 7px);
+}
+.mg-view-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9px;
+}
+.mg-view-row.active {
+  background: rgba(91, 182, 255, 0.12);
+}
+.mg-view-pick {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 9px;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.mg-view-pick .mg-glyph {
+  color: var(--muted);
+  flex: none;
+}
+.mg-view-row.active .mg-view-pick .mg-glyph {
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .mg-view-pick:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+.mg-view-pin {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  border-radius: 8px;
+}
+.mg-view-pin.on {
+  color: var(--accent-warm);
+}
+@media (hover: hover) {
+  .mg-view-pin:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+  }
+}
+.mg-readout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  min-height: 24px;
+}
+.mg-readout-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--accent-warm);
+  font-variant-numeric: tabular-nums;
+}
+.mg-past-tag {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.mg-readout-val {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.mg-readout-precip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.mg-dry {
+  color: var(--muted);
+  font-weight: 500;
+}
+.mg-missing {
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 209, 102, 0.12);
+  border: 1px solid rgba(255, 209, 102, 0.28);
+  color: var(--accent-warm);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.mg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.mg-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.mg-leg i {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.mg-bandlabel {
+  fill: var(--text);
+  font-size: 10px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(11, 18, 32, 0.92);
+  stroke-width: 3px;
+}
+.mg-nowlabel {
+  fill: #241a02;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.meteogram-card {
+  overflow: hidden;
+}
+.meteogram-plot {
+  position: relative;
+  /* Roztáhni graf až ke krajům karty (zruš vnitřní padding karty). */
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  /* Svislý scroll necháme prohlížeči, vodorovný tah používáme pro kurzor. */
+  touch-action: pan-y;
+  cursor: crosshair;
+  /* Na iOS zabraň lupě a označování textu při dotyku v grafu. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.mg-icons {
+  position: relative;
+  height: 26px;
+  margin-bottom: 2px;
+}
+.mg-icon {
+  position: absolute;
+  transform: translateX(-50%);
+  top: 0;
+}
+.mg-svg {
+  display: block;
+}
+/* Vnitřek grafu je dekorativní – dotyk vždy cílí na plot (konzistentní
+   touch-action: pan-y), i když tah začne na popiscích hodnot. */
+.mg-svg,
+.mg-icons {
+  pointer-events: none;
+}
+.mg-daylabel {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(11, 18, 32, 0.85);
+  stroke-width: 3px;
+}
+.mg-daylabel.today {
+  fill: var(--accent-warm);
+  font-size: 12px;
+}
+.mg-daylabel.selected {
+  fill: var(--accent);
+  font-size: 12px;
+}
+.mg-hourlabel {
+  fill: var(--muted);
+  font-size: 10px;
+  text-anchor: middle;
+}
+.mg-preciplabel {
+  fill: #8fd0ff;
+  font-size: 10px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(11, 18, 32, 0.9);
+  stroke-width: 3px;
+}
+.mg-extrema.feels {
+  fill: #c98bff;
+  font-size: 10px;
+}
+.mg-extrema.precip {
+  fill: #9fd0ff;
+  font-size: 10px;
+}
+.mg-extrema {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(11, 18, 32, 0.85);
+  stroke-width: 3px;
+}
+.mg-tip {
+  fill: #eaf1ff;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Stručný přehled vybraného dne nad meteogramem. */
+.mg-daysum {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mg-daysum-main {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.mg-daysum-temp {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mg-daysum-feels {
+  font-size: 0.76rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mg-daysum-tone {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #0c1320;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.mg-daysum-precip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  margin-left: auto;
+  color: #8fd0ff;
+  font-variant-numeric: tabular-nums;
+}
+.mg-daysum-precip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mg-daysum-precip strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.mg-daysum-prob {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Desktop: výraznější, vzdušnější summary. */
+@media (min-width: 920px) {
+  .mg-daysum {
+    gap: 18px;
+    padding: 2px 2px 4px;
+  }
+  .mg-daysum > svg {
+    width: 52px;
+    height: 52px;
+  }
+  .mg-daysum-main {
+    gap: 2px;
+  }
+  .mg-daysum-temp {
+    font-size: 1.85rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .mg-daysum-feels {
+    font-size: 0.98rem;
+  }
+  .mg-daysum-tone {
+    font-size: 0.78rem;
+    padding: 5px 13px;
+    letter-spacing: 0.05em;
+  }
+  .mg-daysum-precip-main {
+    gap: 7px;
+  }
+  .mg-daysum-precip strong {
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+  .mg-daysum-precip-main svg {
+    width: 15px;
+    height: 19px;
+  }
+  .mg-daysum-prob {
+    font-size: 0.86rem;
+  }
+}
+
+/* Ikonový readout hodiny pod kurzorem (pevné rozložení). */
+.mg-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px 10px;
+  margin: 2px 0 16px;
+}
+.mg-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+}
+/* Klikatelné statistiky = přepínač grafu. */
+.mg-stat-btn {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+@media (hover: hover) {
+  .mg-stat-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+}
+.mg-stat-btn.active {
+  background: rgba(91, 182, 255, 0.14);
+  border-color: rgba(91, 182, 255, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(91, 182, 255, 0.25);
+}
+.mg-stat-btn.active .mg-glyph {
+  color: var(--accent);
+}
+.mg-stat .mg-glyph {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.mg-stat-v {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.mg-stat-v strong {
+  font-size: 1.08rem;
+  font-weight: 900;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mg-stat-v span {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.mg-drops {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.mg-ptrend {
+  vertical-align: -2px;
+}
+.mg-ptrend.up {
+  color: #ff8a5b;
+}
+.mg-ptrend.down {
+  color: #7fb2ff;
+}
+.mg-ptrend.steady {
+  color: var(--muted);
+}
+/* Srážky: kapky nahoře, drobný text (mm + šance) pod nimi. */
+.mg-precip-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mg-precip-top .mg-drops.small {
+  gap: 1px;
+}
+
+/* Zvýraznění nestandardních hodnot – měníme jen obsah (text/ikonu),
+   pozadí ani okraj ne, ať položky nepřeskakují. */
+.mg-stat.flag-hot .mg-stat-v strong,
+.mg-stat.flag-hot .mg-glyph {
+  color: #ff8a5b;
+}
+.mg-stat.flag-vhot .mg-stat-v strong,
+.mg-stat.flag-vhot .mg-glyph {
+  color: #ff5b5b;
+}
+.mg-stat.flag-cold .mg-stat-v strong,
+.mg-stat.flag-cold .mg-glyph {
+  color: #7fb2ff;
+}
+.mg-stat.flag-vcold .mg-stat-v strong,
+.mg-stat.flag-vcold .mg-glyph {
+  color: #a9b4ff;
+}
+.mg-stat.flag-windy .mg-stat-v strong,
+.mg-stat.flag-windy .mg-glyph,
+.mg-stat.flag-vwindy .mg-stat-v strong,
+.mg-stat.flag-vwindy .mg-glyph {
+  color: #5bd99a;
+}
+.mg-stat.flag-wet .mg-stat-v strong {
+  color: #8fd0ff;
+}
+.mg-stat.flag-humid .mg-stat-v strong,
+.mg-stat.flag-humid .mg-glyph {
+  color: #4fd1b0;
+}
+
+/* Široký monitor: větší stats, ale pořád všech 8 vedle sebe. */
+@media (min-width: 1280px) {
+  .mg-stats {
+    gap: 10px 14px;
+  }
+  .mg-stat {
+    padding: 6px 10px;
+    gap: 11px;
+  }
+  .mg-stat-v strong {
+    font-size: 1.24rem;
+  }
+  .mg-stat-v span {
+    font-size: 0.78rem;
+  }
+  .mg-precip-sub {
+    font-size: 0.74rem;
+  }
+}
+
+/* Radar */
+.radar-card {
+  display: flex;
+  flex-direction: column;
+}
+.radar-tag {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.74rem;
+  color: var(--accent);
+  background: rgba(91, 182, 255, 0.14);
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  text-align: center;
+}
+.radar-tag.forecast {
+  color: var(--accent-warm);
+  background: rgba(255, 209, 102, 0.16);
+}
+.radar-expand {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+@media (hover: hover) {
+  .radar-expand:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.radar-source {
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 3px;
+  margin-bottom: 12px;
+}
+.radar-source button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.radar-source button.active {
+  background: var(--accent);
+  color: #05203a;
+}
+
+/* Přepínač délky historie ČHMÚ */
+.radar-chmilen {
+  display: inline-flex;
+  gap: 4px;
+  margin: -4px 0 12px 8px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+.radar-chmilen button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.radar-chmilen button.active {
+  background: var(--accent-warm);
+  color: #2a2208;
+}
+
+/* Radar přes celou obrazovku (v rámci appky) */
+.radar-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+}
+.radar-fullscreen .radar-map {
+  flex: 1;
+  height: auto;
+  border-radius: 0;
+  border: none;
+}
+/* Mapa je na celou šířku, ovládací lišty mají vlastní vnitřní okraje. */
+.radar-fullscreen .radar-scale {
+  padding: 6px 14px 0;
+}
+.radar-fullscreen .radar-bar {
+  padding: 0 14px calc(10px + env(safe-area-inset-bottom));
+}
+.radar-map {
+  position: relative;
+  height: 420px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+}
+.radar-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.radar-canvas .maplibregl-ctrl-attrib,
+.radar-canvas .maplibregl-ctrl-logo {
+  display: none;
+}
+.radar-basemap {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 650;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(11, 18, 32, 0.78);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+.radar-basemap button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.radar-basemap button.active {
+  background: var(--accent);
+  color: #05203a;
+}
+@media (min-width: 920px) {
+  .radar-map {
+    height: 520px;
+  }
+}
+.radar-loading {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 650;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(11, 18, 32, 0.82);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+}
+.radar-attr {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  z-index: 600;
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* Aktuální vybrané místo – výrazná tečka s pulsem */
+.loc-marker {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+.loc-dot {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(91, 182, 255, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.55);
+  z-index: 2;
+}
+.loc-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: rgba(91, 182, 255, 0.5);
+  animation: pulse 2s infinite ease-out;
+  z-index: 1;
+}
+
+/* Oblíbená místa na mapě – menší, decentní kulaté tečky */
+.fav-marker {
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  cursor: pointer;
+}
+.fav-dot {
+  display: block;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  background: var(--accent-warm);
+  border: 2.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease;
+}
+@media (hover: hover) {
+  .fav-marker:hover .fav-dot {
+    transform: scale(1.25);
+  }
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+.radar-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.radar-ctl-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+@media (hover: hover) {
+  .radar-ctl-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+.radar-ctl-btn.active {
+  background: var(--accent);
+  color: #05203a;
+  border-color: transparent;
+}
+.radar-settings {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 700;
+}
+.radar-settings-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(88vw, 320px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--card-solid, #11161f);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+.radar-set-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.radar-set-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.radar-seg {
+  display: inline-flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 3px;
+}
+.radar-seg button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.radar-seg button.active {
+  background: var(--accent);
+  color: #05203a;
+}
+.radar-seg-wrap {
+  flex-wrap: wrap;
+}
+.radar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.82rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.radar-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.radar-toggle.disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.radar-toggle.disabled input {
+  cursor: not-allowed;
+}
+.radar-set-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.radar-slider-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  touch-action: none;
+}
+.radar-ticks {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: 50%;
+  height: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.radar-tick {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.4);
+}
+.radar-tick.major {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+/* Pruh stavu snímků pod sliderem – zeleně načtené, žlutě zatím ne. Zarovnáno
+   stejným insetem (9px = poloměr thumbu) jako pozice thumbu. */
+.radar-frames {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: calc(50% + 13px);
+  height: 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+.radar-frame {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+}
+.radar-frame.ok {
+  background: #34d17a;
+}
+.radar-frame.pending {
+  background: #f5c542;
+}
+.play-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #05203a;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+@media (hover: hover) {
+  .play-btn:hover {
+    transform: scale(1.06);
+  }
+}
+.radar-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--accent) var(--pct, 50%),
+    rgba(255, 255, 255, 0.15) var(--pct, 50%)
+  );
+  outline: none;
+  cursor: pointer;
+  /* Ať tažení prstem po slideru neposouvá stránku, ale hýbe posuvníkem. */
+  touch-action: none;
+}
+.radar-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+.radar-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+.radar-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 48px;
+  text-align: right;
+}
+.radar-scale {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  min-height: 22px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.radar-scale-end {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.radar-now-marker {
+  position: absolute;
+  transform: translateX(-50%);
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+
+/* Úhrn srážek – legenda místo časového slideru */
+.radar-accum-bar {
+  align-items: center;
+}
+.radar-accum-legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.radar-accum-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.radar-accum-gradient {
+  height: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(
+    90deg,
+    rgba(120, 200, 255, 0.9) 0%,
+    rgba(60, 150, 240, 0.95) 22%,
+    rgba(70, 200, 120, 0.95) 45%,
+    rgba(240, 210, 70, 0.95) 66%,
+    rgba(240, 130, 50, 0.95) 84%,
+    rgba(230, 50, 70, 0.98) 100%
+  );
+}
+.radar-accum-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Banners + loading */
+.banner.error {
+  background: rgba(255, 90, 90, 0.16);
+  border: 1px solid rgba(255, 90, 90, 0.4);
+  color: #ffd0d0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+}
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 80px 0;
+  color: var(--muted);
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+.spinner.big {
+  width: 38px;
+  height: 38px;
+  border-width: 3px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Indikátor swipe gesta – kroužek se šipkou vylézající z kraje. */
+.swipe-hint {
+  position: fixed;
+  top: 50%;
+  z-index: 2000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: calc(0.35 + 0.65 * var(--p));
+}
+.swipe-hint.left {
+  left: 6px;
+  transform: translateY(-50%) translateX(calc((var(--p) - 1) * 64px));
+}
+.swipe-hint.right {
+  right: 6px;
+  flex-direction: row-reverse;
+  transform: translateY(-50%) translateX(calc((1 - var(--p)) * 64px));
+}
+.swipe-hint-day {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text);
+  background: rgba(20, 28, 44, 0.9);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.swipe-hint.ready .swipe-hint-day {
+  background: var(--accent);
+  color: #05203a;
+  border-color: transparent;
+}
+.swipe-hint-circle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--text);
+  background: rgba(20, 28, 44, 0.9);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease;
+}
+.swipe-hint.ready .swipe-hint-circle {
+  background: var(--accent);
+  color: #05203a;
+  transform: scale(1.12);
+}
+
+/* Loading = mráček s deštěm (jako v logu). */
+.rain-loader-cloud {
+  animation: rain-cloud-bob 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.rain-loader-drops line {
+  animation: rain-drop 1.1s ease-in infinite;
+  transform-box: fill-box;
+}
+.rain-loader-drops line.d2 {
+  animation-delay: 0.22s;
+}
+.rain-loader-drops line.d3 {
+  animation-delay: 0.44s;
+}
+@keyframes rain-cloud-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes rain-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rain-loader-cloud,
+  .rain-loader-drops line {
+    animation: none;
+  }
+}
+
+.footer {
+  text-align: center;
+  font-size: 0.74rem;
+  padding: 28px 0 8px;
+}
+.footer-note {
+  max-width: 46ch;
+  margin: 0 auto 12px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--muted);
+  font-style: italic;
+}
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+.footer a,
+.footer-link-btn {
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0.7;
+}
+.footer-link-btn {
+  border: none;
+  background: none;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .footer a:hover,
+  .footer-link-btn:hover {
+    text-decoration: underline;
+  }
+}
+.footer-sep {
+  color: var(--muted);
+  opacity: 0.5;
+  margin: 0 8px;
+}
+.footer-name {
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Panel s výběrem zdroje dat (modelu) nad patičkou */
+.settings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 16px;
+  margin: 28px 0 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--card-border);
+}
+.settings-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.settings-model-select {
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.settings-hint {
+  font-size: 0.74rem;
+  color: var(--muted);
+  max-width: 46ch;
+  text-align: center;
+}
+.lang-switch {
+  display: inline-flex;
+  gap: 6px;
+}
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  opacity: 0.5;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.lang-btn svg {
+  display: block;
+  border-radius: 2px;
+}
+.lang-btn.active {
+  opacity: 1;
+  border-color: var(--accent);
+}
+@media (hover: hover) {
+  .lang-btn:hover {
+    opacity: 1;
+  }
+}
+/* Modál „Jak to počítám" – test doporučení oblečení */
+.dbg-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.dbg-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.72);
+  backdrop-filter: blur(4px);
+}
+.dbg-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  overflow: auto;
+  background: rgba(16, 22, 36, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.dbg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.dbg-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.dbg-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  cursor: pointer;
+}
+.dbg-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.dbg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dbg-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dbg-slider-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.dbg-slider-head strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.dbg-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.dbg-select {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+}
+.dbg-preview {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+}
+.dbg-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.dbg-tone {
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: #05203a;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.dbg-cond {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.dbg-summary {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.dbg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+}
+.dbg-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  color: var(--text);
+}
+.dbg-item-label {
+  font-size: 0.78rem;
+}
+.dbg-item-note {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+.dbg-flags {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.dbg-flags-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dbg-flags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.dbg-flag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+.dbg-flag.on {
+  color: #062616;
+  background: #4ccf8e;
+  border-color: transparent;
+  font-weight: 700;
+}
+.dbg-flags-note {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.dbg-rules {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dbg-rulegroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dbg-rulelist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dbg-rule {
+  display: grid;
+  grid-template-columns: 26px minmax(110px, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.dbg-rule.on {
+  background: rgba(91, 217, 154, 0.12);
+  color: var(--text);
+}
+.dbg-rule-ico {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+.dbg-rule.on .dbg-rule-ico {
+  color: #5bd99a;
+}
+.dbg-rule-ico svg {
+  width: 22px;
+  height: 22px;
+}
+.dbg-rule-name {
+  font-weight: 600;
+}
+.dbg-rule-cond {
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .dbg-rule {
+    grid-template-columns: 24px 1fr;
+    grid-template-areas: "ico name" "ico cond";
+    row-gap: 2px;
+  }
+  .dbg-rule-ico {
+    grid-area: ico;
+  }
+  .dbg-rule-name {
+    grid-area: name;
+  }
+  .dbg-rule-cond {
+    grid-area: cond;
+    font-size: 0.76rem;
+  }
+}
+.wear-how-btn {
+  margin-left: auto;
+  border: 1px solid var(--card-border);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .wear-how-btn:hover {
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+}
+@media (max-width: 640px) {
+  .dbg-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .yr-head,
+  .yr-row {
+    grid-template-columns: 52px 28px 52px 1fr 50px;
+    gap: 10px;
+  }
+  .yr-icon {
+    justify-self: center;
+  }
+  .yr-24 .yr-head,
+  .yr-24 .yr-row {
+    grid-template-columns: minmax(88px, 1.4fr) 26px 42px minmax(46px, 1fr) 44px;
+    gap: 5px;
+  }
+  .yr-24 .yr-time {
+    font-size: 0.8rem;
+  }
+  .yr-24 .yr-icon {
+    gap: 4px;
+  }
+  .yr-24 .yr-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+  .yr-24 .yr-temp {
+    font-size: 0.95rem;
+  }
+  .yr-head {
+    font-size: 0.6rem;
+    letter-spacing: 0;
+  }
+  /* Na mobilu jen jedna ikona a jen jedna teplota (kompaktní řádek). */
+  .yr-icon svg:not(:first-child) {
+    display: none;
+  }
+  .yr-temp-min {
+    display: none;
+  }
+  /* Menší vnitřní okraje karet, ať má obsah (hlavně výhled) víc místa. */
+  .card {
+    --card-px: 10px;
+    --card-py: 14px;
+  }
+  /* Výběr dnů: bez šipek, lišta až ke krajům obrazovky. */
+  .dayselect-arrow {
+    display: none;
+  }
+  .dayselect-wrap {
+    margin-left: calc(-1 * var(--page-px));
+    margin-right: calc(-1 * var(--page-px));
+  }
+  .dayselect {
+    padding-left: var(--page-px);
+    padding-right: var(--page-px);
+  }
+  /* Menší hodinové ikonky ve dvou řadách. */
+  .mg-icons {
+    height: 36px;
+  }
+  .mg-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* Na mobilu do dvou řad, ať se vejdou. */
+  .mg-icon.row-a {
+    top: 0;
+  }
+  .mg-icon.row-b {
+    top: 18px;
+  }
+  /* Víc místa dole kvůli plovoucímu tlačítku radaru. */
+  .app {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  /* Výběr místa přes celou obrazovku na mobilu. */
+  .locpick {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+  }
+  .locpick-sheet {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+@media (max-width: 520px) {
+  .brand span {
+    display: none;
+  }
+  .fav-toggle span,
+  .fav-share span {
+    display: none;
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .day-row {
+    grid-template-columns: 56px 30px minmax(64px, 1fr) 26px 1fr 26px;
+    gap: 6px;
+  }
+  .day-mm {
+    font-size: 0.74rem;
+  }
+}
+
+/* Nabídka aktualizace PWA (nová verze k dispozici) */
+.pwa-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1399;
+  background: rgba(4, 8, 16, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.pwa-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 24px);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(16, 22, 36, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+}
+.pwa-toast-msg {
+  font-size: 0.88rem;
+}
+.pwa-toast-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.pwa-toast-btn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pwa-toast-btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #05203a;
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .pwa-toast-btn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+  .pwa-toast-btn.primary:hover {
+    filter: brightness(1.05);
+  }
+}
+@media (max-width: 480px) {
+  .pwa-toast {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .pwa-toast-actions {
+    justify-content: center;
+  }
+}
