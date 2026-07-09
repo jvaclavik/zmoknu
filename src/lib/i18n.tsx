@@ -109,6 +109,25 @@ const EN: Record<string, string> = {
   "Počet dní": "Number of days",
   "Počet zobrazených dní": "Number of displayed days",
   "Rozlišit den a noc": "Show day and night",
+  "Délka dne během roku": "Daylight length over the year",
+  "Kolik hodin je za den světlo (od východu do západu Slunce) v průběhu roku. Svislá čára je vybraný den, čísla dole jsou měsíce.":
+    "How many hours of daylight (sunrise to sunset) there are through the year. The vertical line is the selected day, the numbers below are months.",
+  "prodlužuje se o {n} min/den": "getting longer by {n} min/day",
+  "zkracuje se o {n} min/den": "getting shorter by {n} min/day",
+  "nejdelší den v roce": "longest day of the year",
+  "nejkratší den v roce": "shortest day of the year",
+  "Historický normál (30 let)": "Historical normal (30 yr)",
+  Normál: "Normal",
+  "Průměrná teplota pro daný den z let 1995–2024 (ERA5). Zobrazí se u grafu teploty.":
+    "Average temperature for the given day from 1995–2024 (ERA5). Shown on the temperature chart.",
+  "Průměrná teplota pro daný den z let 1995–2024 (ERA5).":
+    "Average temperature for the given day from 1995–2024 (ERA5).",
+  Průměr: "Average",
+  "Průměr 1995–2024": "Average 1995–2024",
+  "Aktuální průměr": "Current average",
+  Odchylka: "Anomaly",
+  "Průměr předpovědi pro tento den.": "Forecast average for this day.",
+  "Odchylka od historického normálu.": "Anomaly from the historical normal.",
   "Připnuté hodnoty se zobrazují nad grafem. Klikni na řádek pro zobrazení v grafu.":
     "Pinned values show above the chart. Click a row to display it in the chart.",
   Odepnout: "Unpin",
@@ -339,6 +358,7 @@ const EN: Record<string, string> = {
   "Zavřít radar": "Close radar",
   "Radar není k dispozici": "Radar isn’t available",
   "Načítám radar…": "Loading radar…",
+  "Načítám úhrn…": "Loading totals…",
   "Přednačítám snímky…": "Preloading frames…",
   minulost: "past",
   nyní: "now",
@@ -354,6 +374,13 @@ const EN: Record<string, string> = {
   Období: "Period",
   "Úhrn srážek z modelu Open-Meteo (mm za období).":
     "Precipitation totals from the Open-Meteo model (mm over the period).",
+  "Úhrn srážek z radaru ČHMÚ (MERGE, mm za období).":
+    "Precipitation totals from ČHMÚ radar (MERGE, mm over the period).",
+  mm: "mm",
+  "24 h": "24 h",
+  "48 h": "48 h",
+  "3 dny": "3 days",
+  "7 dní": "7 days",
   "Poslední 2 dny": "Past 2 days",
   "Poslední 3 dny": "Past 3 days",
   "Posledních 7 dní": "Past 7 days",
@@ -372,11 +399,19 @@ const EN: Record<string, string> = {
   "Je dostupná nová verze aplikace.": "A new version of the app is available.",
   Aktualizovat: "Update",
   Později: "Later",
+  "Aktualizovat aplikaci": "Update app",
 
   // SearchBar
   Zavřít: "Close",
+  Zpět: "Back",
   "Hledat město nebo obec…": "Search city or town…",
+  "Město, obec nebo GPS…": "City, town or GPS…",
   "Hledat město": "Search city",
+  "GPS souřadnice": "GPS coordinates",
+  "Zobrazit počasí pro tyto souřadnice":
+    "Show weather for these coordinates",
+  "Vybrat na mapě": "Pick on map",
+  "Vybrat toto místo": "Select this place",
   Vymazat: "Clear",
   "Hledám…": "Searching…",
   Výsledky: "Results",
@@ -387,6 +422,7 @@ const EN: Record<string, string> = {
   "Použít moji polohu": "Use my location",
   "Aktuální místo": "Current place",
   "Oblíbená místa": "Favorite places",
+  "Naposledy hledané": "Recently searched",
   "Zatím žádná. Vyhledej místo a přidej ho hvězdičkou.":
     "None yet. Search for a place and add it with the star.",
   "Odebrat {name}": "Remove {name}",

@@ -6,6 +6,7 @@ import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
 import Meteogram from "./components/Meteogram";
 import RadarMap from "./components/RadarMap";
+import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
@@ -141,6 +142,34 @@ export default function App() {
       setPull(0);
     }
   }, [loading]);
+
+  // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
+  // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
+  // FAB radaru poskočí. Čtená hodnota přes probe element je stabilní.
+  useEffect(() => {
+    const root = document.documentElement;
+    const probe = document.createElement("div");
+    probe.style.cssText =
+      "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;" +
+      "padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);" +
+      "padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);";
+    document.body.appendChild(probe);
+    const update = () => {
+      const s = getComputedStyle(probe);
+      root.style.setProperty("--sat", s.paddingTop || "0px");
+      root.style.setProperty("--sar", s.paddingRight || "0px");
+      root.style.setProperty("--sab", s.paddingBottom || "0px");
+      root.style.setProperty("--sal", s.paddingLeft || "0px");
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      probe.remove();
+    };
+  }, []);
 
   // Při změně místa zahodíme načtenou historii.
   useEffect(() => {
@@ -822,6 +851,7 @@ export default function App() {
                 day={selectedDay}
                 air={air[selectedDate] ?? null}
                 date={selectedDate}
+                lat={location.latitude}
               />
             )}
           </div>
@@ -907,6 +937,8 @@ export default function App() {
             GitHub
           </a>
         </div>
+
+        <ReloadPrompt />
       </footer>
     </div>
   );

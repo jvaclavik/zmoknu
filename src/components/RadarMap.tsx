@@ -13,6 +13,11 @@ import {
 } from "../lib/omRadar";
 import { buildChmiRadar, CHMI_BOUNDS, isInChmiCoverage } from "../lib/chmi";
 import {
+  precipColor,
+  PRECIP_SCALE,
+  PRECIP_LEGEND_LABELS,
+} from "../lib/precipScale";
+import {
   buildChmiSatFrames,
   CHMI_SAT_CZ_COORDS,
   type SatFrame,
@@ -21,6 +26,7 @@ import { clockTime } from "../lib/format";
 import { tr, getLang } from "../lib/i18n";
 import { darkStyle, loadTouristStyle, loadTouristDarkStyle } from "../lib/mapStyle";
 import { useStoredState } from "../lib/useStoredState";
+import { useBodyScrollLock } from "../lib/scrollLock";
 import { sameLocation } from "./FavoritesBar";
 
 type Basemap = "tourist" | "dark";
@@ -76,43 +82,12 @@ const ACC_RADIUS: maplibregl.ExpressionSpecification = [
   380,
 ] as maplibregl.ExpressionSpecification;
 
-// Barevná škála úhrnu (mm) – vrací [r,g,b,a] pro podíl frac = hodnota/scaleMax.
-// Pod „podlahou" (stopové srážky) je průhledná.
-type AccStop = [number, [number, number, number, number]];
-function accColorRGBA(frac: number, floorFrac: number): [number, number, number, number] {
-  const stops: AccStop[] = [
-    [0, [120, 200, 255, 0]],
-    [floorFrac, [120, 200, 255, 0]],
-    [0.12, [120, 200, 255, 0.72]],
-    [0.28, [60, 150, 240, 0.8]],
-    [0.45, [70, 200, 120, 0.85]],
-    [0.62, [240, 210, 70, 0.88]],
-    [0.8, [240, 130, 50, 0.9]],
-    [1, [230, 50, 70, 0.95]],
-  ];
-  if (frac <= stops[0][0]) return stops[0][1];
-  for (let i = 1; i < stops.length; i++) {
-    if (frac <= stops[i][0]) {
-      const [f0, c0] = stops[i - 1];
-      const [f1, c1] = stops[i];
-      const t = f1 === f0 ? 0 : (frac - f0) / (f1 - f0);
-      return [
-        Math.round(c0[0] + (c1[0] - c0[0]) * t),
-        Math.round(c0[1] + (c1[1] - c0[1]) * t),
-        Math.round(c0[2] + (c1[2] - c0[2]) * t),
-        c0[3] + (c1[3] - c0[3]) * t,
-      ];
-    }
-  }
-  return stops[stops.length - 1][1];
-}
-
 // Vyrenderuje pravidelnou mřížku úhrnů do canvasu s bilineární interpolací
 // mezi body → plynulé (kontinuální) pole. Vrátí data URL a rohy pro image
-// source (barva podle hodnoty, nezávislá na zoomu).
+// source. Barva podle absolutních mm (společná škála PRECIP_SCALE), takže
+// legenda i ČHMÚ vrstva sedí 1:1.
 function buildAccumImage(
   grid: { lats: number[]; lons: number[]; values: number[] },
-  scaleMax: number,
 ): { url: string; coords: [[number, number], [number, number], [number, number], [number, number]] } | null {
   const n = Math.round(Math.sqrt(grid.values.length));
   if (n < 2 || n * n !== grid.values.length) return null;
@@ -132,7 +107,6 @@ function buildAccumImage(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   const img = ctx.createImageData(W, H);
-  const floorFrac = Math.min(0.5, Math.max(0.6, scaleMax * 0.04) / scaleMax);
 
   const val = (i: number, j: number) => grid.values[i * n + j];
 
@@ -152,13 +126,12 @@ function buildAccumImage(
       const top = val(i0, j0) * (1 - tj) + val(i0, j1) * tj;
       const bot = val(i1, j0) * (1 - tj) + val(i1, j1) * tj;
       const v = top * (1 - ti) + bot * ti;
-      const frac = Math.min(1, v / scaleMax);
-      const [r, g, b, a] = accColorRGBA(frac, floorFrac);
+      const [r, g, b, a] = precipColor(v);
       const idx = (py * W + px) * 4;
       img.data[idx] = r;
       img.data[idx + 1] = g;
       img.data[idx + 2] = b;
-      img.data[idx + 3] = Math.round(a * 255);
+      img.data[idx + 3] = a;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -180,6 +153,22 @@ const CHMI_COORDS: [[number, number], [number, number], [number, number], [numbe
   [chmiE, chmiN],
   [chmiE, chmiS],
   [chmiW, chmiS],
+];
+
+type Corners = [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+];
+
+// Datový rozsah ČHMÚ MERGE mřížky (ODIM UL/UR/LR/LL). Menší než „paddovaný"
+// PNG kompozit radaru – sem umisťujeme vyrenderovaný úhrn srážek z /api.
+const MERGE_DATA_COORDINATES: Corners = [
+  [11.266869, 51.458369],
+  [19.623974, 51.458369],
+  [19.623974, 48.047275],
+  [11.266869, 48.047275],
 ];
 
 // ID první vrstvy podkladu, nad kterou chceme nechat hranice států a popisky
@@ -225,16 +214,26 @@ export default function RadarMap({
   const [omError, setOmError] = useState(false);
   const [accumPeriodId, setAccumPeriodId] = useStoredState<string>(
     "zmoknu.accumPeriod",
-    "past2",
+    "h24",
   );
   const accumPeriod =
     ACCUM_PERIODS.find((p) => p.id === accumPeriodId) ?? ACCUM_PERIODS[0];
-  // Denní úhrny se stahují jednou (na lokalitu); období počítáme lokálně.
+  // V pokrytí ČHMÚ bereme úhrn z radaru (MERGE), jinak fallback z Open-Meteo.
+  const accumChmi = inCz;
+  // Denní úhrny (Open-Meteo fallback) se stahují jednou; období počítáme lokálně.
   const [accumDaily, setAccumDaily] = useState<OmAccumDaily | null>(null);
   const [accumError, setAccumError] = useState(false);
+  // Vyrenderovaný overlay úhrnu (image URL + rohy) – z ČHMÚ nebo z Open-Meteo.
+  const [accumImg, setAccumImg] = useState<{
+    url: string;
+    coords: Corners;
+  } | null>(null);
   const accumGrid = useMemo(
-    () => (accumDaily ? sumAccumPeriod(accumDaily, accumPeriod) : null),
-    [accumDaily, accumPeriod],
+    () =>
+      accumDaily && !accumChmi
+        ? sumAccumPeriod(accumDaily, accumPeriod.hours)
+        : null,
+    [accumDaily, accumChmi, accumPeriod],
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -296,10 +295,34 @@ export default function RadarMap({
     };
   }, [source, location.latitude, location.longitude]);
 
-  // Úhrn srážek (Open-Meteo): stáhni denní úhrny JEDNÍM dotazem pro lokalitu.
-  // Přepínání období pak už síť nezatěžuje (počítá se z těchto dat).
+  // Úhrn srážek – ČHMÚ MERGE (radar). Serverová funkce sečte hodinové mřížky
+  // a vrátí obarvené PNG; načteme ho jako blob a vložíme jako image overlay.
   useEffect(() => {
-    if (source !== "accum") return;
+    if (source !== "accum" || !accumChmi) return;
+    let cancelled = false;
+    let objUrl: string | null = null;
+    setAccumImg(null);
+    setAccumError(false);
+    fetch(`/api/precip-accum?hours=${accumPeriod.hours}`)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("accum"))))
+      .then((b) => {
+        if (cancelled) return;
+        objUrl = URL.createObjectURL(b);
+        setAccumImg({ url: objUrl, coords: MERGE_DATA_COORDINATES });
+      })
+      .catch(() => {
+        if (!cancelled) setAccumError(true);
+      });
+    return () => {
+      cancelled = true;
+      if (objUrl) URL.revokeObjectURL(objUrl);
+    };
+  }, [source, accumChmi, accumPeriod.hours]);
+
+  // Úhrn srážek – fallback Open-Meteo (mimo pokrytí ČHMÚ). Denní úhrny stáhneme
+  // jednou; jednotlivá období pak počítáme lokálně (bez dalších dotazů).
+  useEffect(() => {
+    if (source !== "accum" || accumChmi) return;
     let cancelled = false;
     setAccumDaily(null);
     setAccumError(false);
@@ -313,7 +336,17 @@ export default function RadarMap({
     return () => {
       cancelled = true;
     };
-  }, [source, location.latitude, location.longitude]);
+  }, [source, accumChmi, location.latitude, location.longitude]);
+
+  // Fallback Open-Meteo: z denní mřížky vyrenderuj kontinuální obrázek úhrnu.
+  useEffect(() => {
+    if (source !== "accum" || accumChmi) return;
+    if (!accumGrid) {
+      setAccumImg(null);
+      return;
+    }
+    setAccumImg(buildAccumImage(accumGrid));
+  }, [source, accumChmi, accumGrid]);
 
   // Družicové snímky ČHMÚ (oblačnost) za posledních ~6 h po 15 min. Přepočítá
   // se při zapnutí vrstvy, ať se okno posune na aktuální čas.
@@ -608,10 +641,8 @@ export default function RadarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, source, omKey, basemap]);
 
-  // Úhrn srážek: statická heatmapa akumulace (mm) z mřížky Open-Meteo.
-  const accKey = accumGrid
-    ? `${accumPeriodId}:${accumGrid.lats.length}`
-    : "";
+  // Úhrn srážek: image overlay (mm) – z ČHMÚ MERGE nebo z Open-Meteo fallbacku.
+  const accKey = accumImg?.url ?? "";
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -619,17 +650,12 @@ export default function RadarMap({
     if (map.getLayer(`lyr-${ACC_ID}`)) map.removeLayer(`lyr-${ACC_ID}`);
     if (map.getSource(ACC_ID)) map.removeSource(ACC_ID);
 
-    if (source !== "accum" || !accumGrid) return;
-
-    // Kontinuální pole: mřížku vyrenderujeme s bilineární interpolací do
-    // obrázku a vložíme jako image overlay (barva podle mm, nezávislá na zoomu).
-    const built = buildAccumImage(accumGrid, accumPeriod.scaleMax);
-    if (!built) return;
+    if (source !== "accum" || !accumImg) return;
 
     map.addSource(ACC_ID, {
       type: "image",
-      url: built.url,
-      coordinates: built.coords,
+      url: accumImg.url,
+      coordinates: accumImg.coords,
     });
     map.addLayer(
       {
@@ -790,14 +816,14 @@ export default function RadarMap({
 
   const fullscreen = modal || expanded;
 
-  // Zamknout scroll a Esc při celé obrazovce + resize mapy.
+  // Spolehlivé zamčení scrollu pozadí při celé obrazovce (i na iOS).
+  useBodyScrollLock(fullscreen);
+  // Esc při celé obrazovce + resize mapy.
   useEffect(() => {
     if (!fullscreen) {
       const t = setTimeout(() => mapRef.current?.resize(), 80);
       return () => clearTimeout(t);
     }
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (modal) onClose?.();
@@ -806,7 +832,6 @@ export default function RadarMap({
     window.addEventListener("keydown", onKey);
     const t = setTimeout(() => mapRef.current?.resize(), 80);
     return () => {
-      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
       clearTimeout(t);
     };
@@ -816,7 +841,7 @@ export default function RadarMap({
     source === "omforecast"
       ? !!omGrid
       : source === "accum"
-        ? !!accumGrid
+        ? !!accumImg
         : frames.length > 0 && loaded.size >= frames.length;
 
   const errored =
@@ -843,7 +868,7 @@ export default function RadarMap({
     if (!playing || frames.length === 0 || !allLoaded) return;
     timer.current = window.setInterval(() => {
       setIndex((i) => (i + 1) % frames.length);
-    }, 700);
+    }, 500);
     return () => {
       if (timer.current) window.clearInterval(timer.current);
     };
@@ -862,19 +887,66 @@ export default function RadarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, lang]);
 
-  // Značky na slideru – tečka u každého snímku, zvýrazněná na celých hodinách.
+  // Značky na slideru – tečka u každého snímku, časový popisek na celých 6 h.
   const ticks = useMemo(() => {
     const n = frames.length;
     if (n <= 1) return [];
     return frames.map((f, i) => {
       const d = new Date(f.time * 1000);
+      const major = d.getMinutes() === 0 && d.getHours() % 6 === 0;
       return {
         left: (i / (n - 1)) * 100,
         hour: d.getMinutes() === 0,
-        major: d.getMinutes() === 0 && d.getHours() % 6 === 0,
+        major,
+        label: major ? clockTime(d) : "",
       };
     });
   }, [frames]);
+
+  // Scrubování časem přes celou spodní lištu – tažení kdekoliv (ne jen po thumbu).
+  // Tažná zóna = celý footer; měříme ale podle vizuální dráhy (trackRef).
+  const trackRef = useRef<HTMLDivElement>(null);
+  const scrubbing = useRef(false);
+  const scrubFrac = frames.length > 1 ? index / (frames.length - 1) : 0;
+
+  const scrubTo = (clientX: number) => {
+    const el = trackRef.current;
+    if (!el || frames.length <= 1) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) return;
+    const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    setIndex(Math.round(f * (frames.length - 1)));
+  };
+
+  const onScrubDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Kliknutí/tap na ovládací prvky (play, nastavení…) nescrubujeme.
+    if ((e.target as HTMLElement).closest("button, .radar-settings")) return;
+    scrubbing.current = true;
+    setPlaying(false);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    scrubTo(e.clientX);
+  };
+  const onScrubMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (scrubbing.current) scrubTo(e.clientX);
+  };
+  const endScrub = (e: React.PointerEvent<HTMLDivElement>) => {
+    scrubbing.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer už uvolněný */
+    }
+  };
+  const onScrubKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (frames.length <= 1) return;
+    if (e.key === "ArrowLeft") {
+      setPlaying(false);
+      setIndex(Math.max(0, index - 1));
+    } else if (e.key === "ArrowRight") {
+      setPlaying(false);
+      setIndex(Math.min(frames.length - 1, index + 1));
+    }
+  };
 
   const settingsControl = (
     <div className="radar-settings" ref={settingsRef}>
@@ -946,7 +1018,9 @@ export default function RadarMap({
                 ))}
               </div>
               <span className="radar-set-note">
-                {tr("Úhrn srážek z modelu Open-Meteo (mm za období).")}
+                {accumChmi
+                  ? tr("Úhrn srážek z radaru ČHMÚ (MERGE, mm za období).")
+                  : tr("Úhrn srážek z modelu Open-Meteo (mm za období).")}
               </span>
             </div>
           )}
@@ -1014,6 +1088,12 @@ export default function RadarMap({
       <div className="radar-map">
         <div ref={containerRef} className="radar-canvas" />
 
+        {source !== "accum" && !errored && frames.length > 0 && (
+          <div className={`radar-timebadge ${isForecast ? "forecast" : ""}`}>
+            {isForecast ? tr("predikce · {t}", { t: timeLabel }) : timeLabel}
+          </div>
+        )}
+
         {modal && (
           <div className="radar-mapctl">
             {settingsControl}
@@ -1040,7 +1120,8 @@ export default function RadarMap({
               </>
             ) : (
               <>
-                <span className="spinner" /> {tr("Načítám radar…")}
+                <span className="spinner" />{" "}
+                {source === "accum" ? tr("Načítám úhrn…") : tr("Načítám radar…")}
               </>
             )}
           </div>
@@ -1053,7 +1134,9 @@ export default function RadarMap({
             : source === "omforecast"
               ? "předpověď Open-Meteo (ICON)"
               : source === "accum"
-                ? "úhrn Open-Meteo"
+                ? accumChmi
+                  ? "úhrn ČHMÚ (MERGE)"
+                  : "úhrn Open-Meteo"
                 : "RainViewer"}
           {cloudsOn && " · družice ČHMÚ"}
         </div>
@@ -1075,18 +1158,46 @@ export default function RadarMap({
             </button>
           )}
           <div className="radar-accum-legend">
-            <span className="radar-accum-title">{tr(accumPeriod.label)}</span>
-            <div className="radar-accum-gradient" />
+            <span className="radar-accum-title">
+              {tr("Úhrn")} · {tr(accumPeriod.label)} · {tr("mm")}
+            </span>
+            <div className="radar-accum-swatches">
+              {PRECIP_SCALE.map((s) => (
+                <span
+                  key={s.min}
+                  className="radar-accum-swatch"
+                  style={{
+                    background: `rgb(${s.color[0]},${s.color[1]},${s.color[2]})`,
+                  }}
+                />
+              ))}
+            </div>
             <div className="radar-accum-ticks">
-              <span>0</span>
-              <span>{Math.round(accumPeriod.scaleMax / 2)}</span>
-              <span>{accumPeriod.scaleMax}+ mm</span>
+              {PRECIP_SCALE.map((s) => (
+                <span key={s.min}>
+                  {PRECIP_LEGEND_LABELS.includes(s.min) ? s.min : ""}
+                </span>
+              ))}
             </div>
           </div>
           {!modal && settingsControl}
         </div>
       ) : (
-        <>
+        <div
+          className="radar-footer"
+          role="slider"
+          tabIndex={0}
+          aria-label={tr("Posuvník času radaru")}
+          aria-valuemin={0}
+          aria-valuemax={Math.max(0, frames.length - 1)}
+          aria-valuenow={index}
+          aria-valuetext={timeLabel}
+          onPointerDown={onScrubDown}
+          onPointerMove={onScrubMove}
+          onPointerUp={endScrub}
+          onPointerCancel={endScrub}
+          onKeyDown={onScrubKey}
+        >
           <div className="radar-scale">
             <span className="radar-scale-end">
               {source === "chmi"
@@ -1096,9 +1207,6 @@ export default function RadarMap({
                 : source === "omforecast"
                   ? tr("teď")
                   : tr("minulost")}
-            </span>
-            <span className={`radar-tag ${isForecast ? "forecast" : ""}`}>
-              {isForecast ? tr("predikce · {t}", { t: timeLabel }) : timeLabel}
             </span>
             <span className="radar-scale-end">
               {source === "chmi"
@@ -1133,51 +1241,50 @@ export default function RadarMap({
               {playing ? <PauseGlyph /> : <PlayGlyph />}
             </button>
 
-            <div className="radar-slider-wrap">
-              <div className="radar-ticks">
+            <div className="radar-scrub">
+              <div className="radar-scrub-track" ref={trackRef}>
+                <div className="radar-scrub-line" />
+                <div
+                  className="radar-scrub-fill"
+                  style={{ width: `${scrubFrac * 100}%` }}
+                />
+                {frames.length > 1 &&
+                  frames.map((_, i) => {
+                    const status =
+                      source === "omforecast"
+                        ? "plain"
+                        : succeeded.has(`radar-src-${i}`)
+                          ? "ok"
+                          : "pending";
+                    return (
+                      <span
+                        key={i}
+                        className={`radar-scrub-dot ${status}`}
+                        style={{ left: `${(i / (frames.length - 1)) * 100}%` }}
+                      />
+                    );
+                  })}
                 {ticks.map((t, i) =>
-                  t.hour ? (
+                  t.major ? (
                     <span
-                      key={i}
-                      className={`radar-tick ${t.major ? "major" : ""}`}
+                      key={`l${i}`}
+                      className="radar-scrub-label"
                       style={{ left: `${t.left}%` }}
-                    />
+                    >
+                      {t.label}
+                    </span>
                   ) : null,
                 )}
+                <span
+                  className="radar-scrub-thumb"
+                  style={{ left: `${scrubFrac * 100}%` }}
+                />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, frames.length - 1)}
-                value={index}
-                onChange={(e) => {
-                  setPlaying(false);
-                  setIndex(Number(e.target.value));
-                }}
-                className="radar-slider"
-                style={{
-                  ["--pct" as string]: `${(index / Math.max(1, frames.length - 1)) * 100}%`,
-                }}
-                aria-label={tr("Posuvník času radaru")}
-              />
-              {source !== "omforecast" && frames.length > 1 && (
-                <div className="radar-frames" aria-hidden="true">
-                  {frames.map((_, i) => (
-                    <span
-                      key={i}
-                      className={`radar-frame ${
-                        succeeded.has(`radar-src-${i}`) ? "ok" : "pending"
-                      }`}
-                      style={{ left: `${(i / (frames.length - 1)) * 100}%` }}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
 
             {!modal && settingsControl}
           </div>
-        </>
+        </div>
       )}
     </section>
   );

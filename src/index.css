@@ -80,7 +80,7 @@ body::before {
   top: 0;
   left: 0;
   right: 0;
-  height: env(safe-area-inset-top, 0px);
+  height: var(--sat, env(safe-area-inset-top, 0px));
   background: #05080f;
   z-index: 2000;
   pointer-events: none;
@@ -89,7 +89,7 @@ body::before {
 /* Pull-to-refresh indikátor */
 .ptr {
   position: fixed;
-  top: env(safe-area-inset-top, 0px);
+  top: var(--sat, env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translate(-50%, calc(var(--pull, 0px) - 46px));
   z-index: 1500;
@@ -113,7 +113,7 @@ body::before {
   transform: rotate(calc(var(--p, 0) * 300deg));
 }
 .ptr.refreshing {
-  transform: translate(-50%, calc(env(safe-area-inset-top, 0px) + 8px));
+  transform: translate(-50%, calc(var(--sat, env(safe-area-inset-top, 0px)) + 8px));
 }
 .ptr.refreshing .ptr-spinner svg {
   animation: ptr-spin 0.8s linear infinite;
@@ -129,8 +129,8 @@ body::before {
   max-width: 1460px;
   margin: 0 auto;
   /* Header je nahoře → žádný horní padding. Boční insety kvůli notchi v landscape. */
-  padding: 0 calc(var(--page-px) + env(safe-area-inset-right)) 40px
-    calc(var(--page-px) + env(safe-area-inset-left));
+  padding: 0 calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px)))
+    40px calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
 /* Topbar */
@@ -142,7 +142,8 @@ body::before {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: calc(12px + env(safe-area-inset-top)) var(--page-px) 12px;
+  padding: calc(12px + var(--sat, env(safe-area-inset-top, 0px))) var(--page-px)
+    12px;
   margin: 0 calc(-1 * var(--page-px)) 12px;
 }
 
@@ -226,7 +227,7 @@ body::before {
   background: color-mix(in srgb, var(--tier, var(--accent-warm)) 18%, transparent);
 }
 .hb-day.open {
-  box-shadow: inset 0 0 0 1.5px currentColor;
+  background: color-mix(in srgb, var(--tier, var(--accent-warm)) 30%, transparent);
 }
 .hb-day-static {
   font-weight: 700;
@@ -272,7 +273,7 @@ body::before {
     background: rgba(91, 182, 255, 0.26);
   }
   .hb-day:hover {
-    box-shadow: inset 0 0 0 1.5px currentColor;
+    background: color-mix(in srgb, var(--tier, var(--accent-warm)) 30%, transparent);
   }
   .hb-today:hover {
     background: rgba(255, 255, 255, 0.08);
@@ -282,10 +283,9 @@ body::before {
 /* Plovoucí tlačítko radaru vpravo dole */
 .radar-fab {
   position: fixed;
-  right: calc(16px + env(safe-area-inset-right));
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  /* Nad obsahem/headerem (1100), ale POD modály a aktualizačním popupem
-     (pwa-backdrop 1399, modály 2000+), ať je nepřekrývá. */
+  right: calc(16px + var(--sar, env(safe-area-inset-right, 0px)));
+  bottom: calc(16px + var(--sab, env(safe-area-inset-bottom, 0px)));
+  /* Nad obsahem/headerem (1100), ale POD modály (2000+), ať je nepřekrývá. */
   z-index: 1200;
   width: 44px;
   height: 44px;
@@ -720,7 +720,8 @@ body::before {
   position: relative;
   z-index: 1;
   width: min(460px, 100%);
-  max-height: min(80vh, 660px);
+  /* Pevná výška, ať modál neposkakuje podle počtu výsledků; obsah se scrolluje. */
+  height: min(80vh, 660px);
   display: flex;
   flex-direction: column;
   background: var(--card-solid, #11161f);
@@ -805,6 +806,26 @@ body::before {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+}
+.locpick-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.locpick-clearall {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0 2px;
+}
+@media (hover: hover) {
+  .locpick-clearall:hover {
+    color: var(--text);
+  }
 }
 .locpick-list {
   list-style: none;
@@ -896,6 +917,84 @@ body::before {
   opacity: 0.7;
   cursor: default;
 }
+/* Méně výrazná varianta (např. „Vybrat na mapě") */
+.locpick-locate.subtle {
+  background: transparent;
+  border-color: var(--card-border);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Výběr místa na mapě (překryv nad location pickerem) */
+.mappick {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #05080f);
+}
+.mappick-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+  border-bottom: 1px solid var(--card-border);
+  background: var(--card);
+}
+.mappick-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin-left: -6px;
+}
+.mappick-coords {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.mappick-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.mappick-map .maplibregl-map {
+  position: absolute;
+  inset: 0;
+}
+.mappick-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 2;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.mappick-foot {
+  padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  background: var(--card);
+  border-top: 1px solid var(--card-border);
+}
+.mappick-confirm {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #05203a;
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: pointer;
+}
 @media (hover: hover) {
   .locpick-pick:hover {
     background: rgba(255, 255, 255, 0.06);
@@ -917,6 +1016,9 @@ body::before {
   }
   .locpick-locate:hover {
     background: rgba(91, 182, 255, 0.18);
+  }
+  .locpick-locate.subtle:hover {
+    background: rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -1147,7 +1249,7 @@ body::before {
 .yr-row {
   padding-top: 6px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 @media (hover: hover) {
   .yr-row:hover {
@@ -1889,6 +1991,10 @@ body::before {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
 }
+/* Sekce „Slunce a Měsíc“ – pevně 2 sloupce (2×2), sloučená délka dne přes celou šířku */
+.dd-grid-sun {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .dd-tile {
   display: flex;
   align-items: flex-start;
@@ -1954,6 +2060,65 @@ body::before {
   font-size: 0.74rem;
   color: var(--muted);
   line-height: 1.35;
+}
+
+/* Sloučená dlaždice „Délka dne“ (hodnota + roční graf), přes celou šířku 2×2 */
+.dd-daylight {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.dd-daylight-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dd-daylight-headtext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dd-daylight-now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dd-daylight-trend {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.dd-daylight-plot {
+  position: relative;
+}
+.dd-daylight-axis {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.dd-daylight-svg {
+  display: block;
+  width: 100%;
+  touch-action: none;
+}
+.dd-daylight-tip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: rgba(11, 31, 51, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.dd-daylight-tip strong {
+  color: var(--text);
+  font-weight: 700;
 }
 /* Pyl uvnitř široké dlaždice */
 .aqi-pill {
@@ -2254,6 +2419,15 @@ body::before {
   );
   mask: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 7px);
 }
+.mg-legend-line.dotted {
+  background-image: none;
+  -webkit-mask: repeating-linear-gradient(
+    90deg,
+    #000 0 2px,
+    transparent 2px 4px
+  );
+  mask: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px);
+}
 .mg-view-row {
   display: flex;
   align-items: center;
@@ -2402,7 +2576,8 @@ body::before {
   /* Roztáhni graf až ke krajům karty (zruš vnitřní padding karty). */
   margin-left: calc(-1 * var(--card-px));
   margin-right: calc(-1 * var(--card-px));
-  /* Svislý scroll necháme prohlížeči, vodorovný tah používáme pro kurzor. */
+  /* Nad proužkem ikon necháme svislý scroll stránky (pan-y); zámek dotyku je
+     jen na samotném grafu (.mg-svg níže). */
   touch-action: pan-y;
   cursor: crosshair;
   /* Na iOS zabraň lupě a označování textu při dotyku v grafu. */
@@ -2414,20 +2589,38 @@ body::before {
   position: relative;
   height: 26px;
   margin-bottom: 2px;
+  /* Ikony počasí: dotyk propadne na plot (pan-y) → svislý scroll tu funguje. */
+  pointer-events: none;
 }
 .mg-icon {
   position: absolute;
   transform: translateX(-50%);
   top: 0;
 }
+/* Graf: dotyk cílí sem a plně ho řídí JS (scrubování + pinch), proto zámek
+   svislého scrollu jen tady. Události bublají na plot, kde jsou handlery. */
 .mg-svg {
   display: block;
+  pointer-events: auto;
+  touch-action: none;
 }
-/* Vnitřek grafu je dekorativní – dotyk vždy cílí na plot (konzistentní
-   touch-action: pan-y), i když tah začne na popiscích hodnot. */
-.mg-svg,
-.mg-icons {
+/* Zoom nápověda (např. „3 dny") uprostřed grafu. */
+.mg-zoomhint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
   pointer-events: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(10, 16, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 .mg-daylabel {
   fill: var(--muted);
@@ -2499,6 +2692,11 @@ body::before {
   color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.mg-daysum-sep {
+  color: var(--muted);
+  font-weight: 500;
+  opacity: 0.6;
 }
 .mg-daysum-feels {
   font-size: 0.76rem;
@@ -2729,20 +2927,28 @@ body::before {
   display: flex;
   flex-direction: column;
 }
-.radar-tag {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 0.74rem;
-  color: var(--accent);
-  background: rgba(91, 182, 255, 0.14);
-  padding: 2px 9px;
+/* Malý badge s aktuálním časem nahoře uprostřed mapy. */
+.radar-timebadge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 4px 12px;
   border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(10, 16, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   white-space: nowrap;
-  text-align: center;
+  pointer-events: none;
 }
-.radar-tag.forecast {
+.radar-timebadge.forecast {
   color: var(--accent-warm);
-  background: rgba(255, 209, 102, 0.16);
 }
 .radar-expand {
   display: grid;
@@ -3107,59 +3313,99 @@ body::before {
   color: var(--muted);
   line-height: 1.35;
 }
-.radar-slider-wrap {
+/* Tažná zóna = celý footer (řádek s časy + řádek s ovládáním), od kraje ke kraji
+   a až k hornímu okraji footeru. Vizuál se nemění, jen se zvětší plocha pro prst. */
+.radar-footer {
+  position: relative;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.radar-footer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+/* V oblasti nastavení necháme normální dotyk (menu, posun). */
+.radar-footer .radar-settings {
+  touch-action: auto;
+}
+/* Vizuální posuvník (dráha, tečky, thumb). Tažení řeší footer, ne tento prvek. */
+.radar-scrub {
   position: relative;
   flex: 1;
+  align-self: stretch;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  touch-action: none;
+  padding: 0 9px; /* místo pro thumb na krajích */
 }
-.radar-ticks {
-  position: absolute;
-  left: 9px;
-  right: 9px;
-  top: 50%;
-  height: 0;
-  pointer-events: none;
-  z-index: 2;
+.radar-scrub-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
 }
-.radar-tick {
+.radar-scrub-line,
+.radar-scrub-fill {
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px;
-  height: 7px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.4);
+  height: 6px;
+  transform: translateY(-50%);
+  border-radius: 999px;
 }
-.radar-tick.major {
-  height: 12px;
-  background: rgba(255, 255, 255, 0.7);
+.radar-scrub-line {
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.15);
 }
-/* Pruh stavu snímků pod sliderem – zeleně načtené, žlutě zatím ne. Zarovnáno
-   stejným insetem (9px = poloměr thumbu) jako pozice thumbu. */
-.radar-frames {
+.radar-scrub-fill {
+  left: 0;
+  background: var(--accent);
+}
+.radar-scrub-dot {
   position: absolute;
-  left: 9px;
-  right: 9px;
-  top: calc(50% + 13px);
-  height: 4px;
-  pointer-events: none;
-  z-index: 2;
-}
-.radar-frame {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
+  top: 50%;
   width: 4px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
 }
-.radar-frame.ok {
+.radar-scrub-dot.ok {
   background: #34d17a;
 }
-.radar-frame.pending {
+.radar-scrub-dot.pending {
   background: #f5c542;
+}
+.radar-scrub-dot.plain {
+  background: rgba(255, 255, 255, 0.55);
+}
+.radar-scrub-label {
+  position: absolute;
+  top: calc(50% + 9px);
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.radar-scrub-thumb {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--accent);
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 .play-btn {
   display: grid;
@@ -3178,40 +3424,6 @@ body::before {
   .play-btn:hover {
     transform: scale(1.06);
   }
-}
-.radar-slider {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    var(--accent) var(--pct, 50%),
-    rgba(255, 255, 255, 0.15) var(--pct, 50%)
-  );
-  outline: none;
-  cursor: pointer;
-  /* Ať tažení prstem po slideru neposouvá stránku, ale hýbe posuvníkem. */
-  touch-action: none;
-}
-.radar-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--accent);
-  cursor: pointer;
-}
-.radar-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--accent);
-  cursor: pointer;
 }
 .radar-time {
   font-variant-numeric: tabular-nums;
@@ -3257,25 +3469,24 @@ body::before {
   font-weight: 700;
   color: var(--text);
 }
-.radar-accum-gradient {
+.radar-accum-swatches {
+  display: flex;
   height: 10px;
   border-radius: 6px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(
-    90deg,
-    rgba(120, 200, 255, 0.9) 0%,
-    rgba(60, 150, 240, 0.95) 22%,
-    rgba(70, 200, 120, 0.95) 45%,
-    rgba(240, 210, 70, 0.95) 66%,
-    rgba(240, 130, 50, 0.95) 84%,
-    rgba(230, 50, 70, 0.98) 100%
-  );
+}
+.radar-accum-swatch {
+  flex: 1;
 }
 .radar-accum-ticks {
   display: flex;
-  justify-content: space-between;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   color: var(--muted);
+}
+.radar-accum-ticks span {
+  flex: 1;
+  text-align: center;
 }
 
 /* Banners + loading */
@@ -3868,7 +4079,7 @@ body::before {
   }
   /* Víc místa dole kvůli plovoucímu tlačítku radaru. */
   .app {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    padding-bottom: calc(84px + var(--sab, env(safe-area-inset-bottom, 0px)));
   }
   /* Výběr místa přes celou obrazovku na mobilu. */
   .locpick {
@@ -3907,73 +4118,36 @@ body::before {
 }
 
 /* Nabídka aktualizace PWA (nová verze k dispozici) */
-.pwa-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1399;
-  background: rgba(4, 8, 16, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-.pwa-toast {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  z-index: 1400;
-  display: flex;
+/* Nenápadné tlačítko „Aktualizovat aplikaci“ v patičce – zobrazí se jen když je
+   k dispozici novější verze (PWA service worker). */
+.footer-update-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  max-width: calc(100vw - 24px);
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(16, 22, 36, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
-  color: var(--text);
-}
-.pwa-toast-msg {
-  font-size: 0.88rem;
-}
-.pwa-toast-actions {
-  display: flex;
-  gap: 8px;
-  flex: none;
-}
-.pwa-toast-btn {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.05);
+  gap: 7px;
+  margin-top: 16px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
-  padding: 7px 14px;
-  border-radius: 999px;
+  font-size: 0.78rem;
   cursor: pointer;
+  opacity: 0.85;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease;
 }
-.pwa-toast-btn.primary {
+.footer-update-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   background: var(--accent);
-  border-color: transparent;
-  color: #05203a;
-  font-weight: 700;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 @media (hover: hover) {
-  .pwa-toast-btn:hover {
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-  .pwa-toast-btn.primary:hover {
-    filter: brightness(1.05);
-  }
-}
-@media (max-width: 480px) {
-  .pwa-toast {
-    left: 12px;
-    right: 12px;
-    transform: none;
-    flex-direction: column;
-    align-items: stretch;
-    text-align: center;
-  }
-  .pwa-toast-actions {
-    justify-content: center;
+  .footer-update-btn:hover {
+    opacity: 1;
+    border-color: var(--accent);
   }
 }

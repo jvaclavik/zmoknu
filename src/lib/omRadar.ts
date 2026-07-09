@@ -83,27 +83,24 @@ export interface OmAccumDaily {
 
 // Menší mřížka pro úhrn – šetří „váhu" API dotazu (méně bodů = méně 429).
 const ACC_N = 13;
-// Kolik dní stáhnout do minulosti / budoucnosti (kryje všechna období).
-const ACC_PAST_DAYS = 30;
-const ACC_FORECAST_DAYS = 7;
+// Kolik dní stáhnout do minulosti (kryje všechna období). +1 den do budoucna
+// kvůli dnešku.
+const ACC_PAST_DAYS = 8;
+const ACC_FORECAST_DAYS = 1;
 
-// Definice období: počet dní a směr (minulost/budoucnost) od „teď". Úhrn
-// počítáme z denních součtů srážek (precipitation_sum), aby přenos zůstal malý
-// i pro delší okna (30 dní).
+// Definice období úhrnu (do minulosti od „teď"). `hours` řídí ČHMÚ MERGE
+// (radar), `days` fallback z Open-Meteo mimo pokrytí ČHMÚ.
 export interface AccumPeriod {
   id: string;
   label: string; // český popisek (klíč pro i18n)
-  days: number;
-  future: boolean;
-  scaleMax: number; // horní hranice barevné škály (mm)
+  hours: number;
 }
 
 export const ACCUM_PERIODS: AccumPeriod[] = [
-  { id: "past2", label: "Poslední 2 dny", days: 2, future: false, scaleMax: 40 },
-  { id: "past3", label: "Poslední 3 dny", days: 3, future: false, scaleMax: 60 },
-  { id: "past7", label: "Posledních 7 dní", days: 7, future: false, scaleMax: 100 },
-  { id: "past30", label: "Posledních 30 dní", days: 30, future: false, scaleMax: 250 },
-  { id: "next7", label: "Příštích 7 dní", days: 7, future: true, scaleMax: 100 },
+  { id: "h24", label: "24 h", hours: 24 },
+  { id: "h48", label: "48 h", hours: 48 },
+  { id: "h72", label: "3 dny", hours: 72 },
+  { id: "h168", label: "7 dní", hours: 168 },
 ];
 
 // Stáhne denní úhrny pro celé okno JEDNÍM dotazem (pro danou lokalitu).
@@ -149,11 +146,9 @@ export async function fetchOmAccumDaily(
   return { lats, lons, days, daily };
 }
 
-// Z denních úhrnů spočítá součet za zvolené období (bez síťového dotazu).
-export function sumAccumPeriod(
-  raw: OmAccumDaily,
-  period: AccumPeriod,
-): OmAccumGrid {
+// Z denních úhrnů spočítá součet za posledních N dní (bez síťového dotazu).
+export function sumAccumPeriod(raw: OmAccumDaily, hours: number): OmAccumGrid {
+  const days = Math.max(1, Math.round(hours / 24));
   const now = Date.now() / 1000;
   // Index dneška = poslední den, jehož začátek už nastal.
   let todayIdx = 0;
@@ -161,11 +156,8 @@ export function sumAccumPeriod(
     if (raw.days[i] <= now) todayIdx = i;
   }
 
-  const [from, to] = period.future
-    ? [todayIdx, todayIdx + period.days - 1]
-    : [todayIdx - (period.days - 1), todayIdx];
-  const lo = Math.max(0, from);
-  const hi = Math.min(raw.daily[0]?.length ? raw.daily[0].length - 1 : 0, to);
+  const lo = Math.max(0, todayIdx - (days - 1));
+  const hi = todayIdx;
 
   const values = raw.daily.map((arr) => {
     let sum = 0;

@@ -7,7 +7,13 @@ import { dayHeader } from "../lib/format";
 import { useStoredState } from "../lib/useStoredState";
 import { tempColor } from "../lib/tempColor";
 import { TIER_COLOR, TIER_LABEL, tempTier } from "../lib/tiers";
-import { fetchModelSeries, type ModelSeries } from "../lib/openMeteo";
+import {
+  fetchModelSeries,
+  fetchClimateNormals,
+  normalDoy,
+  type ModelSeries,
+  type ClimateNormals,
+} from "../lib/openMeteo";
 import { WEATHER_MODELS, modelColor, modelLabel } from "../lib/models";
 import WeatherIcon from "./WeatherIcon";
 
@@ -90,6 +96,42 @@ function dayShort() {
   return getLang() === "en" ? DAY_SHORT_EN : DAY_SHORT_CS;
 }
 
+// Popisek úrovně detailu při zoomu, se správným skloňováním (1 den / 2 dny / 5 dní).
+function daysLabel(n: number): string {
+  if (getLang() === "en") return `${n} ${n === 1 ? "day" : "days"}`;
+  if (n === 1) return "1 den";
+  if (n < 5) return `${n} dny`;
+  return `${n} dní`;
+}
+
+// Barva odchylky denního průměru od normálu podle její výraznosti (°C).
+// Kladná = teple (světle oranžová → tmavě červená), záporná = chladně
+// (světle modrá → tmavě modrá). Sytost i krytí rostou s velikostí odchylky.
+function anomalyColor(diff: number): { fill: string; line: string } {
+  const m = Math.min(1, Math.abs(diff) / 10); // nasycení dosáhne stropu u ~10 °C
+  const warm = diff >= 0;
+  const mild = warm ? [255, 176, 120] : [140, 205, 235];
+  const strong = warm ? [200, 40, 30] : [30, 80, 210];
+  const r = Math.round(mild[0] + (strong[0] - mild[0]) * m);
+  const g = Math.round(mild[1] + (strong[1] - mild[1]) * m);
+  const b = Math.round(mild[2] + (strong[2] - mild[2]) * m);
+  const alpha = 0.18 + 0.34 * m;
+  return { fill: `rgba(${r},${g},${b},${alpha})`, line: `rgb(${r},${g},${b})` };
+}
+
+// Normál interpolovaný mezi dnem a následujícím dnem podle hodiny v ISO čase –
+// dá plynulou křivku (normál se mění den ode dne, ne skokem o půlnoci).
+function interpNormal(arr: (number | null)[], iso: string): number | null {
+  const doy = normalDoy(iso);
+  const a = arr[doy];
+  const b = arr[(doy + 1) % arr.length];
+  const hour = Number(iso.slice(11, 13)) || 0;
+  const frac = hour / 24;
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return a + (b - a) * frac;
+}
+
 export default function Meteogram({
   hourly,
   activeDate,
@@ -115,13 +157,21 @@ export default function Meteogram({
     "zmoknu.mgNight",
     true,
   );
+  const [showNormal, setShowNormal] = useStoredState<boolean>(
+    "zmoknu.mgNormal",
+    false,
+  );
+  const [normals, setNormals] = useState<ClimateNormals | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
   const viewBtnRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
-    null,
-  );
+  const [menuPos, setMenuPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+    maxH: number;
+  } | null>(null);
   const plotRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -136,7 +186,22 @@ export default function Meteogram({
       const b = viewBtnRef.current;
       if (!b) return;
       const r = b.getBoundingClientRect();
-      setMenuPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+      const right = window.innerWidth - r.right;
+      const gap = 6;
+      const margin = 8;
+      const below = window.innerHeight - r.bottom - margin - gap;
+      const above = r.top - margin - gap;
+      // Otevři dolů, pokud je tam víc místa; jinak nad tlačítko. Výšku vždy ořízni
+      // dostupným prostorem (obsah se pak scrolluje) – ať menu nepřeteče z okna.
+      if (below >= above) {
+        setMenuPos({ top: r.bottom + gap, right, maxH: Math.min(below, 560) });
+      } else {
+        setMenuPos({
+          bottom: window.innerHeight - r.top + gap,
+          right,
+          maxH: Math.min(above, 560),
+        });
+      }
     };
     place();
     window.addEventListener("resize", place);
@@ -174,8 +239,9 @@ export default function Meteogram({
 
   const todayStr = isoLocal(new Date());
 
-  // Počet zobrazených dní volí uživatel (1–5) v nabídce zobrazení dat.
-  const windowHours = Math.min(5, Math.max(1, days)) * 24;
+  // Počet zobrazených dní volí uživatel (1–7) v nabídce zobrazení dat nebo
+  // pinch gestem nad grafem.
+  const windowHours = Math.min(7, Math.max(1, days)) * 24;
 
   // Okno začíná na 00:00 vybraného dne (nebo dneška).
   const points = useMemo(() => {
@@ -205,7 +271,7 @@ export default function Meteogram({
   const iconStep = useMemo(() => {
     if (!pph) return 2;
     for (const s of [2, 3, 4, 6, 12]) {
-      if (s * pph >= 16) return s;
+      if (s * pph >= 26) return s;
     }
     return 24;
   }, [pph]);
@@ -231,6 +297,22 @@ export default function Meteogram({
       cancelled = true;
     };
   }, [compareModels, lat, lon, omVar]);
+
+  // Historický normál (ERA5, 30 let) – stáhne se jednou pro lokalitu při zapnutí.
+  useEffect(() => {
+    if (!showNormal || lat == null || lon == null) return;
+    let cancelled = false;
+    fetchClimateNormals(lat, lon)
+      .then((n) => {
+        if (!cancelled) setNormals(n);
+      })
+      .catch(() => {
+        if (!cancelled) setNormals(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showNormal, lat, lon]);
 
   const toggleCompare = (id: string) =>
     setCompareModels(
@@ -332,7 +414,34 @@ export default function Meteogram({
     return bands;
   }, [points]);
 
-  const series = useMemo(() => buildSeries(tab, points), [tab, points]);
+  const baseSeries = useMemo(() => buildSeries(tab, points), [tab, points]);
+
+  // Historický normál kreslíme jen u skutečné teploty (naše data jsou teplotní).
+  // Hodnotu plynule interpolujeme mezi dny podle hodiny, aby se čára viditelně
+  // měnila den ode dne (ne plochý schod na den).
+  const normalData = useMemo(() => {
+    if (!showNormal || !normals || tab !== "temp") return null;
+    const mean = points.map((p) => interpNormal(normals.mean, p.time));
+    const max = points.map((p) => interpNormal(normals.max, p.time));
+    const min = points.map((p) => interpNormal(normals.min, p.time));
+    if (!mean.some((v) => v != null)) return null;
+    return { mean, max, min };
+  }, [showNormal, normals, tab, points]);
+
+  // Osa Y musí pojmout i normál (pásmo min–max), ať čára nevyjede z grafu.
+  const series = useMemo(() => {
+    if (!normalData) return baseSeries;
+    let { min, max } = baseSeries;
+    for (const arr of [normalData.min, normalData.max]) {
+      for (const v of arr) {
+        if (v != null && Number.isFinite(v)) {
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+    }
+    return { ...baseSeries, min, max };
+  }, [baseSeries, normalData]);
 
   const precipBars = useMemo(() => {
     const bars: { startI: number; endI: number; value: number; prob: number }[] =
@@ -416,6 +525,76 @@ export default function Meteogram({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
 
+  // Normál: pásmo min–max (obvyklý rozsah) pro kontext.
+  const normalBandPath = useMemo(() => {
+    if (!normalData || !pph) return "";
+    const { max, min } = normalData;
+    let d = "";
+    let started = false;
+    for (let i = 0; i < max.length; i++) {
+      const v = max[i];
+      if (v == null) continue;
+      d += `${started ? "L" : "M"} ${x(i)} ${yCurve(v)} `;
+      started = true;
+    }
+    for (let i = min.length - 1; i >= 0; i--) {
+      const v = min[i];
+      if (v == null) continue;
+      d += `L ${x(i)} ${yCurve(v)} `;
+    }
+    if (!started) return "";
+    d += "Z";
+    return d;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalData, pph, series]);
+
+  // Rozdíl PRŮMĚRNÝCH teplot po dnech: pro každý den spočítáme denní průměr
+  // předpovědi a denní normál, vyznačíme obě úrovně vodorovně a plochu mezi
+  // nimi obarvíme (teple = tepleji než obvykle, chladně = chladněji).
+  const anomalyDays = useMemo(() => {
+    if (!normalData || tab !== "temp" || !pph) return null;
+    const segs: {
+      x0: number;
+      x1: number;
+      yActual: number;
+      yNormal: number;
+      fill: string;
+      line: string;
+    }[] = [];
+    for (const b of dayBands) {
+      let sa = 0;
+      let ca = 0;
+      let sn = 0;
+      let cn = 0;
+      for (let i = b.startI; i <= b.endI; i++) {
+        const a = points[i]?.temperature;
+        if (a != null && Number.isFinite(a)) {
+          sa += a;
+          ca++;
+        }
+        const n = normalData.mean[i];
+        if (n != null && Number.isFinite(n)) {
+          sn += n;
+          cn++;
+        }
+      }
+      if (!ca || !cn) continue;
+      const aAvg = sa / ca;
+      const nAvg = sn / cn;
+      const col = anomalyColor(aAvg - nAvg);
+      segs.push({
+        x0: b.startI * pph,
+        x1: (b.endI + 1) * pph,
+        yActual: yCurve(aAvg),
+        yNormal: yCurve(nAvg),
+        fill: col.fill,
+        line: col.line,
+      });
+    }
+    return segs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalData, tab, points, dayBands, pph, series]);
+
   // Multimód: čáry jednotlivých modelů pro aktuální veličinu (stejná osa Y).
   const compareLines = useMemo(() => {
     if (!modelSeries.length || !pph || isCloud) return [];
@@ -485,6 +664,57 @@ export default function Meteogram({
   );
 
   const pressing = useRef(false);
+  // Aktivní dotyky (pointerId → poloha) pro rozpoznání pinch gesta nad grafem.
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinch = useRef<{ startDist: number; startDays: number } | null>(null);
+  // Aktuální počet dní pro nativní wheel listener (mimo React uzávěr).
+  const daysRef = useRef(days);
+  daysRef.current = days;
+
+  // Krátká nápověda o úrovni detailu při zoomu (např. „3 dny").
+  const [daysHint, setDaysHint] = useState<number | null>(null);
+  const daysHintTimer = useRef<number | null>(null);
+  const showDaysHint = (n: number) => {
+    setDaysHint(n);
+    if (daysHintTimer.current) window.clearTimeout(daysHintTimer.current);
+    daysHintTimer.current = window.setTimeout(() => setDaysHint(null), 900);
+  };
+  const showDaysHintRef = useRef(showDaysHint);
+  showDaysHintRef.current = showDaysHint;
+  useEffect(
+    () => () => {
+      if (daysHintTimer.current) window.clearTimeout(daysHintTimer.current);
+    },
+    [],
+  );
+
+  // Pinch na trackpadu (macOS) přichází jako wheel s ctrlKey. React onWheel je
+  // pasivní (nejde preventDefault kvůli zoomu stránky), proto nativní listener.
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el) return;
+    let accum = 0;
+    const STEP = 18; // citlivost gesta
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // jen pinch / ctrl+kolečko, běžný scroll necháme
+      e.preventDefault();
+      accum += e.deltaY;
+      let next = daysRef.current;
+      if (accum <= -STEP) {
+        accum = 0;
+        next = Math.max(1, daysRef.current - 1); // roztažení = přiblížit
+      } else if (accum >= STEP) {
+        accum = 0;
+        next = Math.min(7, daysRef.current + 1); // sevření = oddálit
+      }
+      if (next !== daysRef.current) {
+        setDays(next);
+        showDaysHintRef.current(next);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setDays]);
 
   function handlePointer(clientX: number) {
     const el = plotRef.current;
@@ -501,6 +731,34 @@ export default function Meteogram({
   // ať nesáhneme na points[cursor], které už neexistuje.
   const ci = Math.min(Math.max(0, cursor), points.length - 1);
   const active = points[ci];
+
+  // Statistika pro den pod kurzorem: denní průměr předpovědi vs. normál a rozdíl.
+  const normalStats = useMemo(() => {
+    if (!normalData) return null;
+    const band =
+      dayBands.find((b) => ci >= b.startI && ci <= b.endI) ?? dayBands[0];
+    if (!band) return null;
+    let sa = 0;
+    let ca = 0;
+    let sn = 0;
+    let cn = 0;
+    for (let i = band.startI; i <= band.endI; i++) {
+      const a = points[i]?.temperature;
+      if (a != null && Number.isFinite(a)) {
+        sa += a;
+        ca++;
+      }
+      const n = normalData.mean[i];
+      if (n != null && Number.isFinite(n)) {
+        sn += n;
+        cn++;
+      }
+    }
+    const actual = ca ? sa / ca : null;
+    const normal = cn ? sn / cn : null;
+    const diff = actual != null && normal != null ? actual - normal : null;
+    return { actual, normal, diff };
+  }, [normalData, dayBands, points, ci]);
 
   // Tendence tlaku za poslední ~3 h (pro trendovou šipku ve stats).
   const pressureDelta = active.pressure - points[Math.max(0, ci - 3)].pressure;
@@ -547,8 +805,11 @@ export default function Meteogram({
                 role="menu"
                 style={{
                   position: "fixed",
-                  top: menuPos?.top ?? 0,
                   right: menuPos?.right ?? 0,
+                  ...(menuPos?.bottom != null
+                    ? { bottom: menuPos.bottom }
+                    : { top: menuPos?.top ?? 0 }),
+                  maxHeight: menuPos?.maxH,
                 }}
               >
               <div className="mg-view-days">
@@ -570,7 +831,7 @@ export default function Meteogram({
                 <input
                   type="range"
                   min={1}
-                  max={5}
+                  max={7}
                   step={1}
                   value={days}
                   onChange={(e) => setDays(Number(e.target.value))}
@@ -585,6 +846,21 @@ export default function Meteogram({
                 />
                 <span>{tr("Rozlišit den a noc")}</span>
               </label>
+              <label className="mg-view-toggle">
+                <input
+                  type="checkbox"
+                  checked={showNormal}
+                  onChange={(e) => setShowNormal(e.target.checked)}
+                />
+                <span>{tr("Historický normál (30 let)")}</span>
+              </label>
+              {showNormal && (
+                <div className="mg-view-hint">
+                  {tr(
+                    "Průměrná teplota pro daný den z let 1995–2024 (ERA5). Zobrazí se u grafu teploty.",
+                  )}
+                </div>
+              )}
               <div className="mg-view-hint">
                 {tr(
                   "Připnuté hodnoty se zobrazují nad grafem. Klikni na řádek pro zobrazení v grafu.",
@@ -692,18 +968,9 @@ export default function Meteogram({
         />
       )}
 
-      {compareLines.length > 0 && (
+      {(compareLines.length > 0 || normalData) && (
         <div className="mg-legend">
-          <span
-            className="mg-legend-item"
-            title={
-              model === "best_match"
-                ? tr(
-                    "Automaticky = Open-Meteo vybírá nejvhodnější model podle lokality (v ČR obvykle ICON-D2/ICON-EU pro první dny, ECMWF pro vzdálenější).",
-                  )
-                : modelLabel(model)
-            }
-          >
+          <span className="mg-legend-item" title={modelLabel(model)}>
             <span
               className="mg-legend-line"
               style={{ background: series.stroke }}
@@ -712,7 +979,70 @@ export default function Meteogram({
             <strong className="mg-legend-val">
               {series.fmt(series.primary[ci])}
             </strong>
+            {model === "best_match" && (
+              <InfoHint
+                text={tr(
+                  "„Automaticky“ volí nejlepší model dle lokality (v ČR ICON, pro vzdálenější dny ECMWF).",
+                )}
+              />
+            )}
           </span>
+          {normalData && normalStats && (
+            <>
+              <span
+                className="mg-legend-item"
+                title={tr(
+                  "Průměrná teplota pro daný den z let 1995–2024 (ERA5).",
+                )}
+              >
+                <span
+                  className="mg-legend-line dotted"
+                  style={{ background: "#9aa7bd" }}
+                />
+                {tr("Průměr 1995–2024")}
+                <strong className="mg-legend-val">
+                  {normalStats.normal != null
+                    ? series.fmt(normalStats.normal)
+                    : "–"}
+                </strong>
+              </span>
+              <span
+                className="mg-legend-item"
+                title={tr("Průměr předpovědi pro tento den.")}
+              >
+                <span
+                  className="mg-legend-line dotted"
+                  style={{
+                    background:
+                      (normalStats.diff ?? 0) >= 0 ? "#ff8a5b" : "#63c7e0",
+                  }}
+                />
+                {tr("Aktuální průměr")}
+                <strong className="mg-legend-val">
+                  {normalStats.actual != null
+                    ? series.fmt(normalStats.actual)
+                    : "–"}
+                </strong>
+              </span>
+              {normalStats.diff != null && (
+                <span
+                  className="mg-legend-item"
+                  title={tr("Odchylka od historického normálu.")}
+                >
+                  {tr("Odchylka")}
+                  <strong
+                    className="mg-legend-val"
+                    style={{
+                      color: normalStats.diff >= 0 ? "#ff8a5b" : "#63c7e0",
+                    }}
+                  >
+                    {normalStats.diff >= 0 ? "+" : ""}
+                    {series.fmt(normalStats.diff)}
+                  </strong>
+                </span>
+              )}
+            </>
+          )}
           {compareLines.map((cl) => {
             const v = modelSeries
               .find((ms) => ms.model === cl.model)
@@ -730,13 +1060,6 @@ export default function Meteogram({
               </span>
             );
           })}
-          {model === "best_match" && (
-            <InfoHint
-              text={tr(
-                "„Automaticky“ volí nejlepší model dle lokality (v ČR ICON, pro vzdálenější dny ECMWF).",
-              )}
-            />
-          )}
         </div>
       )}
 
@@ -744,21 +1067,59 @@ export default function Meteogram({
         className="meteogram-plot"
         ref={plotRef}
         onPointerDown={(e) => {
+          pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          // Druhý prst = pinch: zrušíme scrubování a zapamatujeme výchozí stav.
+          if (pointers.current.size >= 2) {
+            pressing.current = false;
+            const [a, b] = [...pointers.current.values()];
+            pinch.current = { startDist: ptDist(a, b), startDays: days };
+            return;
+          }
           pressing.current = true;
           e.currentTarget.setPointerCapture(e.pointerId);
           handlePointer(e.clientX);
         }}
         onPointerMove={(e) => {
+          if (pointers.current.has(e.pointerId)) {
+            pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          }
+          // Pinch nad grafem mění počet dní: roztažení = přiblížit (méně dní),
+          // sevření = oddálit (více dní). Rozsah 1–7.
+          if (pinch.current && pointers.current.size >= 2) {
+            const [a, b] = [...pointers.current.values()];
+            const d = ptDist(a, b);
+            if (d > 0 && pinch.current.startDist > 0) {
+              const raw =
+                pinch.current.startDays * (pinch.current.startDist / d);
+              const next = Math.max(1, Math.min(7, Math.round(raw)));
+              if (next !== days) {
+                setDays(next);
+                showDaysHint(next);
+              } else {
+                showDaysHint(next); // ať se nápověda drží po celou dobu gesta
+              }
+            }
+            return;
+          }
           // Myš scrubuje při přejezdu; dotyk/pero jen během tažení.
           if (e.pointerType === "mouse" || pressing.current) handlePointer(e.clientX);
         }}
-        onPointerUp={() => {
+        onPointerUp={(e) => {
+          pointers.current.delete(e.pointerId);
+          if (pointers.current.size < 2) pinch.current = null;
           pressing.current = false;
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          pointers.current.delete(e.pointerId);
+          if (pointers.current.size < 2) pinch.current = null;
           pressing.current = false;
         }}
       >
+        {daysHint != null && (
+          <div className="mg-zoomhint" aria-hidden="true">
+            {daysLabel(daysHint)}
+          </div>
+        )}
         {/* proužek ikon – po 2 hodinách, střídavě ve dvou řadách */}
         <div className="mg-icons">
           {pph > 0 &&
@@ -1008,6 +1369,46 @@ export default function Meteogram({
             pph > 0 && (
               <>
                 <path d={areaPath} fill="url(#grad-primary)" />
+                {normalBandPath && (
+                  <path
+                    d={normalBandPath}
+                    fill="rgba(150,165,190,0.14)"
+                    stroke="none"
+                  />
+                )}
+                {anomalyDays?.map((s, i) => (
+                  <g key={`anom-${i}`}>
+                    <rect
+                      x={s.x0}
+                      y={Math.min(s.yActual, s.yNormal)}
+                      width={Math.max(0, s.x1 - s.x0)}
+                      height={Math.abs(s.yActual - s.yNormal)}
+                      fill={s.fill}
+                    />
+                    {/* denní normál (obvyklý průměr) */}
+                    <line
+                      x1={s.x0}
+                      y1={s.yNormal}
+                      x2={s.x1}
+                      y2={s.yNormal}
+                      stroke="#9aa7bd"
+                      strokeWidth="1.6"
+                      strokeDasharray="2 2"
+                      strokeLinecap="round"
+                    />
+                    {/* denní průměr předpovědi */}
+                    <line
+                      x1={s.x0}
+                      y1={s.yActual}
+                      x2={s.x1}
+                      y2={s.yActual}
+                      stroke={s.line}
+                      strokeWidth="2"
+                      strokeDasharray="2 2"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                ))}
                 {compareLines.map((cl) => (
                   <path
                     key={`cmp-${cl.model}`}
@@ -1172,7 +1573,7 @@ function DaySummary({
           <span style={{ color: tempColor(day.tempMin) }}>
             {Math.round(day.tempMin)}°
           </span>
-          {" / "}
+          <span className="mg-daysum-sep"> / </span>
           <span style={{ color: tempColor(day.tempMax) }}>
             {Math.round(day.tempMax)}°
           </span>
@@ -1919,6 +2320,11 @@ function InfoHint({ text }: { text: string }) {
         )}
     </span>
   );
+}
+
+// Vzdálenost dvou dotyků (pro pinch gesto).
+function ptDist(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function cursorTimeLabel(iso: string): string {

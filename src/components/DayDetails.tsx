@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { DailyPoint } from "../types";
 import type { AirQuality, LevelTier } from "../lib/airQuality";
 import { aqiLabel, pmLevel, pollenLevel } from "../lib/airQuality";
@@ -9,6 +15,37 @@ interface Props {
   day: DailyPoint;
   air: AirQuality | null;
   date: string;
+  lat?: number;
+}
+
+// Délka dne (h) pro daný den v roce a zeměpisnou šířku – čistě astronomicky,
+// bez API. Deklinace přibližně dle Cooperovy formule, hodinový úhel z acos.
+function daylightHours(lat: number, doy: number): number {
+  const latRad = (lat * Math.PI) / 180;
+  const decl =
+    ((-23.44 * Math.PI) / 180) * Math.cos((2 * Math.PI * (doy + 10)) / 365);
+  // Standardní výška Slunce při východu/západu (−0,833°: refrakce + poloměr disku),
+  // aby délka dne odpovídala času východu/západu z API, ne jen geometrii.
+  const alt0 = (-0.833 * Math.PI) / 180;
+  const cosH =
+    (Math.sin(alt0) - Math.sin(latRad) * Math.sin(decl)) /
+    (Math.cos(latRad) * Math.cos(decl));
+  if (cosH <= -1) return 24; // polární den
+  if (cosH >= 1) return 0; // polární noc
+  return (24 * Math.acos(cosH)) / Math.PI;
+}
+
+// Den v roce (1–366) z ISO data.
+function dayOfYear(iso: string): number {
+  const d = new Date(`${iso}T12:00:00`);
+  const start = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d.getTime() - start.getTime()) / 86_400_000);
+}
+
+function fmtDur(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h} h ${m} min`;
 }
 
 // Barevná pilulka s úrovní (dobré/špatné) – sdílené barvy přes .lvl-{tier}.
@@ -78,7 +115,7 @@ function daylight(sunrise: string, sunset: string): string {
   return `${h} h ${m} min`;
 }
 
-export default function DayDetails({ day, air, date }: Props) {
+export default function DayDetails({ day, air, date, lat }: Props) {
   const [open, setOpen] = useState(false);
   const uv = uvInfo(day.uvIndexMax);
   const aqi = air ? aqiLabel(air.aqi) : null;
@@ -119,17 +156,12 @@ export default function DayDetails({ day, air, date }: Props) {
       {open && (
         <div className="details-body">
           <div className="dd-group-title">{tr("Slunce a Měsíc")}</div>
-          <div className="dd-grid">
+          <div className="dd-grid dd-grid-sun">
             <Tile icon="sunrise" label={tr("Východ / západ")}>
               <span className="dd-tile-value">
                 {clockTime(new Date(day.sunrise))}
                 <em className="dd-tile-sep"> / </em>
                 {clockTime(new Date(day.sunset))}
-              </span>
-            </Tile>
-            <Tile icon="daylight" label={tr("Délka dne")}>
-              <span className="dd-tile-value">
-                {daylight(day.sunrise, day.sunset)}
               </span>
             </Tile>
             <Tile emoji={moon.emoji} label={tr("Měsíc")}>
@@ -140,6 +172,18 @@ export default function DayDetails({ day, air, date }: Props) {
                 {tr("osvětlení {n} %", { n: moon.illum })}
               </span>
             </Tile>
+            {lat != null && (
+              <DaylightYearChart
+                lat={lat}
+                date={date}
+                lengthLabel={daylight(day.sunrise, day.sunset)}
+                todayHours={
+                  (new Date(day.sunset).getTime() -
+                    new Date(day.sunrise).getTime()) /
+                  3_600_000
+                }
+              />
+            )}
           </div>
 
           <div className="dd-group-title">{tr("Ovzduší a UV")}</div>
@@ -191,6 +235,254 @@ export default function DayDetails({ day, air, date }: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+// Graf, jak se během roku prodlužuje a zkracuje den, s markerem aktuálního dne.
+// Slučuje v sobě i hodnotu „Délka dne“ (lengthLabel) – tvoří širokou dlaždici.
+function DaylightYearChart({
+  lat,
+  date,
+  lengthLabel,
+  todayHours,
+}: {
+  lat: number;
+  date: string;
+  lengthLabel: string;
+  todayHours: number;
+}) {
+  // Graf kreslíme v pixelech (viewBox = skutečná šířka × výška), aby byl vždy na
+  // 100 % šířky, s pevnou max. výškou a bez deformace (kulaté body, ostrý text).
+  const svgRef = useRef<SVGSVGElement>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [cw, setCw] = useState(0);
+  useLayoutEffect(() => {
+    const el = plotRef.current;
+    if (!el) return;
+    const update = () => setCw(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const H = Math.round(Math.min(150, Math.max(96, cw / 3.2)));
+  const padL = 26; // levý žlábek pro popisky osy y (hodiny)
+  const padR = 8;
+  const padT = 8;
+  const padB = 18; // dolní pruh pro čísla měsíců
+  const DAYS = 365;
+
+  // Popisky měsíců jako čísla 1–12.
+  const CUM = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+
+  const { vals, lo, hi } = useMemo(() => {
+    const v = Array.from({ length: DAYS }, (_, i) => daylightHours(lat, i + 1));
+    return { vals: v, lo: Math.min(...v), hi: Math.max(...v) };
+  }, [lat]);
+
+  const idx = Math.max(0, Math.min(DAYS - 1, dayOfYear(date) - 1));
+  const range = Math.max(0.5, hi - lo);
+  const X = (i: number) => padL + (i / (DAYS - 1)) * (cw - padL - padR);
+  const Y = (v: number) => padT + (1 - (v - lo) / range) * (H - padT - padB);
+
+  // Ukotvení: posuneme celou křivku tak, aby vybraný den seděl přesně na hodnotu
+  // z východu/západu (todayHours). Posun je konstantní → tvar i pozice křivky se
+  // nemění, jen se zobrazované hodnoty srovnají s tím, co je napsané mimo graf.
+  const offset = Number.isFinite(todayHours) ? todayHours - vals[idx] : 0;
+  const dispVal = (i: number) => vals[i] + offset;
+
+  const linePath = vals
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${X(i).toFixed(1)} ${Y(v).toFixed(1)}`)
+    .join(" ");
+  const areaPath = `${linePath} L ${X(DAYS - 1).toFixed(1)} ${H - padB} L ${X(0).toFixed(1)} ${H - padB} Z`;
+
+  // Vodorovné čáry osy y po celých hodinách (krok 4 h) s popiskem.
+  const yTicks: number[] = [];
+  for (let h = Math.ceil(lo / 4) * 4; h <= hi; h += 4) yTicks.push(h);
+
+  const prev = vals[Math.max(0, idx - 1)];
+  const next = vals[Math.min(DAYS - 1, idx + 1)];
+  const deltaMin = Math.round(((next - prev) / 2) * 60);
+  let trend: string;
+  if (deltaMin > 0) trend = tr("prodlužuje se o {n} min/den", { n: deltaMin });
+  else if (deltaMin < 0)
+    trend = tr("zkracuje se o {n} min/den", { n: -deltaMin });
+  else
+    trend =
+      vals[idx] > (lo + hi) / 2
+        ? tr("nejdelší den v roce")
+        : tr("nejkratší den v roce");
+
+  const markX = X(idx);
+  const markY = Y(vals[idx]);
+
+  const [hover, setHover] = useState<{
+    idx: number;
+    xPct: number;
+    yPct: number;
+  } | null>(null);
+  const year = Number(date.slice(0, 4)) || new Date().getFullYear();
+
+  // Mapování kurzoru na den v roce přes getScreenCTM – korektně i když je SVG
+  // kvůli poměru stran vycentrované s okraji (jinak by odchylka rostla od středu).
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    const ctm = svg?.getScreenCTM();
+    const rect = svg?.getBoundingClientRect();
+    if (!svg || !ctm || !rect || rect.width === 0) return;
+    const userX = new DOMPoint(e.clientX, e.clientY).matrixTransform(
+      ctm.inverse(),
+    ).x;
+    const i = Math.max(
+      0,
+      Math.min(
+        DAYS - 1,
+        Math.round(((userX - padL) / (cw - padL - padR)) * (DAYS - 1)),
+      ),
+    );
+    const snap = new DOMPoint(X(i), Y(vals[i])).matrixTransform(ctm);
+    const xPct = ((snap.x - rect.left) / rect.width) * 100;
+    const yPct = ((snap.y - rect.top) / rect.height) * 100;
+    setHover({ idx: i, xPct, yPct });
+  };
+
+  const hi2 = hover ? hover.idx : null;
+  const hoverDate = hi2 != null ? new Date(Date.UTC(year, 0, 1 + hi2)) : null;
+  const hoverLabel = hoverDate
+    ? `${hoverDate.getUTCDate()}. ${hoverDate.getUTCMonth() + 1}.`
+    : "";
+  const hoverPct = hover ? hover.xPct : 0;
+  const xt = hoverPct < 18 ? "0" : hoverPct > 82 ? "-100%" : "-50%";
+  // Tooltip nad bodem; u horního okraje se překlopí pod něj, ať je vidět.
+  const flipDown = (hover?.yPct ?? 100) < 34;
+  const yt = flipDown ? "8px" : "calc(-100% - 8px)";
+
+  return (
+    <div className="dd-tile dd-daylight">
+      <div className="dd-daylight-head">
+        <span className="dd-tile-ico" aria-hidden="true">
+          <DetailIcon kind="daylight" />
+        </span>
+        <div className="dd-daylight-headtext">
+          <span className="dd-tile-label">{tr("Délka dne")}</span>
+          <div className="dd-daylight-now">
+            <span className="dd-tile-value">{lengthLabel}</span>
+            <span className="dd-daylight-trend">{trend}</span>
+          </div>
+        </div>
+      </div>
+      <div className="dd-daylight-plot" ref={plotRef}>
+        {cw > 0 && (
+        <svg
+          ref={svgRef}
+          className="dd-daylight-svg"
+          viewBox={`0 0 ${cw} ${H}`}
+          style={{ height: `${H}px` }}
+          role="img"
+          aria-label={tr("Délka dne během roku")}
+          onPointerMove={onMove}
+          onPointerDown={onMove}
+          onPointerLeave={() => setHover(null)}
+        >
+          <defs>
+            <linearGradient id="dd-day-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(255,209,102,0.35)" />
+              <stop offset="100%" stopColor="rgba(255,209,102,0)" />
+            </linearGradient>
+          </defs>
+          {yTicks.map((h) => (
+            <g key={`y${h}`}>
+              <line
+                x1={padL}
+                y1={Y(h)}
+                x2={cw - padR}
+                y2={Y(h)}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth="1"
+              />
+              <text
+                x={padL - 5}
+                y={Y(h) + 3}
+                className="dd-daylight-axis"
+                textAnchor="end"
+              >
+                {h} h
+              </text>
+            </g>
+          ))}
+          {CUM.map((c, m) => (
+            <text
+              key={`m${m}`}
+              x={X(c + 15)}
+              y={H - 5}
+              className="dd-daylight-axis"
+              textAnchor="middle"
+            >
+              {m + 1}
+            </text>
+          ))}
+          <path d={areaPath} fill="url(#dd-day-grad)" />
+          <path
+            d={linePath}
+            fill="none"
+            stroke="#ffd166"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <line
+            x1={markX}
+            y1={padT - 4}
+            x2={markX}
+            y2={H - padB}
+            stroke="var(--accent, #4aa8ff)"
+            strokeWidth="1.5"
+            strokeDasharray="3 3"
+          />
+          <circle
+            cx={markX}
+            cy={markY}
+            r="4.5"
+            fill="var(--accent, #4aa8ff)"
+            stroke="#0b1f33"
+            strokeWidth="1.5"
+          />
+          {hi2 != null && (
+            <g pointerEvents="none">
+              <line
+                x1={X(hi2)}
+                y1={padT - 4}
+                x2={X(hi2)}
+                y2={H - padB}
+                stroke="rgba(255,255,255,0.5)"
+                strokeWidth="1"
+              />
+              <circle
+                cx={X(hi2)}
+                cy={Y(vals[hi2])}
+                r="4"
+                fill="#fff"
+                stroke="#0b1f33"
+                strokeWidth="1.5"
+              />
+            </g>
+          )}
+        </svg>
+        )}
+        {hi2 != null && (
+          <div
+            className="dd-daylight-tip"
+            style={{
+              left: `${hoverPct}%`,
+              top: `${hover?.yPct ?? 0}%`,
+              transform: `translate(${xt}, ${yt})`,
+            }}
+          >
+            <strong>{fmtDur(dispVal(hi2))}</strong> · {hoverLabel}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -9,6 +9,6 @@
       "source": "/chmi-sat/:path*",
       "destination": "https://opendata.chmi.cz/meteorology/weather/satellite/geo/:path*"
     },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!api/).*)", "destination": "/" }
   ]
 }

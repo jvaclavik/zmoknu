@@ -8,7 +8,7 @@ const UPDATE_CHECK_MS = 60 * 60 * 1000;
 export default function ReloadPrompt() {
   useLang();
   const {
-    needRefresh: [needRefresh, setNeedRefresh],
+    needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
@@ -27,29 +27,13 @@ export default function ReloadPrompt() {
   if (!needRefresh) return null;
 
   return (
-    <>
-      <div className="pwa-backdrop" aria-hidden="true" />
-      <div className="pwa-toast" role="alert" aria-live="polite">
-        <span className="pwa-toast-msg">
-          {tr("Je dostupná nová verze aplikace.")}
-        </span>
-        <div className="pwa-toast-actions">
-          <button
-            type="button"
-            className="pwa-toast-btn primary"
-            onClick={() => updateServiceWorker(true)}
-          >
-            {tr("Aktualizovat")}
-          </button>
-          <button
-            type="button"
-            className="pwa-toast-btn"
-            onClick={() => setNeedRefresh(false)}
-          >
-            {tr("Později")}
-          </button>
-        </div>
-      </div>
-    </>
+    <button
+      type="button"
+      className="footer-update-btn"
+      onClick={() => updateServiceWorker(true)}
+    >
+      <span className="footer-update-dot" aria-hidden="true" />
+      {tr("Aktualizovat aplikaci")}
+    </button>
   );
 }

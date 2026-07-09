@@ -1,8 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import type { GeoLocation } from "../types";
-import { searchLocations } from "../lib/openMeteo";
+import { searchLocations, reverseGeocode } from "../lib/openMeteo";
 import { tr } from "../lib/i18n";
+import { useStoredState } from "../lib/useStoredState";
+import { useBodyScrollLock } from "../lib/scrollLock";
 import { sameLocation } from "./FavoritesBar";
+import MapPicker from "./MapPicker";
+
+const HISTORY_MAX = 8;
+
+// Rozpozná zadané GPS souřadnice ve formátu „lat, lon" (desetinné stupně),
+// volitelně s příponou N/S/E/W. Vrací null, když to souřadnice nejsou.
+function parseCoords(q: string): { lat: number; lon: number } | null {
+  const s = q.trim().replace(/°/g, "");
+  const m = s.match(
+    /^(-?\d{1,3}(?:\.\d+)?)\s*([NS])?\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*([EW])?$/i,
+  );
+  if (!m) return null;
+  let lat = parseFloat(m[1]);
+  let lon = parseFloat(m[3]);
+  const latH = m[2]?.toUpperCase();
+  const lonH = m[4]?.toUpperCase();
+  if (latH === "S") lat = -Math.abs(lat);
+  else if (latH === "N") lat = Math.abs(lat);
+  if (lonH === "W") lon = -Math.abs(lon);
+  else if (lonH === "E") lon = Math.abs(lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
+function coordLabel(lat: number, lon: number): string {
+  return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+}
 
 interface Props {
   open: boolean;
@@ -34,11 +64,27 @@ export default function SearchBar({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoLocation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [history, setHistory] = useStoredState<GeoLocation[]>(
+    "zmoknu.searchHistory",
+    [],
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const pushHistory = (loc: GeoLocation) =>
+    setHistory(
+      [loc, ...history.filter((h) => !sameLocation(h, loc))].slice(
+        0,
+        HISTORY_MAX,
+      ),
+    );
+
+  const coords = parseCoords(query);
+
   useEffect(() => {
-    if (query.trim().length < 2) {
+    if (query.trim().length < 2 || parseCoords(query)) {
       setResults([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -62,32 +108,49 @@ export default function SearchBar({
     } else {
       setQuery("");
       setResults([]);
+      setMapOpen(false);
     }
   }, [open]);
 
-  // Zamkni scroll pozadí + zavírání klávesou Escape, když je modál otevřený.
+  // Zamkni scroll pozadí (spolehlivě i na iOS) + zavírání klávesou Escape.
+  useBodyScrollLock(open);
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   function pick(loc: GeoLocation) {
+    pushHistory(loc);
     onSelect(loc);
+    onClose();
+  }
+
+  async function pickCoords(lat: number, lon: number) {
+    let name = coordLabel(lat, lon);
+    try {
+      const rev = await reverseGeocode(lat, lon);
+      if (rev && rev !== "Moje poloha") name = rev;
+    } catch {
+      /* název necháme jako souřadnice */
+    }
+    const loc: GeoLocation = { name, latitude: lat, longitude: lon };
+    pushHistory(loc);
+    onSelect(loc);
+    setMapOpen(false);
     onClose();
   }
 
   if (!open) return null;
 
   const isSearching = query.trim().length >= 2;
+  // Historie bez aktuálního místa (to je zobrazené výš samostatně).
+  const recent = history.filter(
+    (h) => !(current && sameLocation(h, current)),
+  );
 
   return (
     <div className="locpick" role="dialog" aria-modal="true">
@@ -116,7 +179,7 @@ export default function SearchBar({
             ref={inputRef}
             type="text"
             value={query}
-            placeholder={tr("Hledat město nebo obec…")}
+            placeholder={tr("Město, obec nebo GPS…")}
             onChange={(e) => setQuery(e.target.value)}
             aria-label={tr("Hledat město")}
           />
@@ -136,7 +199,30 @@ export default function SearchBar({
         </div>
 
         <div className="locpick-body">
-          {isSearching ? (
+          {isSearching && coords ? (
+            <section className="locpick-section">
+              <div className="locpick-label">{tr("GPS souřadnice")}</div>
+              <ul className="locpick-list">
+                <li className="locpick-row">
+                  <button
+                    type="button"
+                    className="locpick-pick"
+                    onClick={() => pickCoords(coords.lat, coords.lon)}
+                  >
+                    <PinGlyph />
+                    <span className="locpick-rowtext">
+                      <span className="locpick-name">
+                        {coordLabel(coords.lat, coords.lon)}
+                      </span>
+                      <span className="locpick-meta">
+                        {tr("Zobrazit počasí pro tyto souřadnice")}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              </ul>
+            </section>
+          ) : isSearching ? (
             <section className="locpick-section">
               <div className="locpick-label">
                 {loading ? tr("Hledám…") : tr("Výsledky")}
@@ -201,6 +287,15 @@ export default function SearchBar({
                 </span>
               </button>
 
+              <button
+                type="button"
+                className="locpick-locate subtle"
+                onClick={() => setMapOpen(true)}
+              >
+                <MapGlyph />
+                <span>{tr("Vybrat na mapě")}</span>
+              </button>
+
               {current && (
                 <section className="locpick-section">
                   <div className="locpick-label">{tr("Aktuální místo")}</div>
@@ -238,6 +333,65 @@ export default function SearchBar({
                       <StarGlyph filled={isCurrentFav} />
                     </button>
                   </div>
+                </section>
+              )}
+
+              {recent.length > 0 && (
+                <section className="locpick-section">
+                  <div className="locpick-label locpick-label-row">
+                    <span>{tr("Naposledy hledané")}</span>
+                    <button
+                      type="button"
+                      className="locpick-clearall"
+                      onClick={() => setHistory([])}
+                    >
+                      {tr("Vymazat")}
+                    </button>
+                  </div>
+                  <ul className="locpick-list">
+                    {recent.map((h) => {
+                      const fav = favorites.some((f) => sameLocation(f, h));
+                      return (
+                        <li
+                          key={`h-${h.latitude},${h.longitude}`}
+                          className="locpick-row"
+                        >
+                          <button
+                            type="button"
+                            className="locpick-pick"
+                            onClick={() => pick(h)}
+                          >
+                            <ClockGlyph />
+                            <span className="locpick-rowtext">
+                              <span className="locpick-name">{h.name}</span>
+                              <span className="locpick-meta">
+                                {[h.admin1, h.country]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`locpick-star ${fav ? "on" : ""}`}
+                            onClick={() => onToggleFavorite(h)}
+                            aria-label={
+                              fav
+                                ? tr("Odebrat z oblíbených")
+                                : tr("Přidat do oblíbených")
+                            }
+                            title={
+                              fav
+                                ? tr("Odebrat z oblíbených")
+                                : tr("Přidat do oblíbených")
+                            }
+                          >
+                            <StarGlyph filled={fav} />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </section>
               )}
 
@@ -285,7 +439,31 @@ export default function SearchBar({
           )}
         </div>
       </div>
+
+      <MapPicker
+        open={mapOpen}
+        initial={{
+          lat: current?.latitude ?? 49.82,
+          lon: current?.longitude ?? 15.47,
+        }}
+        onCancel={() => setMapOpen(false)}
+        onConfirm={pickCoords}
+      />
     </div>
+  );
+}
+
+function MapGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M9 3v16M15 5v16" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -309,6 +487,21 @@ function PinGlyph({ active = false }: { active?: boolean }) {
         strokeLinejoin="round"
       />
       <circle cx="12" cy="10" r="2.5" fill={active ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ClockGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M12 7.5V12l3 2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

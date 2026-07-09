@@ -1,12 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+
+// Lokální obsluha serverless funkce /api/precip-accum (na Vercelu ji řeší
+// runtime automaticky). V devu ji spustíme přes ssrLoadModule, ať úhrn srážek
+// z ČHMÚ funguje i na localhost.
+const devPrecipAccum = (): PluginOption => ({
+  name: "dev-api-precip-accum",
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url || !req.url.startsWith("/api/precip-accum")) return next();
+      server
+        .ssrLoadModule("/api/precip-accum.ts")
+        .then((mod) => (mod as { default: Function }).default(req, res))
+        .catch((e) => {
+          res.statusCode = 500;
+          res.end(String(e));
+        });
+    });
+  },
+});
 
 // ČHMÚ opendata neposílá CORS hlavičky → obrázky radaru nejdou použít jako
 // WebGL textura. Proxujeme je přes vlastní origin (na Vercelu to řeší rewrite
 // ve vercel.json, lokálně tento dev proxy).
 export default defineConfig({
   plugins: [
+    devPrecipAccum(),
     react(),
     VitePWA({
       // "prompt": nová verze se nenainstaluje potají – uživatel dostane nabídku

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { DailyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
 import { tr } from "../lib/i18n";
+import { useBodyScrollLock } from "../lib/scrollLock";
 import { TIER_COLOR, TIER_LABEL } from "../lib/tiers";
 import {
   ACTIVITY_OFFSET,
@@ -91,16 +92,13 @@ export default function OutfitTester({ onClose, initial }: Props) {
     initial?.activity ?? "walk",
   );
 
+  useBodyScrollLock(true);
   useEffect(() => {
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = "";
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   const outfit = useMemo(() => {

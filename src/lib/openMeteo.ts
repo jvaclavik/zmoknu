@@ -356,6 +356,102 @@ export async function searchLocations(query: string): Promise<GeoLocation[]> {
   }));
 }
 
+// ---- Klimatologický normál (historický průměr) ----------------------------
+// Denní index v roce (0–364), nepřestupný; 29. 2. sloučíme do 28. 2.
+const CUM_DAYS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+export function normalDoy(iso: string): number {
+  const m = Number(iso.slice(5, 7));
+  const d = Number(iso.slice(8, 10));
+  if (m === 2 && d === 29) return 58; // 28. 2.
+  const idx = CUM_DAYS[m - 1] + (d - 1);
+  return Math.max(0, Math.min(364, idx));
+}
+
+// Průměrná teplota (a min/max) pro každý den v roce z reanalýzy ERA5.
+export interface ClimateNormals {
+  mean: (number | null)[]; // délka 365, °C
+  max: (number | null)[];
+  min: (number | null)[];
+}
+
+const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
+const NORMAL_START = "1995-01-01";
+const NORMAL_END = "2024-12-31";
+const normalsCache = new Map<string, Promise<ClimateNormals>>();
+
+// Kruhové vyhlazení průměrů oknem ±win dní (klimatologie bývá po dnech zašuměná).
+function smoothCircular(arr: (number | null)[], win: number): (number | null)[] {
+  const n = arr.length;
+  return arr.map((_, i) => {
+    let sum = 0;
+    let cnt = 0;
+    for (let k = -win; k <= win; k++) {
+      const v = arr[(i + k + n) % n];
+      if (v != null && Number.isFinite(v)) {
+        sum += v;
+        cnt++;
+      }
+    }
+    return cnt ? sum / cnt : null;
+  });
+}
+
+export function fetchClimateNormals(
+  lat: number,
+  lon: number,
+): Promise<ClimateNormals> {
+  // Zaokrouhlíme na ~0,25°, ať sdílíme cache i mezi blízkými body.
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const cached = normalsCache.get(key);
+  if (cached) return cached;
+
+  const p = (async (): Promise<ClimateNormals> => {
+    const params = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lon.toString(),
+      start_date: NORMAL_START,
+      end_date: NORMAL_END,
+      daily: "temperature_2m_mean,temperature_2m_max,temperature_2m_min",
+      timezone: "auto",
+    });
+    const data = await fetchOmJson<{
+      daily?: {
+        time?: string[];
+        temperature_2m_mean?: (number | null)[];
+        temperature_2m_max?: (number | null)[];
+        temperature_2m_min?: (number | null)[];
+      };
+    }>(`${ARCHIVE_URL}?${params.toString()}`, "Nepodařilo se načíst normál.");
+
+    const time = data.daily?.time ?? [];
+    const src = {
+      mean: data.daily?.temperature_2m_mean ?? [],
+      max: data.daily?.temperature_2m_max ?? [],
+      min: data.daily?.temperature_2m_min ?? [],
+    };
+
+    const build = (values: (number | null)[]): (number | null)[] => {
+      const sum = new Array(365).fill(0);
+      const cnt = new Array(365).fill(0);
+      for (let i = 0; i < time.length; i++) {
+        const v = values[i];
+        if (v == null || !Number.isFinite(v)) continue;
+        const doy = normalDoy(time[i]);
+        sum[doy] += v;
+        cnt[doy] += 1;
+      }
+      const out = sum.map((s, i) => (cnt[i] ? s / cnt[i] : null));
+      return smoothCircular(out, 7);
+    };
+
+    return { mean: build(src.mean), max: build(src.max), min: build(src.min) };
+  })();
+
+  normalsCache.set(key, p);
+  p.catch(() => normalsCache.delete(key)); // ať jde po chybě zkusit znovu
+  return p;
+}
+
 // Reverzní geokódování pro pojmenování polohy z GPS.
 export async function reverseGeocode(
   lat: number,
