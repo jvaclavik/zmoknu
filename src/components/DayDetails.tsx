@@ -5,9 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { DailyPoint } from "../types";
+import type { DailyPoint, HourlyPoint } from "../types";
 import type { AirQuality, LevelTier } from "../lib/airQuality";
 import { aqiLabel, pmLevel, pollenLevel } from "../lib/airQuality";
+import { stormRiskForDate } from "../lib/storm";
 import { clockTime } from "../lib/format";
 import { tr } from "../lib/i18n";
 
@@ -16,6 +17,7 @@ interface Props {
   air: AirQuality | null;
   date: string;
   lat?: number;
+  hourly?: HourlyPoint[];
 }
 
 // Délka dne (h) pro daný den v roce a zeměpisnou šířku – čistě astronomicky,
@@ -33,6 +35,33 @@ function daylightHours(lat: number, doy: number): number {
   if (cosH <= -1) return 24; // polární den
   if (cosH >= 1) return 0; // polární noc
   return (24 * Math.acos(cosH)) / Math.PI;
+}
+
+// Sluneční deklinace (rad) pro den v roce – Cooperova formule.
+function solarDecl(doy: number): number {
+  return ((-23.44 * Math.PI) / 180) * Math.cos((2 * Math.PI * (doy + 10)) / 365);
+}
+
+// Hodiny od pravého poledne, kdy je Slunce ve výšce altDeg (null = nenastane).
+function hoursFromNoon(lat: number, decl: number, altDeg: number): number | null {
+  const latR = (lat * Math.PI) / 180;
+  const altR = (altDeg * Math.PI) / 180;
+  const cosH =
+    (Math.sin(altR) - Math.sin(latR) * Math.sin(decl)) /
+    (Math.cos(latR) * Math.cos(decl));
+  if (cosH <= -1 || cosH >= 1) return null;
+  return (Math.acos(cosH) * 12) / Math.PI;
+}
+
+// Délka zlaté hodinky (min): jak dlouho trvá, než Slunce vystoupá z obzoru
+// (−0,833°) na 6° nad obzorem. Symetricky platí i pro večer před západem.
+function goldenHourMinutes(lat: number, doy: number): number {
+  const decl = solarDecl(doy);
+  const hRise = hoursFromNoon(lat, decl, -0.833);
+  const h6 = hoursFromNoon(lat, decl, 6);
+  if (hRise == null || h6 == null) return 50; // polární oblasti → fallback
+  const min = (hRise - h6) * 60;
+  return Math.max(10, Math.min(180, min));
 }
 
 // Den v roce (1–366) z ISO data.
@@ -115,12 +144,26 @@ function daylight(sunrise: string, sunset: string): string {
   return `${h} h ${m} min`;
 }
 
-export default function DayDetails({ day, air, date, lat }: Props) {
+export default function DayDetails({ day, air, date, lat, hourly }: Props) {
   const [open, setOpen] = useState(false);
   const uv = uvInfo(day.uvIndexMax);
   const aqi = air ? aqiLabel(air.aqi) : null;
   const pm = air ? pmLevel(air.pm25, air.pm10) : null;
   const moon = moonInfo(date);
+
+  // Zlatá hodinka: ráno od východu, večer do západu.
+  const sunriseD = new Date(day.sunrise);
+  const sunsetD = new Date(day.sunset);
+  const goldenMin = goldenHourMinutes(lat ?? 50, dayOfYear(date));
+  const goldenAmEnd = new Date(sunriseD.getTime() + goldenMin * 60_000);
+  const goldenPmStart = new Date(sunsetD.getTime() - goldenMin * 60_000);
+  const goldenOk =
+    Number.isFinite(sunriseD.getTime()) &&
+    Number.isFinite(sunsetD.getTime()) &&
+    goldenPmStart.getTime() > goldenAmEnd.getTime();
+
+  const storm =
+    hourly && hourly.length ? stormRiskForDate(hourly, date) : null;
 
   return (
     <section className="card details-card">
@@ -172,6 +215,16 @@ export default function DayDetails({ day, air, date, lat }: Props) {
                 {tr("osvětlení {n} %", { n: moon.illum })}
               </span>
             </Tile>
+            {goldenOk && (
+              <Tile icon="golden" label={tr("Zlatá hodinka")}>
+                <span className="dd-tile-value dd-tile-value-sm">
+                  {clockTime(sunriseD)}–{clockTime(goldenAmEnd)}
+                </span>
+                <span className="dd-tile-note">
+                  {tr("večer")} {clockTime(goldenPmStart)}–{clockTime(sunsetD)}
+                </span>
+              </Tile>
+            )}
             {lat != null && (
               <DaylightYearChart
                 lat={lat}
@@ -185,6 +238,40 @@ export default function DayDetails({ day, air, date, lat }: Props) {
               />
             )}
           </div>
+
+          {storm && (
+            <>
+              <div className="dd-group-title">{tr("Bouřky")}</div>
+              <div className="dd-grid">
+                <Tile
+                  icon="storm"
+                  label={tr("Riziko bouřek")}
+                  className={storm.level === "high" ? "dd-tile-alert" : ""}
+                >
+                  <div className="dd-tile-main">
+                    <LevelPill tier={storm.tier} text={storm.label} />
+                  </div>
+                  {storm.from ? (
+                    <span className="dd-tile-note">
+                      {tr("mezi {a} a {b}", {
+                        a: clockTime(new Date(storm.from)),
+                        b: clockTime(
+                          new Date(new Date(storm.to!).getTime() + 3_600_000),
+                        ),
+                      })}
+                      {storm.hail ? ` · ${tr("možné kroupy")}` : ""}
+                    </span>
+                  ) : storm.maxCape > 0 ? (
+                    <span className="dd-tile-note">
+                      {tr("energie CAPE {n} J/kg", {
+                        n: Math.round(storm.maxCape),
+                      })}
+                    </span>
+                  ) : null}
+                </Tile>
+              </div>
+            </>
+          )}
 
           <div className="dd-group-title">{tr("Ovzduší a UV")}</div>
           <div className="dd-grid">
@@ -490,15 +577,17 @@ function Tile({
   icon,
   emoji,
   label,
+  className,
   children,
 }: {
   icon?: DetailIconKind;
   emoji?: string;
   label: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="dd-tile">
+    <div className={`dd-tile${className ? ` ${className}` : ""}`}>
       <span className="dd-tile-ico" aria-hidden="true">
         {emoji ? emoji : icon ? <DetailIcon kind={icon} /> : null}
       </span>
@@ -510,7 +599,15 @@ function Tile({
   );
 }
 
-type DetailIconKind = "sunrise" | "daylight" | "uv" | "air" | "dust" | "pollen";
+type DetailIconKind =
+  | "sunrise"
+  | "daylight"
+  | "uv"
+  | "air"
+  | "dust"
+  | "pollen"
+  | "golden"
+  | "storm";
 
 function DetailIcon({ kind }: { kind: DetailIconKind }) {
   const c = {
@@ -570,6 +667,21 @@ function DetailIcon({ kind }: { kind: DetailIconKind }) {
         <svg {...c}>
           <circle cx="12" cy="12" r="2.2" />
           <path d="M12 12c0-4-4-6-4-6s0 4 4 6zM12 12c0-4 4-6 4-6s0 4-4 6zM12 12c4 0 6 4 6 4s-4 0-6-4zM12 12c-4 0-6 4-6 4s4 0 6-4z" />
+        </svg>
+      );
+    case "golden":
+      return (
+        <svg {...c}>
+          <circle cx="12" cy="9" r="3.5" />
+          <path d="M12 2.5v1.6M4.8 9H3.2M20.8 9h-1.6M6.4 3.4l1.1 1.1M17.6 3.4l-1.1 1.1" />
+          <path d="M3 18h18M3 21h18" />
+        </svg>
+      );
+    case "storm":
+      return (
+        <svg {...c}>
+          <path d="M7 16a4 4 0 0 1 .5-7.97 5.5 5.5 0 0 1 10.6 1.02A3.5 3.5 0 0 1 17.5 16" />
+          <path d="M12.5 12l-2.5 4h3l-2 4" />
         </svg>
       );
   }

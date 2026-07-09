@@ -46,12 +46,26 @@ const EN: Record<string, string> = {
   "Zdroj dat (model)": "Data source (model)",
   "Předpověď z Open-Meteo. Modely lze porovnat v meteogramu (ikona oka → multimód). ČHMÚ ALADIN pokrývá jen ČR a krátké okno – když nemá data, přepni na jiný model.":
     "Forecast by Open-Meteo. Models can be compared in the meteogram (eye icon → multi). ČHMÚ ALADIN covers only Czechia and a short window – switch to another model when it has no data.",
-  "„Vzniklo z frustrace, že chybí počasí s intuitivním UX, dobrými daty, historií bez paywallu a reklam. Tak jsem ho udělal.“":
-    "“Born out of frustration that there’s no weather app with intuitive UX, good data, history without a paywall or ads. So I made one.”",
+  "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam.":
+    "Born out of frustration that there was no weather app with intuitive UX and a clear presentation of data without a paywall or ads.",
   "Dejte mi vědět": "Let me know",
   ", jak se vám líbí.": " how you like it.",
   "Odkaz zkopírován": "Link copied",
   "Sdílet odkaz": "Share link",
+  Aktualizováno: "Updated",
+  "Nainstalovat aplikaci": "Install app",
+  "Nainstalovat do telefonu": "Install on your phone",
+  "V Safari klepni na": "In Safari tap",
+  Sdílet: "Share",
+  Zvol: "Choose",
+  "Přidat na plochu": "Add to Home Screen",
+  "Potvrď „Přidat“ – appka bude na ploše jako ikona.":
+    "Confirm “Add” – the app appears on your Home Screen as an icon.",
+  "Otevři menu prohlížeče": "Open the browser menu",
+  "Potvrď – appka se přidá mezi aplikace.":
+    "Confirm – the app is added to your apps.",
+  "právě teď": "just now",
+  "před {n} min": "{n} min ago",
   "Data: Open-Meteo (CC BY 4.0)": "Data: Open-Meteo (CC BY 4.0)",
   "Počasí – {name}": "Weather – {name}",
   "Sdílené místo": "Shared place",
@@ -142,6 +156,8 @@ const EN: Record<string, string> = {
   vysoká: "high",
   střední: "medium",
   nízká: "low",
+  "Shoda modelů": "Model agreement",
+  "Výstrahy ČHMÚ": "ČHMÚ weather alerts",
   Teď: "Now",
   Now: "Now",
   "Automaticky = Open-Meteo vybírá nejvhodnější model podle lokality (v ČR obvykle ICON-D2/ICON-EU pro první dny, ECMWF pro vzdálenější).":
@@ -319,6 +335,18 @@ const EN: Record<string, string> = {
   "couvající měsíc": "waning gibbous",
   "poslední čtvrť": "last quarter",
   "couvající srpek": "waning crescent",
+  "Zlatá hodinka": "Golden hour",
+  "večer": "evening",
+  Bouřky: "Thunderstorms",
+  "Riziko bouřek": "Storm risk",
+  "Bez bouřek": "No storms",
+  "Bouřky možné": "Storms possible",
+  "Bouřky pravděpodobné": "Storms likely",
+  "Silné bouřky": "Severe storms",
+  "Bouřky s krupobitím": "Storms with hail",
+  "mezi {a} a {b}": "between {a} and {b}",
+  "možné kroupy": "hail possible",
+  "energie CAPE {n} J/kg": "CAPE energy {n} J/kg",
 
   // airQuality
   Olše: "Alder",

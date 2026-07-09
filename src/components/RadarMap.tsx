@@ -887,27 +887,53 @@ export default function RadarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, lang]);
 
-  // Značky na slideru – tečka u každého snímku, časový popisek na celých 6 h.
+  // Šířka dráhy – podle ní počítáme, kolik časových popisků se vejde vedle sebe.
+  const [trackW, setTrackW] = useState(0);
+
+  // Časové popisky u bodů slideru – ukážeme jen ty, které se vedle sebe vejdou.
+  // Kandidáti jsou celé hodiny; greedy zleva je řídneme podle změřené šířky, ať
+  // na úzké obrazovce nebylo popisků moc a nepřekrývaly se.
   const ticks = useMemo(() => {
     const n = frames.length;
     if (n <= 1) return [];
-    return frames.map((f, i) => {
+    const pxPerFrame = trackW > 0 ? trackW / (n - 1) : 0;
+    const MIN_GAP = 44; // min. rozestup popisků v px (šířka „14:00“ + rezerva)
+    const out: { left: number; label: string }[] = [];
+    let lastPx = -Infinity;
+    frames.forEach((f, i) => {
       const d = new Date(f.time * 1000);
-      const major = d.getMinutes() === 0 && d.getHours() % 6 === 0;
-      return {
-        left: (i / (n - 1)) * 100,
-        hour: d.getMinutes() === 0,
-        major,
-        label: major ? clockTime(d) : "",
-      };
+      if (d.getMinutes() !== 0) return; // popisky jen na celé hodiny
+      // Dokud nemáme změřenou šířku, drž se řídkých 6h značek (ať to nepřeteče).
+      if (pxPerFrame === 0) {
+        if (d.getHours() % 6 === 0)
+          out.push({ left: (i / (n - 1)) * 100, label: clockTime(d) });
+        return;
+      }
+      const px = i * pxPerFrame;
+      if (px - lastPx >= MIN_GAP) {
+        out.push({ left: (i / (n - 1)) * 100, label: clockTime(d) });
+        lastPx = px;
+      }
     });
-  }, [frames]);
+    return out;
+  }, [frames, trackW]);
 
   // Scrubování časem přes celou spodní lištu – tažení kdekoliv (ne jen po thumbu).
   // Tažná zóna = celý footer; měříme ale podle vizuální dráhy (trackRef).
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubbing = useRef(false);
   const scrubFrac = frames.length > 1 ? index / (frames.length - 1) : 0;
+
+  // Měření šířky dráhy (trackW deklarován výše, u výpočtu popisků).
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) =>
+      setTrackW(entries[0].contentRect.width),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [frames.length]);
 
   const scrubTo = (clientX: number) => {
     const el = trackRef.current;
@@ -1264,17 +1290,15 @@ export default function RadarMap({
                       />
                     );
                   })}
-                {ticks.map((t, i) =>
-                  t.major ? (
-                    <span
-                      key={`l${i}`}
-                      className="radar-scrub-label"
-                      style={{ left: `${t.left}%` }}
-                    >
-                      {t.label}
-                    </span>
-                  ) : null,
-                )}
+                {ticks.map((t, i) => (
+                  <span
+                    key={`l${i}`}
+                    className="radar-scrub-label"
+                    style={{ left: `${t.left}%` }}
+                  >
+                    {t.label}
+                  </span>
+                ))}
                 <span
                   className="radar-scrub-thumb"
                   style={{ left: `${scrubFrac * 100}%` }}

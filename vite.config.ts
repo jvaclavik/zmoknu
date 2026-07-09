@@ -2,16 +2,17 @@ import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-// Lokální obsluha serverless funkce /api/precip-accum (na Vercelu ji řeší
-// runtime automaticky). V devu ji spustíme přes ssrLoadModule, ať úhrn srážek
-// z ČHMÚ funguje i na localhost.
-const devPrecipAccum = (): PluginOption => ({
-  name: "dev-api-precip-accum",
+// Lokální obsluha serverless funkcí z /api (na Vercelu je řeší runtime
+// automaticky). V devu je spustíme přes ssrLoadModule, ať fungují i na localhost.
+const DEV_API_ROUTES = ["/api/precip-accum", "/api/chmi-alerts"];
+const devApi = (): PluginOption => ({
+  name: "dev-api",
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
-      if (!req.url || !req.url.startsWith("/api/precip-accum")) return next();
+      const route = DEV_API_ROUTES.find((r) => req.url?.startsWith(r));
+      if (!route) return next();
       server
-        .ssrLoadModule("/api/precip-accum.ts")
+        .ssrLoadModule(`${route}.ts`)
         .then((mod) => (mod as { default: Function }).default(req, res))
         .catch((e) => {
           res.statusCode = 500;
@@ -26,14 +27,22 @@ const devPrecipAccum = (): PluginOption => ({
 // ve vercel.json, lokálně tento dev proxy).
 export default defineConfig({
   plugins: [
-    devPrecipAccum(),
+    devApi(),
     react(),
     VitePWA({
       // "prompt": nová verze se nenainstaluje potají – uživatel dostane nabídku
       // k aktualizaci (viz ReloadPrompt). Registraci řeší useRegisterSW hook.
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      // Logo v hlavičce (/logo.svg) i ikony musí být v precache, ať se appka
+      // offline zobrazí i s logem, ne jen s rozbitým obrázkem.
+      includeAssets: [
+        "favicon.svg",
+        "apple-touch-icon.png",
+        "logo.svg",
+        "pwa-192x192.png",
+        "pwa-512x512.png",
+      ],
       manifest: {
         name: "Zmoknu? – počasí a radar",
         short_name: "Zmoknu?",
@@ -56,6 +65,12 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Precache i statické assety (SVG/PNG loga, ikony), ať jsou dostupné
+        // offline – ne jen JS/CSS/HTML.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
+        // Splash obrázky jsou jen iOS launch screeny (přes <link> v index.html),
+        // appka je za běhu nenačítá → není třeba je mít v precache.
+        globIgnores: ["**/splash/**"],
         // Předpověď a radar necacheujeme natvrdo (jsou živé) – jen runtime cache
         // s krátkou platností, ať appka funguje i offline s posledními daty.
         runtimeCaching: [

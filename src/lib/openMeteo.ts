@@ -21,6 +21,27 @@ interface RawForecast {
   current: Record<string, number | string>;
   hourly: Record<string, (number | string)[]>;
   daily: Record<string, (number | string)[]>;
+  minutely_15?: Record<string, (number | string)[]>;
+}
+
+// Krátká cache předpovědí (klíč = místo+historie+model), ať je přepínání mezi
+// oblíbenými okamžité (viz prefetchForecast) a opětovné otevření nestahuje znovu.
+const forecastCache = new Map<string, { at: number; data: Forecast }>();
+const FORECAST_TTL = 10 * 60 * 1000;
+function fcKey(lat: number, lon: number, pastDays: number, model: string) {
+  return `${lat.toFixed(3)},${lon.toFixed(3)},${pastDays},${model}`;
+}
+
+// Přednačte předpověď do cache (pro oblíbená místa). Chyby ignoruje.
+export function prefetchForecast(
+  lat: number,
+  lon: number,
+  model = "best_match",
+): void {
+  const key = fcKey(lat, lon, 1, model);
+  const c = forecastCache.get(key);
+  if (c && Date.now() - c.at < FORECAST_TTL) return;
+  fetchForecast(lat, lon, 1, model).catch(() => {});
 }
 
 export async function fetchForecast(
@@ -28,7 +49,13 @@ export async function fetchForecast(
   lon: number,
   pastDays = 1,
   model = "best_match",
+  opts?: { force?: boolean },
 ): Promise<Forecast> {
+  const cacheKey = fcKey(lat, lon, pastDays, model);
+  if (!opts?.force) {
+    const c = forecastCache.get(cacheKey);
+    if (c && Date.now() - c.at < FORECAST_TTL) return c.data;
+  }
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lon.toString(),
@@ -61,6 +88,7 @@ export async function fetchForecast(
       "cloud_cover_low",
       "cloud_cover_mid",
       "cloud_cover_high",
+      "cape",
       "is_day",
     ].join(","),
     daily: [
@@ -75,6 +103,8 @@ export async function fetchForecast(
       "sunset",
       "uv_index_max",
     ].join(","),
+    minutely_15: "precipitation",
+    forecast_minutely_15: "48",
     timezone: "auto",
     forecast_days: "16",
     past_days: String(Math.min(92, Math.max(1, pastDays))),
@@ -131,8 +161,11 @@ export async function fetchForecast(
     }
   }
 
-  return {
+  const minutely15 = mapMinutely15(data.minutely_15);
+
+  const result: Forecast = {
     timezone: data.timezone,
+    minutely15,
     current: {
       time: String(c.time),
       temperature: Number(c.temperature_2m),
@@ -150,6 +183,8 @@ export async function fetchForecast(
     hourly,
     daily,
   };
+  forecastCache.set(cacheKey, { at: Date.now(), data: result });
+  return result;
 }
 
 // Pořadí preference modelů pro úhrny srážek (od nejdetailnějšího hodinového).
@@ -298,10 +333,23 @@ function mapHourly(h: RawForecast["hourly"]) {
       cloudLow: Number(h.cloud_cover_low[i]),
       cloudMid: Number(h.cloud_cover_mid[i]),
       cloudHigh: Number(h.cloud_cover_high[i]),
+      cape: h.cape ? Number(h.cape[i]) : NaN,
       isDay: Number(h.is_day[i]) === 1,
     });
   }
   return out;
+}
+
+function mapMinutely15(
+  m: RawForecast["minutely_15"],
+): { time: string[]; precipitation: number[] } | undefined {
+  const time = m?.time as string[] | undefined;
+  const precip = m?.precipitation as (number | string | null)[] | undefined;
+  if (!time || !precip || !time.length) return undefined;
+  return {
+    time: time.map(String),
+    precipitation: precip.map((v) => (v == null ? 0 : Number(v))),
+  };
 }
 
 function mapDaily(d: RawForecast["daily"]) {

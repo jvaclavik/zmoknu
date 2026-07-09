@@ -4,15 +4,19 @@ import DayDetails from "./components/DayDetails";
 import DaySelector from "./components/DaySelector";
 import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
+import InstallHint from "./components/InstallHint";
 import Meteogram from "./components/Meteogram";
 import RadarMap from "./components/RadarMap";
 import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
+import Skeleton from "./components/Skeleton";
+import SmartSummary from "./components/SmartSummary";
+import WeatherAlerts from "./components/WeatherAlerts";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
 import { dayHeader, isoDate, todayISO } from "./lib/format";
 import { DEFAULT_MODEL, WEATHER_MODELS } from "./lib/models";
-import { fetchForecast, reverseGeocode } from "./lib/openMeteo";
+import { fetchForecast, prefetchForecast, reverseGeocode } from "./lib/openMeteo";
 import { fetchRadar } from "./lib/rainviewer";
 import { tr, useLang } from "./lib/i18n";
 import { TIER_COLOR, tempTier } from "./lib/tiers";
@@ -64,6 +68,16 @@ function loadSavedLocation(): GeoLocation {
   return DEFAULT_LOCATION;
 }
 
+// „Naposledy aktualizováno" jako relativní čas (právě teď / před X min / před X h).
+function relUpdated(from: number, now: number): string {
+  const s = Math.max(0, Math.round((now - from) / 1000));
+  if (s < 60) return tr("právě teď");
+  const m = Math.round(s / 60);
+  if (m < 60) return tr("před {n} min", { n: m });
+  const h = Math.round(m / 60);
+  return tr("před {n} h", { n: h });
+}
+
 // Posun ISO data (YYYY-MM-DD) o daný počet dní.
 function shiftIso(iso: string, days: number): string {
   const d = new Date(iso + "T12:00:00");
@@ -111,14 +125,26 @@ export default function App() {
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  // Kdy byla naposledy načtena předpověď + „tik" pro průběžný relativní čas.
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const lastReloadTick = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchForecast(location.latitude, location.longitude, pastDays, model)
+    // Pull-to-refresh (reloadTick) vynutí čerstvá data mimo cache.
+    const force = reloadTick !== lastReloadTick.current;
+    lastReloadTick.current = reloadTick;
+    fetchForecast(location.latitude, location.longitude, pastDays, model, {
+      force,
+    })
       .then((f) => {
-        if (!cancelled) setForecast(f);
+        if (!cancelled) {
+          setForecast(f);
+          setFetchedAt(Date.now());
+        }
       })
       .catch((e) => {
         if (!cancelled) {
@@ -142,6 +168,12 @@ export default function App() {
       setPull(0);
     }
   }, [loading]);
+
+  // Průběžně přepočítávej „naposledy aktualizováno před …" (jednou za 30 s).
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
   // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
@@ -192,6 +224,14 @@ export default function App() {
       cancelled = true;
     };
   }, [location]);
+
+  // Prefetch oblíbených míst do cache → přepnutí je pak okamžité.
+  useEffect(() => {
+    favorites
+      .filter((f) => !sameLocation(f, location))
+      .slice(0, 6)
+      .forEach((f) => prefetchForecast(f.latitude, f.longitude, model));
+  }, [favorites, location, model]);
 
   // Udržuj v URL aktuální lokaci, ať jde odkaz sdílet (deep-link).
   useEffect(() => {
@@ -807,25 +847,37 @@ export default function App() {
           aria-label={tr("Otevřít radar")}
         >
           <RadarGlyph />
+          <span className="radar-fab-label">{tr("Radar srážek")}</span>
         </button>
       )}
 
       {error && <div className="banner error">{error}</div>}
 
       {loading && !forecast ? (
-        <div className="loading-screen">
-          <RainLoader />
-          <p>{tr("Načítám počasí…")}</p>
-        </div>
+        <Skeleton />
       ) : forecast ? (
         <main className="content">
           <div className="col-main">
+            <WeatherAlerts
+              lat={location.latitude}
+              lon={location.longitude}
+            />
+            {selectedDay && (
+              <SmartSummary
+                day={selectedDay}
+                hourly={forecast.hourly}
+                date={selectedDate}
+                isToday={selectedDate === today}
+                minutely={forecast.minutely15}
+                lat={location.latitude}
+                lon={location.longitude}
+                feelsMax={feelsMax}
+                feelsMin={feelsMin}
+              />
+            )}
             <Meteogram
               hourly={forecast.hourly}
               activeDate={selectedDate}
-              day={selectedDay}
-              feelsMax={feelsMax}
-              feelsMin={feelsMin}
               lat={location.latitude}
               lon={location.longitude}
               model={model}
@@ -852,6 +904,7 @@ export default function App() {
                 air={air[selectedDate] ?? null}
                 date={selectedDate}
                 lat={location.latitude}
+                hourly={forecast.hourly}
               />
             )}
           </div>
@@ -910,7 +963,7 @@ export default function App() {
       <footer className="footer">
         <p className="footer-note">
           {tr(
-            "„Vzniklo z frustrace, že chybí počasí s intuitivním UX, dobrými daty, historií bez paywallu a reklam. Tak jsem ho udělal.“",
+            "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam.",
           )}
           <br />—{" "}
           <span className="footer-name">Jan Václavík</span>
@@ -919,6 +972,19 @@ export default function App() {
           <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
           {tr(", jak se vám líbí.")}
         </p>
+
+        {fetchedAt != null && (
+          <p
+            className="footer-updated"
+            title={new Date(fetchedAt).toLocaleString(
+              lang === "en" ? "en-GB" : "cs-CZ",
+            )}
+          >
+            {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
+          </p>
+        )}
+
+        <InstallHint />
 
         <div className="footer-links">
           <button type="button" className="footer-link-btn" onClick={shareLink}>
@@ -999,34 +1065,6 @@ function SwipeArrow({ dir }: { dir: 1 | -1 }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-function RainLoader() {
-  return (
-    <svg
-      className="rain-loader"
-      width="104"
-      height="104"
-      viewBox="0 0 64 64"
-      aria-hidden="true"
-    >
-      <path
-        className="rain-loader-cloud"
-        d="M20 42a11 11 0 0 1 1-22 14 14 0 0 1 26 4 9 9 0 0 1-2 18H20z"
-        fill="#dfe7f5"
-      />
-      <g
-        className="rain-loader-drops"
-        stroke="#5bb6ff"
-        strokeWidth="3"
-        strokeLinecap="round"
-      >
-        <line className="d1" x1="24" y1="45" x2="24" y2="52" />
-        <line className="d2" x1="33" y1="45" x2="33" y2="52" />
-        <line className="d3" x1="42" y1="45" x2="42" y2="52" />
-      </g>
     </svg>
   );
 }

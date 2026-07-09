@@ -39,6 +39,7 @@ export interface HourlyPoint {
   cloudLow: number;
   cloudMid: number;
   cloudHigh: number;
+  cape: number;
   isDay: boolean;
 }
 
@@ -56,11 +57,17 @@ export interface DailyPoint {
   uvIndexMax: number;
 }
 
+export interface Minutely15 {
+  time: string[];
+  precipitation: number[];
+}
+
 export interface Forecast {
   timezone: string;
   current: CurrentWeather;
   hourly: HourlyPoint[];
   daily: DailyPoint[];
+  minutely15?: Minutely15;
 }
 
 export interface RadarFrame {

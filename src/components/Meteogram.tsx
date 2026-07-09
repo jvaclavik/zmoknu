@@ -20,9 +20,6 @@ import WeatherIcon from "./WeatherIcon";
 interface Props {
   hourly: HourlyPoint[];
   activeDate?: string;
-  day?: DailyPoint | null;
-  feelsMax?: number;
-  feelsMin?: number;
   lat?: number;
   lon?: number;
   model?: string;
@@ -135,9 +132,6 @@ function interpNormal(arr: (number | null)[], iso: string): number | null {
 export default function Meteogram({
   hourly,
   activeDate,
-  day,
-  feelsMax,
-  feelsMin,
   lat,
   lon,
   model = "best_match",
@@ -468,6 +462,36 @@ export default function Meteogram({
     return bars;
   }, [points]);
 
+  // Bouřkové úseky (WMO 95/96/99) – zvýrazníme je ve srážkovém grafu,
+  // průhlednost pruhu odpovídá pravděpodobnosti srážek v daném úseku.
+  const stormBars = useMemo(() => {
+    const isStorm = (c: number) => c === 95 || c === 96 || c === 99;
+    const bars: {
+      startI: number;
+      endI: number;
+      prob: number;
+      hail: boolean;
+    }[] = [];
+    let i = 0;
+    while (i < points.length) {
+      if (!isStorm(points[i].weatherCode)) {
+        i++;
+        continue;
+      }
+      let j = i;
+      let prob = points[i].precipitationProbability;
+      let hail = points[i].weatherCode !== 95;
+      while (j + 1 < points.length && isStorm(points[j + 1].weatherCode)) {
+        j++;
+        prob = Math.max(prob, points[j].precipitationProbability);
+        hail = hail || points[j].weatherCode !== 95;
+      }
+      bars.push({ startI: i, endI: j, prob, hail });
+      i = j + 1;
+    }
+    return bars;
+  }, [points]);
+
   const yCurve = (v: number) => {
     const t = (v - series.min) / Math.max(0.001, series.max - series.min);
     return CURVE_BOTTOM - t * (CURVE_BOTTOM - TOP_PAD);
@@ -769,12 +793,6 @@ export default function Meteogram({
 
   return (
     <>
-      {day && (
-        <section className="card mg-summary-card">
-          <DaySummary day={day} feelsMax={feelsMax} feelsMin={feelsMin} />
-        </section>
-      )}
-
       <section className="card meteogram-card">
       <div className="mg-head">
         <div className="mg-head-title">
@@ -1327,6 +1345,30 @@ export default function Meteogram({
                     </text>
                   </g>
                 ))}
+                {/* bouřkové úseky – svislý pruh s průhledností dle pravděpodobnosti */}
+                {stormBars.map((b) => {
+                  const left = x(b.startI) - pph * 0.5;
+                  const right = x(b.endI) + pph * 0.5;
+                  const op = 0.16 + 0.34 * (Math.max(0, b.prob) / 100);
+                  const cx = (left + right) / 2;
+                  return (
+                    <g key={`storm-${b.startI}`}>
+                      <rect
+                        x={left}
+                        y={TOP_PAD}
+                        width={Math.max(0, right - left)}
+                        height={PRECIP_BASELINE - TOP_PAD}
+                        fill="rgba(168,120,255,1)"
+                        opacity={op}
+                      />
+                      <StormBolt
+                        x={cx}
+                        y={TOP_PAD + 9}
+                        hail={b.hail}
+                      />
+                    </g>
+                  );
+                })}
                 {/* velké srážkové sloupce – od spodku grafu */}
                 {precipBars.map((b) => {
                   const top = yPrecip(b.value);
@@ -1551,14 +1593,16 @@ export default function Meteogram({
 }
 
 // Stručný přehled vybraného dne nad meteogramem.
-function DaySummary({
+export function DaySummary({
   day,
   feelsMax,
   feelsMin,
+  hideTone,
 }: {
   day: DailyPoint;
   feelsMax?: number;
   feelsMin?: number;
+  hideTone?: boolean;
 }) {
   const info = describeWeather(day.weatherCode);
   const prob = day.precipitationProbabilityMax ?? 0;
@@ -1584,12 +1628,14 @@ function DaySummary({
           </span>
         )}
       </div>
-      <span
-        className="mg-daysum-tone"
-        style={{ background: TIER_COLOR[tier] }}
-      >
-        {tr(TIER_LABEL[tier])}
-      </span>
+      {!hideTone && (
+        <span
+          className="mg-daysum-tone"
+          style={{ background: TIER_COLOR[tier] }}
+        >
+          {tr(TIER_LABEL[tier])}
+        </span>
+      )}
       <div className="mg-daysum-precip" style={{ opacity: precipOp }}>
         <span className="mg-daysum-precip-main">
           <DropMini />
@@ -1958,6 +2004,26 @@ function RainGlyph() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+function StormBolt({ x, y, hail }: { x: number; y: number; hail: boolean }) {
+  return (
+    <g transform={`translate(${x - 7} ${y - 7})`} opacity="0.95">
+      <path
+        d="M8 0 L3 8 H6.5 L5 14 L11 5 H7.5 L9.5 0 Z"
+        fill="rgba(200,170,255,0.95)"
+        stroke="rgba(120,80,200,0.8)"
+        strokeWidth="0.6"
+        strokeLinejoin="round"
+      />
+      {hail && (
+        <>
+          <circle cx="1.5" cy="12.5" r="1.1" fill="rgba(220,235,255,0.95)" />
+          <circle cx="12.5" cy="12.5" r="1.1" fill="rgba(220,235,255,0.95)" />
+        </>
+      )}
+    </g>
   );
 }
 
