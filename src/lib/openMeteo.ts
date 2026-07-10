@@ -32,6 +32,95 @@ function fcKey(lat: number, lon: number, pastDays: number, model: string) {
   return `${lat.toFixed(3)},${lon.toFixed(3)},${pastDays},${model}`;
 }
 
+// Offline úložiště předpovědí (víc míst): oblíbená + posledních N navštívených.
+// Na rozdíl od forecastCache (jen v paměti) přežije reload i restart prohlížeče
+// a umožní přepínat mezi místy i bez sítě.
+const OFFLINE_KEY = "zmoknu.offlineForecasts";
+// Kolik nechat nefavoritních (naposledy navštívených) a favoritních záznamů.
+const OFFLINE_RECENTS = 5;
+const OFFLINE_FAVS = 8;
+
+export interface SavedForecast {
+  at: number;
+  location: GeoLocation;
+  pastDays: number;
+  model: string;
+  forecast: Forecast;
+}
+
+type OfflineStore = Record<string, SavedForecast>;
+
+function offlineKey(lat: number, lon: number): string {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`;
+}
+
+export function loadOfflineStore(): OfflineStore {
+  try {
+    const raw = localStorage.getItem(OFFLINE_KEY);
+    if (raw) return JSON.parse(raw) as OfflineStore;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+// Zápis s ořezem podle priority (favority + nejnovější navštívená) a s fallbackem
+// při překročení kvóty localStorage (postupně zahazujeme nejméně důležité).
+function persistOfflineStore(store: OfflineStore, favKeys: Set<string>): void {
+  const entries = Object.entries(store);
+  const byAtDesc = (a: [string, SavedForecast], b: [string, SavedForecast]) =>
+    b[1].at - a[1].at;
+  const favs = entries.filter(([k]) => favKeys.has(k)).sort(byAtDesc);
+  const rest = entries.filter(([k]) => !favKeys.has(k)).sort(byAtDesc);
+  // Priorita: nejnovější favority, pak nejnovější navštívená (na konci = první
+  // kandidáti na zahození při nedostatku místa).
+  let keep = [...favs.slice(0, OFFLINE_FAVS), ...rest.slice(0, OFFLINE_RECENTS)];
+  while (keep.length > 0) {
+    try {
+      localStorage.setItem(OFFLINE_KEY, JSON.stringify(Object.fromEntries(keep)));
+      return;
+    } catch {
+      keep = keep.slice(0, -1); // odeber nejméně důležitý a zkus znovu
+    }
+  }
+  try {
+    localStorage.removeItem(OFFLINE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Ulož předpověď pro dané místo do offline úložiště. `favorites` slouží k tomu,
+// aby se při ořezu zachovaly předpovědi oblíbených míst.
+export function saveOfflineForecast(
+  location: GeoLocation,
+  pastDays: number,
+  model: string,
+  forecast: Forecast,
+  favorites: GeoLocation[] = [],
+): void {
+  const store = loadOfflineStore();
+  store[offlineKey(location.latitude, location.longitude)] = {
+    at: Date.now(),
+    location,
+    pastDays,
+    model,
+    forecast,
+  };
+  const favKeys = new Set(
+    favorites.map((f) => offlineKey(f.latitude, f.longitude)),
+  );
+  persistOfflineStore(store, favKeys);
+}
+
+// Vrátí uloženou předpověď pro dané místo (nebo null).
+export function getOfflineForecast(
+  lat: number,
+  lon: number,
+): SavedForecast | null {
+  return loadOfflineStore()[offlineKey(lat, lon)] ?? null;
+}
+
 // Přednačte předpověď do cache (pro oblíbená místa). Chyby ignoruje.
 export function prefetchForecast(
   lat: number,

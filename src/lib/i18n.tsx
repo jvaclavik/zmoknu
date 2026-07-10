@@ -48,6 +48,10 @@ const EN: Record<string, string> = {
     "Forecast by Open-Meteo. Models can be compared in the meteogram (eye icon → multi). ČHMÚ ALADIN covers only Czechia and a short window – switch to another model when it has no data.",
   "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam.":
     "Born out of frustration that there was no weather app with intuitive UX and a clear presentation of data without a paywall or ads.",
+  "Jste offline – zobrazuji naposledy uloženou předpověď.":
+    "You’re offline – showing the last saved forecast.",
+  "Jste offline – zobrazuji uloženou předpověď z {when} ({rel}).":
+    "You’re offline – showing a saved forecast from {when} ({rel}).",
   "Dejte mi vědět": "Let me know",
   ", jak se vám líbí.": " how you like it.",
   "Odkaz zkopírován": "Link copied",
@@ -244,6 +248,75 @@ const EN: Record<string, string> = {
     "Activity shifts the feels-like temperature: moving warms you, resting cools you.",
   "Doporučení platí na celý (bdělý) den, ne na jednu hodinu. Teplota vychází z pocitové (ne reálné): hlavní vrstvu určí denní maximum, minimum přidá vrstvu navíc na chladnější ráno a večer. Déšť se počítá z denních hodin 6–22 (noční se neřeší, kromě vydatných srážek z celodenního úhrnu), vítr a UV jsou denní maxima.":
     "The recommendation covers the whole waking day, not a single hour. Temperature is based on feels-like (not the real one): the daily high sets the main layer, while the low adds an extra layer for cooler mornings and evenings. Rain is computed from daytime hours 6–22 (night is ignored, except heavy rain based on the full-day total); wind and UV are daily maxima.",
+  // Meteogram – vysvětlivky typů
+  "Vysvětlivky u typů": "Explanations for types",
+  "Teplota vzduchu ve stínu (2 m nad zemí). Základ pro plánování dne.":
+    "Air temperature in the shade (2 m above ground). The basis for planning your day.",
+  "Jak teplo/zima reálně je – zohledňuje vítr, vlhkost a slunce. Pro oblečení spolehlivější než samotná teplota.":
+    "How warm/cold it actually feels – accounts for wind, humidity and sun. More reliable for clothing than temperature alone.",
+  "Množství srážek (mm) a pravděpodobnost. Napoví, jestli a jak moc bude pršet.":
+    "Precipitation amount (mm) and probability. Tells you whether and how much it will rain.",
+  "Rychlost větru a nárazy. Silný vítr zesiluje pocit chladu a komplikuje cyklistiku či deštník.":
+    "Wind speed and gusts. Strong wind intensifies the feeling of cold and complicates cycling or using an umbrella.",
+  "Pokrytí oblohy mraky (%). Nízké hodnoty = jasno a víc slunce (a v noci chladněji).":
+    "Sky cloud cover (%). Low values = clear skies and more sun (and colder at night).",
+  "Relativní vlhkost vzduchu (%). Vysoká v teple je dusno, v zimě zvyšuje pocit chladu; kolem 100 % hrozí mlha nebo rosa.":
+    "Relative humidity (%). High in warm weather feels muggy, in winter it increases the feeling of cold; near 100 % fog or dew is likely.",
+  "Teplota, při níž vzduch nasytí vlhkost. Čím blíž je teplotě, tím dusněji je a tím spíš vznikne mlha/rosa. Nad ~16 °C bývá dusno.":
+    "The temperature at which air becomes saturated. The closer it is to the temperature, the muggier it feels and the more likely fog/dew is. Above ~16 °C it tends to feel muggy.",
+  "Tlak vzduchu. Klesající tlak často předchází zhoršení počasí (déšť, vítr), rostoucí naopak vyjasnění a klid.":
+    "Air pressure. Falling pressure often precedes worsening weather (rain, wind), while rising pressure means clearing and calm.",
+  // Upozornění na počasí (notifikace)
+  "Upozornění na počasí": "Weather alerts",
+  "Začne pršet": "Rain will start",
+  "Začne sněžit": "Snow will start",
+  "Teplota klesne pod": "Temperature drops below",
+  "Teplota vystoupá nad": "Temperature rises above",
+  "Vítr zesílí nad": "Wind rises above",
+  Ochlazení: "Cooling down",
+  "Vysoká teplota": "High temperature",
+  "Silný vítr": "Strong wind",
+  "do {n} h": "within {n} h",
+  do: "within",
+  "{n} h": "{n} h",
+  "Teplota klesne pod {t} °C": "Temperature below {t} °C",
+  "Teplota vystoupá nad {t} °C": "Temperature above {t} °C",
+  "Vítr zesílí nad {t} m/s": "Wind above {t} m/s",
+  "Do {m} min začne pršet – {loc}": "Rain starts in {m} min – {loc}",
+  "Kolem {t} začne pršet – {loc}": "Rain starts around {t} – {loc}",
+  "Právě je {v} °C – {loc}": "It’s {v} °C now – {loc}",
+  "Kolem {t} klesne na {v} °C – {loc}": "Around {t} it drops to {v} °C – {loc}",
+  "Kolem {t} vystoupá na {v} °C – {loc}":
+    "Around {t} it rises to {v} °C – {loc}",
+  "Právě fouká až {v} m/s – {loc}": "Gusts up to {v} m/s now – {loc}",
+  "Kolem {t} vítr až {v} m/s – {loc}": "Around {t} gusts up to {v} m/s – {loc}",
+  "Právě sněží – {loc}": "It’s snowing now – {loc}",
+  "Kolem {t} bude sněžit – {loc}": "Snow around {t} – {loc}",
+  "Tento prohlížeč notifikace nepodporuje. Na iPhonu appku nejdřív přidej na plochu.":
+    "This browser doesn’t support notifications. On iPhone, add the app to your home screen first.",
+  "Notifikace jsou zakázané. Povol je v nastavení prohlížeče pro tuto stránku.":
+    "Notifications are blocked. Enable them in your browser settings for this site.",
+  "Nejdřív povol zobrazování notifikací.": "First allow showing notifications.",
+  "Povolit notifikace": "Enable notifications",
+  "Zatím žádná pravidla. Přidej si první níže.":
+    "No rules yet. Add your first one below.",
+  "Zapnout/vypnout": "Toggle on/off",
+  "Smazat pravidlo": "Delete rule",
+  "Přidat pravidlo": "Add rule",
+  "Zkušební upozornění": "Test alert",
+  "Takto bude upozornění vypadat.": "This is how an alert will look.",
+  "Poslat zkušební notifikaci": "Send a test notification",
+  "Poslat zkušební notifikaci ({n} s)": "Send a test notification ({n} s)",
+  "Přepni se z aplikace…": "Switch away from the app…",
+  "Notifikaci pošlu za {n} s – přepni se z aplikace.":
+    "Sending in {n} s – switch away from the app.",
+  "Začne pršet (≥ {t} mm/h)": "Rain starts (≥ {t} mm/h)",
+  "Notifikace odeslána. Když ji nevidíš, zkontroluj oprávnění v systému a prohlížeči.":
+    "Notification sent. If you don’t see it, check permissions in your system and browser.",
+  "Bez povolení nelze notifikaci zobrazit.":
+    "A notification can’t be shown without permission.",
+  "Upozornění se vyhodnocují podle předpovědi pro aktuální lokaci, dokud je appka spuštěná (i na pozadí). Doručení, když je appka úplně zavřená, web negarantuje.":
+    "Alerts are evaluated against the forecast for the current location while the app is running (including in the background). Delivery when the app is fully closed isn’t guaranteed on the web.",
   "Vyhodnocené podmínky": "Evaluated conditions",
   "Oblečení se skládá podle pocitové teploty, na kterou pak navazují srážky, vítr, sníh a UV. Aktivní podmínky (zeleně) přidávají další kusy.":
     "The outfit is built from the feels-like temperature, then precipitation, wind, snow and UV are layered on. Active conditions (green) add more items.",

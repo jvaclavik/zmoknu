@@ -76,6 +76,18 @@ const TAB_LABEL: Record<Tab, string> = {
   pressure: "Tlak",
 };
 
+// Krátké vysvětlivky – k čemu je dobré danou veličinu sledovat.
+const TAB_INFO: Record<Tab, string> = {
+  temp: "Teplota vzduchu ve stínu (2 m nad zemí). Základ pro plánování dne.",
+  feels: "Jak teplo/zima reálně je – zohledňuje vítr, vlhkost a slunce. Pro oblečení spolehlivější než samotná teplota.",
+  precip: "Množství srážek (mm) a pravděpodobnost. Napoví, jestli a jak moc bude pršet.",
+  wind: "Rychlost větru a nárazy. Silný vítr zesiluje pocit chladu a komplikuje cyklistiku či deštník.",
+  cloud: "Pokrytí oblohy mraky (%). Nízké hodnoty = jasno a víc slunce (a v noci chladněji).",
+  humidity: "Relativní vlhkost vzduchu (%). Vysoká v teple je dusno, v zimě zvyšuje pocit chladu; kolem 100 % hrozí mlha nebo rosa.",
+  dewpoint: "Teplota, při níž vzduch nasytí vlhkost. Čím blíž je teplotě, tím dusněji je a tím spíš vznikne mlha/rosa. Nad ~16 °C bývá dusno.",
+  pressure: "Tlak vzduchu. Klesající tlak často předchází zhoršení počasí (déšť, vítr), rostoucí naopak vyjasnění a klid.",
+};
+
 const DEFAULT_PINNED: Record<Tab, boolean> = {
   temp: true,
   feels: true,
@@ -160,6 +172,10 @@ export default function Meteogram({
   );
   const [showNormal, setShowNormal] = useStoredState<boolean>(
     "zmoknu.mgNormal",
+    false,
+  );
+  const [showTypeInfo, setShowTypeInfo] = useStoredState<boolean>(
+    "zmoknu.mgTypeInfo",
     false,
   );
   const [normals, setNormals] = useState<ClimateNormals | null>(null);
@@ -882,6 +898,14 @@ export default function Meteogram({
                 />
                 <span>{tr("Historický normál (30 let)")}</span>
               </label>
+              <label className="mg-view-toggle">
+                <input
+                  type="checkbox"
+                  checked={showTypeInfo}
+                  onChange={(e) => setShowTypeInfo(e.target.checked)}
+                />
+                <span>{tr("Vysvětlivky u typů")}</span>
+              </label>
               {showNormal && (
                 <div className="mg-view-hint">
                   {tr(
@@ -994,6 +1018,10 @@ export default function Meteogram({
           pressureDelta={pressureDelta}
           visible={(t) => pinned[t] || tab === t}
         />
+      )}
+
+      {showTypeInfo && (
+        <p className="mg-typeinfo">{tr(TAB_INFO[tab])}</p>
       )}
 
       {(compareLines.length > 0 || normalData) && (

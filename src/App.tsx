@@ -13,6 +13,7 @@ import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
 import InstallHint from "./components/InstallHint";
 import Meteogram from "./components/Meteogram";
+import NotifySettings from "./components/NotifySettings";
 import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
 import Skeleton from "./components/Skeleton";
@@ -25,9 +26,11 @@ import { tr, useLang } from "./lib/i18n";
 import { DEFAULT_MODEL, WEATHER_MODELS } from "./lib/models";
 import {
   fetchForecast,
-  prefetchForecast,
+  getOfflineForecast,
   reverseGeocode,
+  saveOfflineForecast,
 } from "./lib/openMeteo";
+import { runAlertChecks } from "./lib/notify";
 import { fetchRadar } from "./lib/rainviewer";
 import { tempTier, TIER_COLOR } from "./lib/tiers";
 import { useStoredState } from "./lib/useStoredState";
@@ -146,7 +149,13 @@ export default function App() {
   // Kdy byla naposledy načtena předpověď + „tik" pro průběžný relativní čas.
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
+  const [offline, setOffline] = useState(false);
   const lastReloadTick = useRef(0);
+  // Aktuální seznam oblíbených bez nutnosti re-fetche předpovědi při jeho změně.
+  const favoritesRef = useRef<GeoLocation[]>([]);
+  favoritesRef.current = favorites;
 
   useEffect(() => {
     let cancelled = false;
@@ -162,13 +171,29 @@ export default function App() {
         if (!cancelled) {
           setForecast(f);
           setFetchedAt(Date.now());
+          setOffline(false);
+          saveOfflineForecast(location, pastDays, model, f, favoritesRef.current);
         }
       })
       .catch((e) => {
-        if (!cancelled) {
+        if (cancelled) return;
+        // Při výpadku sítě zkusíme obnovit uloženou předpověď pro dané místo
+        // (ať appka funguje i offline a jde přepínat mezi uloženými místy).
+        // Jiné chyby (např. model bez dat) řešíme jako dřív – jen hláškou.
+        const isNetwork = !navigator.onLine || e instanceof TypeError;
+        const saved = isNetwork
+          ? getOfflineForecast(location.latitude, location.longitude)
+          : null;
+        if (saved) {
+          setForecast(saved.forecast);
+          setFetchedAt(saved.at);
+          setOffline(true);
+          setError(null);
+        } else {
           setError(e instanceof Error ? e.message : tr("Chyba načítání"));
           // Nezobrazuj stará/rozbitá data – ať je vidět jen hláška.
           setForecast(null);
+          setOffline(false);
         }
       })
       .finally(() => {
@@ -256,6 +281,27 @@ export default function App() {
     setPendingDate(null);
   }, [location]);
 
+  // Lokální upozornění: vyhodnotíme pravidla proti čerstvé předpovědi hned po
+  // načtení a pak průběžně (interval + návrat na záložku), dokud appka běží.
+  useEffect(() => {
+    if (!forecast) return;
+    const run = () => {
+      runAlertChecks(forecast, location.name).catch(() => {});
+    };
+    run();
+    const id = window.setInterval(run, 10 * 60 * 1000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", run);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", run);
+    };
+  }, [forecast, location.name]);
+
   // Kvalita ovzduší + pyl (samostatné API, nebrání hlavní předpovědi).
   useEffect(() => {
     let cancelled = false;
@@ -272,13 +318,20 @@ export default function App() {
     };
   }, [location]);
 
-  // Prefetch oblíbených míst do cache → přepnutí je pak okamžité.
+  // Prefetch oblíbených míst → přepnutí je okamžité a předpověď se zároveň
+  // uloží pro offline použití (spolu s naposledy navštívenými místy).
   useEffect(() => {
     favorites
       .filter((f) => !sameLocation(f, location))
-      .slice(0, 6)
-      .forEach((f) => prefetchForecast(f.latitude, f.longitude, model));
-  }, [favorites, location, model]);
+      .slice(0, 8)
+      .forEach((f) => {
+        fetchForecast(f.latitude, f.longitude, pastDays, model)
+          .then((fc) =>
+            saveOfflineForecast(f, pastDays, model, fc, favoritesRef.current),
+          )
+          .catch(() => {});
+      });
+  }, [favorites, location, model, pastDays]);
 
   // Až je appka načtená a chvíli klid, potichu přednačti radarový chunk
   // (maplibre). Otevření radaru je pak okamžité, ale nezdrží první vykreslení.
@@ -913,6 +966,8 @@ export default function App() {
         )}
       </header>
 
+      {notifyOpen && <NotifySettings onClose={() => setNotifyOpen(false)} />}
+
       <SearchBar
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -941,6 +996,22 @@ export default function App() {
       )}
 
       {error && <div className="banner error">{error}</div>}
+      {offline && forecast && (
+        <div className="banner offline">
+          {fetchedAt != null
+            ? tr(
+                "Jste offline – zobrazuji uloženou předpověď z {when} ({rel}).",
+                {
+                  when: new Date(fetchedAt).toLocaleString(
+                    lang === "cs" ? "cs-CZ" : "en-GB",
+                    { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" },
+                  ),
+                  rel: relUpdated(fetchedAt, nowTick),
+                },
+              )
+            : tr("Jste offline – zobrazuji naposledy uloženou předpověď.")}
+        </div>
+      )}
       {loading && !forecast ? (
         <Skeleton />
       ) : forecast ? (
@@ -1074,6 +1145,17 @@ export default function App() {
 
         <InstallHint />
 
+        <div className="install-hint">
+          <button
+            type="button"
+            className="install-btn"
+            onClick={() => setNotifyOpen(true)}
+          >
+            <BellGlyph />
+            {tr("Upozornění na počasí")}
+          </button>
+        </div>
+
         <div className="footer-links">
           <button type="button" className="footer-link-btn" onClick={shareLink}>
             {shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
@@ -1106,6 +1188,25 @@ function skyTheme(code: number, isDay: boolean): string {
     return "rain";
   if (icon === "snow" || icon === "sleet") return "snow";
   return "cloud";
+}
+
+function BellGlyph() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  );
 }
 
 function RadarGlyph() {
