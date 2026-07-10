@@ -1,5 +1,5 @@
-import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig, type PluginOption } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Lokální obsluha serverless funkcí z /api (na Vercelu je řeší runtime
@@ -37,7 +37,7 @@ export default defineConfig({
       // Logo v hlavičce (/logo.svg) i ikony musí být v precache, ať se appka
       // offline zobrazí i s logem, ne jen s rozbitým obrázkem.
       includeAssets: [
-        "favicon.svg",
+        "favicon.png",
         "apple-touch-icon.png",
         "logo.svg",
         "pwa-192x192.png",
@@ -46,8 +46,7 @@ export default defineConfig({
       manifest: {
         name: "Zmoknu? – počasí a radar",
         short_name: "Zmoknu?",
-        description:
-          "Přehledné počasí, předpověď až na 16 dní a radar srážek.",
+        description: "Přehledné počasí, předpověď až na 16 dní a radar srážek.",
         lang: "cs",
         theme_color: "#05080f",
         background_color: "#05080f",
@@ -71,7 +70,7 @@ export default defineConfig({
         // Splash obrázky jsou jen iOS launch screeny (přes <link> v index.html),
         // appka je za běhu nenačítá → není třeba je mít v precache. OG náhled
         // stahují jen crawlery (Slack/FB/Twitter), taky ho nemá smysl cacheovat.
-        globIgnores: ["**/splash/**", "**/og-image.png"],
+        globIgnores: ["**/splash/**", "**/og-image.jpg"],
         // Předpověď a radar necacheujeme natvrdo (jsou živé) – jen runtime cache
         // s krátkou platností, ať appka funguje i offline s posledními daty.
         runtimeCaching: [
@@ -96,7 +95,7 @@ export default defineConfig({
         rewrite: (p) =>
           p.replace(
             /^\/chmi-radar/,
-            "/meteorology/weather/radar/composite/maxz/png",
+            "/meteorology/weather/radar/composite/maxz/png"
           ),
       },
       "/chmi-sat": {

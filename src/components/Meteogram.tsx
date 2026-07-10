@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import type { DailyPoint, HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
@@ -854,6 +861,9 @@ export default function Meteogram({
                   value={days}
                   onChange={(e) => setDays(Number(e.target.value))}
                   aria-label={tr("Počet zobrazených dní")}
+                  style={
+                    { "--fill": `${((days - 1) / 6) * 100}%` } as CSSProperties
+                  }
                 />
               </div>
               <label className="mg-view-toggle">

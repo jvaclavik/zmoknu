@@ -242,6 +242,8 @@ const EN: Record<string, string> = {
   Běhám: "Running",
   "Aktivita posouvá pocitovou teplotu: pohyb hřeje, klid ochlazuje.":
     "Activity shifts the feels-like temperature: moving warms you, resting cools you.",
+  "Doporučení platí na celý (bdělý) den, ne na jednu hodinu. Teplota vychází z pocitové (ne reálné): hlavní vrstvu určí denní maximum, minimum přidá vrstvu navíc na chladnější ráno a večer. Déšť se počítá z denních hodin 6–22 (noční se neřeší, kromě vydatných srážek z celodenního úhrnu), vítr a UV jsou denní maxima.":
+    "The recommendation covers the whole waking day, not a single hour. Temperature is based on feels-like (not the real one): the daily high sets the main layer, while the low adds an extra layer for cooler mornings and evenings. Rain is computed from daytime hours 6–22 (night is ignored, except heavy rain based on the full-day total); wind and UV are daily maxima.",
   "Vyhodnocené podmínky": "Evaluated conditions",
   "Oblečení se skládá podle pocitové teploty, na kterou pak navazují srážky, vítr, sníh a UV. Aktivní podmínky (zeleně) přidávají další kusy.":
     "The outfit is built from the feels-like temperature, then precipitation, wind, snow and UV are layered on. Active conditions (green) add more items.",

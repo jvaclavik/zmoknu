@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { DailyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
@@ -75,6 +75,11 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        style={
+          {
+            "--fill": `${((value - min) / (max - min)) * 100}%`,
+          } as CSSProperties
+        }
       />
     </label>
   );
@@ -148,6 +153,11 @@ export default function OutfitTester({ onClose, initial }: Props) {
         </div>
 
         <div className="dbg-body">
+          <p className="dbg-intro">
+            {tr(
+              "Doporučení platí na celý (bdělý) den, ne na jednu hodinu. Teplota vychází z pocitové (ne reálné): hlavní vrstvu určí denní maximum, minimum přidá vrstvu navíc na chladnější ráno a večer. Déšť se počítá z denních hodin 6–22 (noční se neřeší, kromě vydatných srážek z celodenního úhrnu), vítr a UV jsou denní maxima.",
+            )}
+          </p>
           <div className="dbg-controls">
             <div className="dbg-activity">
               <span className="dbg-slider-head">

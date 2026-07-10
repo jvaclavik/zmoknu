@@ -1,12 +1,18 @@
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import DayDetails from "./components/DayDetails";
 import DaySelector from "./components/DaySelector";
 import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
 import InstallHint from "./components/InstallHint";
 import Meteogram from "./components/Meteogram";
-import RadarMap from "./components/RadarMap";
 import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
 import Skeleton from "./components/Skeleton";
@@ -15,14 +21,23 @@ import WeatherAlerts from "./components/WeatherAlerts";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
 import { dayHeader, isoDate, todayISO } from "./lib/format";
-import { DEFAULT_MODEL, WEATHER_MODELS } from "./lib/models";
-import { fetchForecast, prefetchForecast, reverseGeocode } from "./lib/openMeteo";
-import { fetchRadar } from "./lib/rainviewer";
 import { tr, useLang } from "./lib/i18n";
-import { TIER_COLOR, tempTier } from "./lib/tiers";
+import { DEFAULT_MODEL, WEATHER_MODELS } from "./lib/models";
+import {
+  fetchForecast,
+  prefetchForecast,
+  reverseGeocode,
+} from "./lib/openMeteo";
+import { fetchRadar } from "./lib/rainviewer";
+import { tempTier, TIER_COLOR } from "./lib/tiers";
 import { useStoredState } from "./lib/useStoredState";
 import { describeWeather } from "./lib/weatherCodes";
 import type { Forecast, GeoLocation, RadarData } from "./types";
+// RadarMap tahá maplibre-gl (~800 kB) – načteme ho až po zbytku appky, aby
+// počáteční bundle byl malý a layout/skeleton se vykreslil co nejdřív. Chunk pak
+// na pozadí přednačteme (viz efekt níže), ať je otevření radaru okamžité.
+const importRadarMap = () => import("./components/RadarMap");
+const RadarMap = lazy(importRadarMap);
 
 type RadarStatus = "loading" | "ok" | "error";
 
@@ -109,7 +124,10 @@ export default function App() {
   const [air, setAir] = useState<AirByDate>({});
   // Kolik dní historie načítáme (1–7) a den, na který skočit po donačtení.
   const [pastDays, setPastDays] = useState(1);
-  const [model, setModel] = useStoredState<string>("zmoknu.model", DEFAULT_MODEL);
+  const [model, setModel] = useStoredState<string>(
+    "zmoknu.model",
+    DEFAULT_MODEL
+  );
   const [pendingDate, setPendingDate] = useState<string | null>(null);
   // Vizuální stav swipe gesta (šipka vylézající z kraje jako „zpět" v Chrome).
   const [swipe, setSwipe] = useState<{
@@ -186,19 +204,48 @@ export default function App() {
       "padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);" +
       "padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);";
     document.body.appendChild(probe);
-    const update = () => {
-      const s = getComputedStyle(probe);
-      root.style.setProperty("--sat", s.paddingTop || "0px");
-      root.style.setProperty("--sar", s.paddingRight || "0px");
-      root.style.setProperty("--sab", s.paddingBottom || "0px");
-      root.style.setProperty("--sal", s.paddingLeft || "0px");
+    // iOS někdy při prvním načtení (a během scrollu/přetažení) hlásí env(safe-area-*)
+    // jako 0. Kdybychom tu 0 uložili, maska status baru (body::before) by měla nulovou
+    // výšku a header by při scrollu „vjel" do status baru. Proto hodnotu nikdy
+    // nepřepisujeme dolů na menší – držíme dosavadní maximum (reset jen při otočení).
+    const setMax = (name: string, val: string, reset: boolean) => {
+      const next = parseFloat(val) || 0;
+      const prev = reset
+        ? 0
+        : parseFloat(root.style.getPropertyValue(name)) || 0;
+      root.style.setProperty(name, `${Math.max(prev, next)}px`);
     };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
+    const update = (reset = false) => {
+      const s = getComputedStyle(probe);
+      setMax("--sat", s.paddingTop, reset);
+      setMax("--sar", s.paddingRight, reset);
+      setMax("--sab", s.paddingBottom, reset);
+      setMax("--sal", s.paddingLeft, reset);
+    };
+    update(true);
+    const onChange = () => update(false);
+    // Otočení mění insety (portrét×krajina) → nastavíme baseline znovu od nuly.
+    const onOrient = () => window.setTimeout(() => update(true), 300);
+    // Doměřovat při scrollu má smysl jen dokud iOS nenahlásí kladný inset – jakmile
+    // ho známe, listener odpojíme, ať getComputedStyle nezdržuje každý frame scrollu.
+    const onScroll = () => {
+      update(false);
+      if ((parseFloat(root.style.getPropertyValue("--sat")) || 0) > 0) {
+        window.removeEventListener("scroll", onScroll);
+      }
+    };
+    window.addEventListener("resize", onChange);
+    window.addEventListener("orientationchange", onOrient);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // iOS reportuje správný inset až chvíli po prvním vykreslení – doměříme.
+    const t1 = window.setTimeout(onChange, 300);
+    const t2 = window.setTimeout(onChange, 1200);
     return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
+      window.removeEventListener("resize", onChange);
+      window.removeEventListener("orientationchange", onOrient);
+      window.removeEventListener("scroll", onScroll);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       probe.remove();
     };
   }, []);
@@ -232,6 +279,37 @@ export default function App() {
       .slice(0, 6)
       .forEach((f) => prefetchForecast(f.latitude, f.longitude, model));
   }, [favorites, location, model]);
+
+  // Až je appka načtená a chvíli klid, potichu přednačti radarový chunk
+  // (maplibre). Otevření radaru je pak okamžité, ale nezdrží první vykreslení.
+  const radarWarmed = useRef(false);
+  useEffect(() => {
+    if (radarWarmed.current || loading || !forecast) return;
+    radarWarmed.current = true;
+    const warm = () => {
+      importRadarMap().catch(() => {
+        radarWarmed.current = false; // zkus to příště znovu
+      });
+    };
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (
+          cb: () => void,
+          o?: { timeout: number }
+        ) => number;
+      }
+    ).requestIdleCallback;
+    if (ric) {
+      const id = ric(warm, { timeout: 4000 });
+      return () => {
+        (
+          window as unknown as { cancelIdleCallback?: (id: number) => void }
+        ).cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(warm, 2000);
+    return () => window.clearTimeout(t);
+  }, [loading, forecast]);
 
   // Udržuj v URL aktuální lokaci, ať jde odkaz sdílet (deep-link).
   useEffect(() => {
@@ -560,11 +638,21 @@ export default function App() {
     );
   }, []);
 
-  // Aktualizace barevného motivu pozadí podle aktuálního počasí.
+  // Aktualizace barevného motivu pozadí podle aktuálního počasí. Motiv
+  // ukládáme do localStorage a nastavujeme na <html>, aby ho preload v
+  // index.html mohl aplikovat hned při dalším otevření (bez skoku barvy).
   useEffect(() => {
-    const code = forecast?.current.weatherCode ?? 0;
-    const isDay = forecast?.current.isDay ?? true;
-    document.body.dataset.sky = skyTheme(code, isDay);
+    if (!forecast) return;
+    const theme = skyTheme(
+      forecast.current.weatherCode,
+      forecast.current.isDay
+    );
+    document.documentElement.dataset.sky = theme;
+    try {
+      localStorage.setItem("sky", theme);
+    } catch {
+      /* localStorage může být nedostupné (privátní režim) */
+    }
   }, [forecast]);
 
   const handleLocate = useCallback(() => {
@@ -794,7 +882,9 @@ export default function App() {
                 {dayHeader(selectedDate || today)}
               </button>
             ) : (
-              <span className="hb-day-static">{tr("dnes")}</span>
+              <span className="hb-pick hb-day-static" aria-hidden="true">
+                {dayHeader(today)}
+              </span>
             )}
           </span>
         </div>
@@ -804,8 +894,7 @@ export default function App() {
             className="tb-daypanel tb-daygroup"
             style={
               {
-                "--arrow-x":
-                  dayArrowX != null ? `${dayArrowX}px` : "50%",
+                "--arrow-x": dayArrowX != null ? `${dayArrowX}px` : "50%",
                 "--tier": selectedDay
                   ? TIER_COLOR[tempTier(selectedDay.tempMax)]
                   : undefined,
@@ -852,16 +941,12 @@ export default function App() {
       )}
 
       {error && <div className="banner error">{error}</div>}
-
       {loading && !forecast ? (
         <Skeleton />
       ) : forecast ? (
         <main className="content">
           <div className="col-main">
-            <WeatherAlerts
-              lat={location.latitude}
-              lon={location.longitude}
-            />
+            <WeatherAlerts lat={location.latitude} lon={location.longitude} />
             {selectedDay && (
               <SmartSummary
                 day={selectedDay}
@@ -912,20 +997,24 @@ export default function App() {
       ) : null}
 
       {radarOpen && (
-        <RadarMap
-          location={location}
-          radar={radar}
-          radarStatus={radarStatus}
-          favorites={favorites}
-          onSelect={setLocation}
-          modal
-          onClose={() => setRadarOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <RadarMap
+            location={location}
+            radar={radar}
+            radarStatus={radarStatus}
+            favorites={favorites}
+            onSelect={setLocation}
+            modal
+            onClose={() => setRadarOpen(false)}
+          />
+        </Suspense>
       )}
 
       <div className="settings-bar">
         <label className="settings-model">
-          <span className="settings-model-label">{tr("Zdroj dat (model)")}</span>
+          <span className="settings-model-label">
+            {tr("Zdroj dat (model)")}
+          </span>
           <select
             className="settings-model-select"
             value={model}
@@ -963,10 +1052,9 @@ export default function App() {
       <footer className="footer">
         <p className="footer-note">
           {tr(
-            "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam.",
+            "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam."
           )}
-          <br />—{" "}
-          <span className="footer-name">Jan Václavík</span>
+          <br />— <span className="footer-name">Jan Václavík</span>
           <br />
           <br />
           <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
@@ -977,7 +1065,7 @@ export default function App() {
           <p
             className="footer-updated"
             title={new Date(fetchedAt).toLocaleString(
-              lang === "en" ? "en-GB" : "cs-CZ",
+              lang === "en" ? "en-GB" : "cs-CZ"
             )}
           >
             {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
@@ -1071,7 +1159,13 @@ function SwipeArrow({ dir }: { dir: 1 | -1 }) {
 
 function RefreshGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M20 11a8 8 0 1 0-.9 4.5"
         stroke="currentColor"
@@ -1113,7 +1207,13 @@ function FlagEN() {
 
 function ClockGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
       <path
         d="M12 7.5V12l3 2"
@@ -1125,4 +1225,3 @@ function ClockGlyph() {
     </svg>
   );
 }
-

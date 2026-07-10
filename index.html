@@ -2,7 +2,7 @@
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Zmoknu?" />
@@ -40,10 +40,10 @@
       property="og:description"
       content="Přehledná předpověď počasí a radar srážek s posuvníkem času. Bez paywallu a reklam."
     />
-    <meta property="og:image" content="https://zmoknu.vercel.app/og-image.png" />
-    <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="1536" />
-    <meta property="og:image:height" content="1024" />
+    <meta property="og:image" content="https://zmoknu.vercel.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="800" />
     <meta property="og:image:alt" content="Zmoknu? – počasí a radar srážek" />
 
     <!-- Twitter / X -->
@@ -53,21 +53,535 @@
       name="twitter:description"
       content="Přehledná předpověď počasí a radar srážek s posuvníkem času. Bez paywallu a reklam."
     />
-    <meta name="twitter:image" content="https://zmoknu.vercel.app/og-image.png" />
+    <meta name="twitter:image" content="https://zmoknu.vercel.app/og-image.jpg" />
     <meta name="twitter:image:alt" content="Zmoknu? – počasí a radar srážek" />
+    <script>
+      // Barvu pozadí (motiv oblohy) známe z minula – nastavíme ji na <html>
+      // hned, ať preload i načtená appka mají stejnou barvu bez skoku. Když
+      // motiv neznáme, odhadneme noc podle lokálního času.
+      (function () {
+        try {
+          var sky = localStorage.getItem("sky");
+          if (!sky) {
+            var h = new Date().getHours();
+            if (h < 6 || h >= 21) sky = "night";
+          }
+          if (sky) document.documentElement.dataset.sky = sky;
+        } catch (e) {}
+      })();
+    </script>
     <style>
-      /* Tmavé pozadí hned od prvního vykreslení (bez bílého probliknutí). */
+      /* Stejné pozadí (gradient) hned od prvního vykreslení jako u načtené
+         appky – žádná změna barvy před skeletonem. Motiv (data-sky) na <html>
+         se aplikuje přes :root[data-sky] body, shodně s index.css. */
       :root {
         color-scheme: dark;
       }
-      html,
+      html {
+        background: #05080f;
+      }
       body {
-        background-color: #05080f;
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(160deg, #05080f, #0a1120);
+        background-attachment: fixed;
+      }
+      :root[data-sky="clear"] body {
+        background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66);
+      }
+      :root[data-sky="cloud"] body {
+        background: linear-gradient(160deg, #141b29, #1f2838);
+      }
+      :root[data-sky="rain"] body {
+        background: linear-gradient(160deg, #0d141d, #18222e);
+      }
+      :root[data-sky="snow"] body {
+        background: linear-gradient(160deg, #182032, #28324d);
+      }
+      :root[data-sky="night"] body {
+        background: linear-gradient(160deg, #03060d, #080e1a);
+      }
+      /* Okamžitý skeleton ještě před spuštěním JS. Plně samostatné styly
+         (v devu se index.css injektuje až přes JS), ať se skeleton zobrazí
+         vždy správně. React ho po připojení nahradí vizuálně shodným skeletonem. */
+      #boot,
+      #boot * {
+        box-sizing: border-box;
+      }
+      #boot {
+        --px: clamp(12px, 3vw, 28px);
+        position: relative;
+        max-width: 1460px;
+        margin: 0 auto;
+        padding: 0 var(--px) 40px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        letter-spacing: -0.003em;
+        -webkit-font-smoothing: antialiased;
+      }
+      /* Déšť přes celý skeleton (stejný efekt jako .skel-rain v Reactu), aby
+         pršelo hned při prvotním vykreslení, ještě než naběhne JS/React. Kapky
+         doplní drobný inline skript níže. */
+      #boot .b-rain {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 3;
+      }
+      #boot .b-raindrop {
+        position: absolute;
+        top: -32px;
+        width: 2px;
+        border-radius: 2px;
+        background: linear-gradient(
+          to bottom,
+          rgba(130, 175, 255, 0),
+          rgba(130, 175, 255, 0.45)
+        );
+        animation-name: b-rainfall;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+        will-change: transform, opacity;
+      }
+      @keyframes b-rainfall {
+        0% {
+          transform: translateY(0);
+          opacity: 0;
+        }
+        8% {
+          opacity: var(--op, 0.6);
+        }
+        92% {
+          opacity: var(--op, 0.6);
+        }
+        100% {
+          transform: translateY(102vh);
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .b-rain {
+          display: none;
+        }
+      }
+      #boot .b-top {
+        position: relative;
+        /* Vlastní stacking context, aby se ::before (z-index:-1) vykreslil nad
+           pozadím body a byl vidět. Zároveň nad deštěm (.b-rain z-index:3), ať
+           kapky prší jen přes karty, ne přes hlavičku (stejně jako v Reactu). */
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: calc(12px + env(safe-area-inset-top, 0px)) 0 12px;
+        margin-bottom: 12px;
+      }
+      /* Stejné frosted pozadí headeru přes celou šířku viewportu jako
+         .topbar::before v index.css. */
+      #boot .b-top::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: calc(50% - 50vw);
+        right: calc(50% - 50vw);
+        z-index: -1;
+        background: rgba(6, 10, 18, 0.68);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        backdrop-filter: blur(18px) saturate(140%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      #boot .b-row1 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      /* Výška 2. řádku odpovídá reálné větě „předpověď pro … na …"
+         (0.92rem × line-height 1.55 ≈ 23px), ať header nemá jinou výšku než
+         po naběhnutí Reactu a ohraničení/obsah neposkočí. */
+      #boot .b-row2 {
+        display: flex;
+        align-items: center;
+        /* Reálný 2. řádek obsahuje „pill" tlačítka (lokace/den) ~28px vysoká. */
+        min-height: 28px;
+      }
+      #boot .b-logo {
+        height: 30px;
+        width: 29px;
+        object-fit: contain;
+        display: block;
+      }
+      #boot .b-brand {
+        font-weight: 800;
+        font-size: 1.12rem;
+        letter-spacing: -0.02em;
+        color: #eef2fb;
+      }
+      #boot .b-brand i {
+        color: #5bb6ff;
+        font-style: normal;
+      }
+      #boot .b-card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 18px;
+        padding: 18px;
+        margin-bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+      }
+      #boot .s {
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+      }
+      #boot .line {
+        height: 14px;
+      }
+      #boot .lg {
+        height: 20px;
+      }
+      #boot .sm {
+        height: 11px;
+      }
+      #boot .pill {
+        height: 22px;
+        border-radius: 999px;
+      }
+      #boot .circle {
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      #boot .c36 {
+        width: 36px;
+        height: 36px;
+      }
+      #boot .c28 {
+        width: 28px;
+        height: 28px;
+      }
+      #boot .block {
+        border-radius: 14px;
+      }
+      #boot .tile {
+        height: 62px;
+        border-radius: 14px;
+      }
+      #boot .hour {
+        flex: 1;
+        min-width: 40px;
+        height: 96px;
+        border-radius: 12px;
+      }
+      #boot .stat {
+        height: 43px;
+        border-radius: 9px;
+      }
+      #boot .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #boot .col {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+      #boot .col.end {
+        align-items: flex-end;
+        margin-left: auto;
+      }
+      #boot .split {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #boot .split .col {
+        flex: 1;
+      }
+      #boot .foot {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-top: 11px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      #boot .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+        gap: 8px 10px;
+        margin: 2px 0 16px;
+      }
+      #boot .btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        flex-shrink: 0;
+      }
+      #boot .seg {
+        width: 150px;
+        height: 36px;
+        border-radius: 999px;
+        flex-shrink: 0;
+      }
+      #boot .acts {
+        display: flex;
+        gap: 6px;
+      }
+      #boot .wear-grid {
+        display: flex;
+        gap: 10px;
+        overflow: hidden;
+      }
+      #boot .wear-item {
+        flex: 0 0 auto;
+        width: 92px;
+        height: 104px;
+        border-radius: 14px;
+      }
+      #boot .bestwin {
+        height: 64px;
+        border-radius: 14px;
+      }
+      #boot .yrhead,
+      #boot .yrrow {
+        display: grid;
+        grid-template-columns: 60px 44px 64px 1fr 96px;
+        gap: 8px;
+        align-items: center;
+      }
+      #boot .yrhead {
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      #boot .dayhead {
+        height: 43px;
+        display: flex;
+        align-items: flex-end;
+        padding-bottom: 8px;
+      }
+      #boot .yrrow {
+        height: 43px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      }
+      #boot .r {
+        margin-left: auto;
+      }
+      #boot .details {
+        padding: 0;
+        overflow: hidden;
+      }
+      #boot .details-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+      #boot .details-peek {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+      }
+      /* Mobil: shodně s .app / .topbar v index.css (@media max-width:560px). */
+      @media (max-width: 560px) {
+        #boot {
+          --px: 10px;
+        }
+        #boot .b-top {
+          gap: 8px;
+        }
       }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Okamžitý „first paint": samostatný skeleton se scoped styly (#boot),
+         nezávislý na index.css (ten se v devu injektuje až přes JS). React po
+         připojení #root nahradí vizuálně shodným skeletonem. -->
+    <div id="root">
+      <div id="boot" aria-hidden="true">
+        <div class="b-rain" id="b-rain"></div>
+        <div class="b-top">
+          <div class="b-row1">
+            <img src="/logo.svg" alt="" class="b-logo" />
+            <span class="b-brand">zmoknu<i>?</i></span>
+          </div>
+          <div class="b-row2">
+            <div class="s" style="width: 190px; height: 12px"></div>
+          </div>
+        </div>
+
+        <!-- Souhrn dne -->
+        <div class="b-card">
+          <div class="row">
+            <div class="s circle c36"></div>
+            <div class="col">
+              <div class="s lg" style="width: 78px"></div>
+              <div class="s sm" style="width: 116px"></div>
+            </div>
+            <div class="col end">
+              <div class="s" style="width: 62px; height: 16px"></div>
+              <div class="s sm" style="width: 46px"></div>
+            </div>
+          </div>
+          <div class="foot">
+            <div class="s line" style="flex: 1"></div>
+            <div class="s line" style="width: 92px"></div>
+            <div class="s pill" style="width: 52px; height: 22px"></div>
+          </div>
+        </div>
+
+        <!-- Meteogram -->
+        <div class="b-card">
+          <div class="split">
+            <div class="col">
+              <div class="s sm" style="width: 80px"></div>
+              <div class="s" style="width: 132px; height: 13px"></div>
+            </div>
+            <div class="s btn"></div>
+          </div>
+          <div class="stats">
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+            <div class="s stat"></div>
+          </div>
+          <div class="s block" style="height: 267px"></div>
+        </div>
+
+        <!-- Co si vzít na sebe -->
+        <div class="b-card">
+          <div class="s" style="width: 46%; height: 18px"></div>
+          <div class="acts">
+            <div class="s pill" style="width: 82px; height: 34px"></div>
+            <div class="s pill" style="width: 82px; height: 34px"></div>
+            <div class="s pill" style="width: 82px; height: 34px"></div>
+          </div>
+          <div class="wear-grid">
+            <div class="s wear-item"></div>
+            <div class="s wear-item"></div>
+            <div class="s wear-item"></div>
+            <div class="s wear-item"></div>
+            <div class="s wear-item"></div>
+          </div>
+          <div class="s" style="width: 60%; height: 20px"></div>
+          <div class="s bestwin"></div>
+        </div>
+
+        <!-- Výhled -->
+        <div class="b-card">
+          <div class="split">
+            <div class="s sm" style="width: 64px"></div>
+            <div class="s seg"></div>
+          </div>
+          <div class="yrhead">
+            <div class="s sm" style="width: 34px"></div>
+            <span></span>
+            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 60px"></div>
+          </div>
+          <div class="dayhead"><div class="s sm" style="width: 118px"></div></div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+          <div class="dayhead"><div class="s sm" style="width: 118px"></div></div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+          <div class="yrrow">
+            <div class="s sm" style="width: 46px"></div>
+            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm r" style="width: 40px"></div>
+            <div class="s sm r" style="width: 28px"></div>
+            <div class="s sm r" style="width: 44px"></div>
+          </div>
+        </div>
+
+        <!-- Další detaily (sbalené) -->
+        <div class="b-card details">
+          <div class="details-head">
+            <div class="s sm" style="width: 96px"></div>
+            <div class="details-peek">
+              <div class="s sm" style="width: 40px"></div>
+              <div class="s sm" style="width: 54px"></div>
+              <div class="s circle" style="width: 18px; height: 18px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Déšť pro prvotní (boot) skeleton – vygeneruje kapky hned při parsování,
+      // ještě než naběhne React. Částečně náhodné, stejně jako v Skeleton.tsx.
+      (function () {
+        var el = document.getElementById("b-rain");
+        if (!el) return;
+        try {
+          if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        } catch (e) {}
+        var n = 26,
+          html = "";
+        for (var i = 0; i < n; i++) {
+          var base = (i / n) * 100;
+          var left = Math.min(99, Math.max(0, base + (Math.random() - 0.5) * 9));
+          var delay = (Math.random() * 2.4).toFixed(2);
+          var dur = (0.8 + Math.random() * 1.3).toFixed(2);
+          var h = Math.round(10 + Math.random() * 22);
+          var op = (0.3 + Math.random() * 0.45).toFixed(2);
+          html +=
+            '<span class="b-raindrop" style="left:' +
+            left.toFixed(2) +
+            "%;height:" +
+            h +
+            "px;animation-delay:" +
+            delay +
+            "s;animation-duration:" +
+            dur +
+            "s;--op:" +
+            op +
+            '"></span>';
+        }
+        el.innerHTML = html;
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

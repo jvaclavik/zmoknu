@@ -55,20 +55,21 @@ body {
   transition: background 0.8s ease;
 }
 
-/* Varianty oblohy podle počasí (ztmavené) */
-body[data-sky="clear"] {
+/* Varianty oblohy podle počasí (ztmavené). Atribut je na <html> (:root), aby
+   ho preload v index.html mohl nastavit z localStorage ještě před Reactem. */
+:root[data-sky="clear"] body {
   background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66);
 }
-body[data-sky="cloud"] {
+:root[data-sky="cloud"] body {
   background: linear-gradient(160deg, #141b29, #1f2838);
 }
-body[data-sky="rain"] {
+:root[data-sky="rain"] body {
   background: linear-gradient(160deg, #0d141d, #18222e);
 }
-body[data-sky="snow"] {
+:root[data-sky="snow"] body {
   background: linear-gradient(160deg, #182032, #28324d);
 }
-body[data-sky="night"] {
+:root[data-sky="night"] body {
   background: linear-gradient(160deg, #03060d, #080e1a);
 }
 
@@ -80,7 +81,9 @@ body::before {
   top: 0;
   left: 0;
   right: 0;
-  height: var(--sat, env(safe-area-inset-top, 0px));
+  /* Vezmeme větší z nacachované hodnoty a živého env() – ať status bar zůstane
+     zamaskovaný i když jedna z hodnot zrovna spadne na 0. */
+  height: max(var(--sat, 0px), env(safe-area-inset-top, 0px));
   background: #05080f;
   z-index: 2000;
   pointer-events: none;
@@ -183,7 +186,10 @@ body::before {
 }
 .hb-logo-img {
   height: 30px;
-  width: auto;
+  /* Pevná šířka (poměr loga 487×509) rezervuje místo i před načtením obrázku,
+     jinak by měl img šířku 0 a text „zmoknu?" by po dotažení loga poskočil. */
+  width: 29px;
+  object-fit: contain;
   display: block;
 }
 .hb-brandname {
@@ -230,8 +236,12 @@ body::before {
   background: color-mix(in srgb, var(--tier, var(--accent-warm)) 30%, transparent);
 }
 .hb-day-static {
-  font-weight: 700;
-  color: var(--text);
+  /* Placeholder „pill" během načítání: dědí geometrii z .hb-pick/.hb-day
+     (padding, zaoblení, posun), ale je tlumený a neaktivní – naznačuje button,
+     ale ještě nejde kliknout a hlavně po dotažení dat nic neposkočí. */
+  color: var(--muted, rgba(226, 232, 240, 0.6));
+  background: rgba(255, 255, 255, 0.06);
+  cursor: default;
 }
 .hb-today {
   margin-left: auto;
@@ -2298,6 +2308,78 @@ body::before {
   width: 100%;
   accent-color: var(--accent);
 }
+/* Posuvníky (range) – velký „thumb" a vysoká dotyková plocha, ať se do nich na
+   telefonu dá pohodlně trefit (výchozí nativní jezdec je malý). */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 30px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  /* Levá (projetá) část barevně, zbytek tlumeně. --fill nastavuje komponenta
+     podle aktuální hodnoty (WebKit nemá vlastní „progress" pseudo-element). */
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--fill, 0%),
+    rgba(255, 255, 255, 0.18) var(--fill, 0%)
+  );
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+/* Zvýraznění jezdce na hover/tažení – ať je jasné, že jsem „na něm". */
+@media (hover: hover) {
+  input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+      0 0 0 6px rgba(91, 182, 255, 0.22);
+  }
+  input[type="range"]:hover::-moz-range-thumb {
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+      0 0 0 6px rgba(91, 182, 255, 0.22);
+  }
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 8px rgba(91, 182, 255, 0.28);
+}
+input[type="range"]:active::-moz-range-thumb {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 8px rgba(91, 182, 255, 0.28);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--accent);
+  /* Tmavý prstenec (barva karty) místo bílého – oddělí jezdec od tracku, ale
+     bez „ostrého" bílého lemu, který vypadal cize. */
+  border: 3px solid rgba(9, 14, 26, 0.9);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(9, 14, 26, 0.9);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
 .mg-view-toggle {
   display: flex;
   align-items: center;
@@ -2375,6 +2457,30 @@ body::before {
   height: 12px;
   border-radius: 3px;
   flex: none;
+}
+/* Na dotykových zařízeních zvětšíme dotykové plochy drobných ovládacích prvků
+   (Vše/Zrušit, přepínače modelů), ať se do nich dá pohodlně trefit prstem. */
+@media (pointer: coarse) {
+  .mg-view-compare-head {
+    min-height: 40px;
+  }
+  .mg-view-clear {
+    padding: 9px 10px;
+    font-size: 0.8rem;
+  }
+  .mg-view-compare-list {
+    gap: 2px 8px;
+  }
+  .mg-view-model {
+    padding: 9px 6px;
+    min-height: 40px;
+    gap: 8px;
+  }
+  .mg-view-model input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex: none;
+  }
 }
 .mg-legend {
   display: flex;
@@ -3793,34 +3899,58 @@ body::before {
   flex-direction: column;
   gap: 12px;
 }
+/* Déšť přes skeleton – jemný, ať evokuje „počasí se načítá". */
+.skeleton-main {
+  position: relative;
+}
+.skel-rain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+.skel-raindrop {
+  position: absolute;
+  top: -32px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    rgba(130, 175, 255, 0),
+    rgba(130, 175, 255, 0.45)
+  );
+  animation-name: skel-rainfall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes skel-rainfall {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: var(--op, 0.6);
+  }
+  92% {
+    opacity: var(--op, 0.6);
+  }
+  100% {
+    transform: translateY(102vh);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-rain {
+    display: none;
+  }
+}
 .skel {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
-}
-.skel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.09),
-    transparent
-  );
-  animation: skel-shimmer 1.3s infinite;
-}
-@keyframes skel-shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .skel::after {
-    animation: none;
-  }
 }
 .skel-line {
   height: 14px;
@@ -3907,9 +4037,11 @@ body::before {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px 10px;
+  /* Stejné vnější okraje jako reálné .mg-stats, ať výška meteogram karty sedí. */
+  margin: 2px 0 16px;
 }
 .skel-stat {
-  height: 38px;
+  height: 43px;
   border-radius: 9px;
 }
 /* Řádek „pill“ přepínačů (aktivita v Co na sebe) */
@@ -3937,6 +4069,86 @@ body::before {
 .skel-tile {
   height: 62px;
   border-radius: 14px;
+}
+/* Tlačítko „zobrazení dat" v meteogramu (34×34, kopíruje .mg-view-btn) */
+.skel-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+/* Segmentový přepínač 1h/6h/24h ve výhledu (kopíruje .yr-seg) */
+.skel-seg {
+  width: 150px;
+  height: 36px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+/* Přepínač aktivity v „Co na sebe" (3 pilulky) */
+.skel-acts {
+  display: flex;
+  gap: 6px;
+}
+/* Vodorovné dlaždice oblečení (kopíruje .wear-grid / .wear-item 92×104) */
+.skel-wear-grid {
+  display: flex;
+  gap: 10px;
+  overflow: hidden;
+  padding-bottom: 4px;
+}
+.skel-wear-item {
+  flex: 0 0 auto;
+  width: 92px;
+  height: 104px;
+  border-radius: 14px;
+}
+/* „Nejlepší okno na ven" (kopíruje .bestwin) */
+.skel-bestwin {
+  height: 64px;
+  border-radius: 14px;
+}
+/* Výhled: hlavička sloupců + řádky po dnech (kopíruje .yr-head / .yr-row) */
+.skel-yrhead,
+.skel-yrrow {
+  display: grid;
+  grid-template-columns: 60px 44px 64px 1fr 96px;
+  gap: 8px;
+  align-items: center;
+}
+.skel-yrhead {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.skel-yrlist {
+  display: flex;
+  flex-direction: column;
+}
+.skel-dayhead {
+  height: 43px;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 8px;
+}
+.skel-yrrow {
+  height: 43px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+/* Detaily – sbalená karta bez paddingu s hlavičkou 14/16 (kopíruje .details-*) */
+.skel-details {
+  padding: 0;
+  overflow: hidden;
+}
+.skel-details-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.skel-details-peek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 .spinner {
   width: 16px;
@@ -4275,6 +4487,17 @@ body::before {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
+}
+.dbg-intro {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 .dbg-controls {
   display: flex;

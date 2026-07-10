@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { GeoLocation } from "../types";
 import { searchLocations, reverseGeocode } from "../lib/openMeteo";
 import { tr } from "../lib/i18n";
 import { useStoredState } from "../lib/useStoredState";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import { sameLocation } from "./FavoritesBar";
-import MapPicker from "./MapPicker";
+// MapPicker tahá maplibre-gl – načteme ho až při otevření mapy.
+const MapPicker = lazy(() => import("./MapPicker"));
 
 const HISTORY_MAX = 8;
 
@@ -459,15 +460,19 @@ export default function SearchBar({
         </div>
       </div>
 
-      <MapPicker
-        open={mapOpen}
-        initial={{
-          lat: current?.latitude ?? 49.82,
-          lon: current?.longitude ?? 15.47,
-        }}
-        onCancel={() => setMapOpen(false)}
-        onConfirm={pickCoords}
-      />
+      {mapOpen && (
+        <Suspense fallback={null}>
+          <MapPicker
+            open
+            initial={{
+              lat: current?.latitude ?? 49.82,
+              lon: current?.longitude ?? 15.47,
+            }}
+            onCancel={() => setMapOpen(false)}
+            onConfirm={pickCoords}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
