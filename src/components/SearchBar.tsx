@@ -70,6 +70,7 @@ export default function SearchBar({
     [],
   );
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const pushHistory = (loc: GeoLocation) =>
     setHistory(
@@ -114,6 +115,24 @@ export default function SearchBar({
 
   // Zamkni scroll pozadí (spolehlivě i na iOS) + zavírání klávesou Escape.
   useBodyScrollLock(open);
+
+  // iOS: i při zamčeném body se tažení mimo seznam „přelije" na stránku a rozbije
+  // header. Povolíme tažení jen uvnitř scrollovatelného seznamu (a jen když má
+  // co scrollovat), jinak touchmove zrušíme. Když je otevřená mapa, nezasahujeme
+  // (mapa si musí ponechat vlastní gesta).
+  useEffect(() => {
+    if (!open || mapOpen) return;
+    const onTouchMove = (e: TouchEvent) => {
+      const scroller = bodyRef.current;
+      if (scroller && scroller.contains(e.target as Node)) {
+        if (scroller.scrollHeight > scroller.clientHeight) return;
+      }
+      e.preventDefault();
+    };
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => document.removeEventListener("touchmove", onTouchMove);
+  }, [open, mapOpen]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -198,7 +217,7 @@ export default function SearchBar({
           )}
         </div>
 
-        <div className="locpick-body">
+        <div className="locpick-body" ref={bodyRef}>
           {isSearching && coords ? (
             <section className="locpick-section">
               <div className="locpick-label">{tr("GPS souřadnice")}</div>

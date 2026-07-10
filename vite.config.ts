@@ -69,8 +69,9 @@ export default defineConfig({
         // offline – ne jen JS/CSS/HTML.
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
         // Splash obrázky jsou jen iOS launch screeny (přes <link> v index.html),
-        // appka je za běhu nenačítá → není třeba je mít v precache.
-        globIgnores: ["**/splash/**"],
+        // appka je za běhu nenačítá → není třeba je mít v precache. OG náhled
+        // stahují jen crawlery (Slack/FB/Twitter), taky ho nemá smysl cacheovat.
+        globIgnores: ["**/splash/**", "**/og-image.png"],
         // Předpověď a radar necacheujeme natvrdo (jsou živé) – jen runtime cache
         // s krátkou platností, ať appka funguje i offline s posledními daty.
         runtimeCaching: [
