@@ -12,6 +12,7 @@
     "jsfive": "^0.4.0",
     "maplibre-gl": "^5.24.0",
     "pngjs": "^7.0.0",
+    "posthog-js": "^1.399.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

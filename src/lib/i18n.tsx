@@ -138,6 +138,9 @@ const EN: Record<string, string> = {
   Normál: "Normal",
   "Průměrná teplota pro daný den z let 1995–2024 (ERA5). Zobrazí se u grafu teploty.":
     "Average temperature for the given day from 1995–2024 (ERA5). Shown on the temperature chart.",
+  "Načítám…": "Loading…",
+  "Historický normál se nepodařilo načíst. Zkus to prosím znovu.":
+    "Couldn’t load the historical normal. Please try again.",
   "Průměrná teplota pro daný den z let 1995–2024 (ERA5).":
     "Average temperature for the given day from 1995–2024 (ERA5).",
   Průměr: "Average",
@@ -503,6 +506,14 @@ const EN: Record<string, string> = {
   Aktualizovat: "Update",
   Později: "Later",
   "Aktualizovat aplikaci": "Update app",
+
+  // Donate
+  "Podpořit projekt": "Support the project",
+  "QR kód pro platbu Bitcoin / Lightning":
+    "Bitcoin / Lightning payment QR code",
+  "Kopírovat adresu": "Copy address",
+  Kopírovat: "Copy",
+  Zkopírováno: "Copied",
 
   // SearchBar
   Zavřít: "Close",

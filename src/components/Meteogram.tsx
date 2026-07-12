@@ -176,9 +176,11 @@ export default function Meteogram({
   );
   const [showTypeInfo, setShowTypeInfo] = useStoredState<boolean>(
     "zmoknu.mgTypeInfo",
-    false,
+    true,
   );
   const [normals, setNormals] = useState<ClimateNormals | null>(null);
+  const [normalLoading, setNormalLoading] = useState(false);
+  const [normalError, setNormalError] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
   const viewBtnRef = useRef<HTMLButtonElement>(null);
@@ -317,14 +319,25 @@ export default function Meteogram({
 
   // Historický normál (ERA5, 30 let) – stáhne se jednou pro lokalitu při zapnutí.
   useEffect(() => {
-    if (!showNormal || lat == null || lon == null) return;
+    if (!showNormal || lat == null || lon == null) {
+      setNormalLoading(false);
+      setNormalError(false);
+      return;
+    }
     let cancelled = false;
+    setNormalLoading(true);
+    setNormalError(false);
     fetchClimateNormals(lat, lon)
       .then((n) => {
-        if (!cancelled) setNormals(n);
+        if (cancelled) return;
+        setNormals(n);
+        setNormalLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setNormals(null);
+        if (cancelled) return;
+        setNormals(null);
+        setNormalError(true);
+        setNormalLoading(false);
       });
     return () => {
       cancelled = true;
@@ -897,6 +910,13 @@ export default function Meteogram({
                   onChange={(e) => setShowNormal(e.target.checked)}
                 />
                 <span>{tr("Historický normál (30 let)")}</span>
+                {showNormal && normalLoading && (
+                  <span
+                    className="spinner mg-view-spinner"
+                    role="status"
+                    aria-label={tr("Načítám…")}
+                  />
+                )}
               </label>
               <label className="mg-view-toggle">
                 <input
@@ -910,6 +930,13 @@ export default function Meteogram({
                 <div className="mg-view-hint">
                   {tr(
                     "Průměrná teplota pro daný den z let 1995–2024 (ERA5). Zobrazí se u grafu teploty.",
+                  )}
+                </div>
+              )}
+              {showNormal && normalError && (
+                <div className="mg-view-hint mg-view-hint-error" role="alert">
+                  {tr(
+                    "Historický normál se nepodařilo načíst. Zkus to prosím znovu.",
                   )}
                 </div>
               )}

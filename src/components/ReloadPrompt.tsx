@@ -21,6 +21,12 @@ export default function ReloadPrompt() {
       };
       check();
       setInterval(check, UPDATE_CHECK_MS);
+      // PWA je na mobilu většinu času na pozadí a interval tam neběží spolehlivě.
+      // Zkontrolujeme aktualizaci i při každém návratu do appky, ať se nabídka
+      // objeví hned a nezůstane „viset" na staré verzi.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") check();
+      });
     },
   });
 

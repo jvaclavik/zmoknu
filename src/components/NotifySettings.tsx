@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import posthog from "posthog-js";
 import { tr } from "../lib/i18n";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import {
@@ -57,11 +58,17 @@ export default function NotifySettings({ onClose }: Props) {
   const patch = (id: string, p: Partial<AlertRule>) =>
     update(rules.map((r) => (r.id === id ? { ...r, ...p } : r)));
   const remove = (id: string) => update(rules.filter((r) => r.id !== id));
-  const add = () => update([...rules, newRule(addType)]);
+  const add = () => {
+    posthog.capture("notification_rule_added", { alert_type: addType });
+    update([...rules, newRule(addType)]);
+  };
 
   const enableNotifications = async () => {
     const res = await requestNotifyPermission();
     setPerm(res);
+    if (res === "granted") {
+      posthog.capture("notification_permission_granted");
+    }
   };
 
   const TEST_DELAY = 5;

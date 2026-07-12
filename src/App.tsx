@@ -9,6 +9,7 @@ import {
 } from "react";
 import DayDetails from "./components/DayDetails";
 import DaySelector from "./components/DaySelector";
+import Donate from "./components/Donate";
 import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
 import InstallHint from "./components/InstallHint";
@@ -36,6 +37,7 @@ import { tempTier, TIER_COLOR } from "./lib/tiers";
 import { useStoredState } from "./lib/useStoredState";
 import { describeWeather } from "./lib/weatherCodes";
 import type { Forecast, GeoLocation, RadarData } from "./types";
+import posthog from "posthog-js";
 // RadarMap tahá maplibre-gl (~800 kB) – načteme ho až po zbytku appky, aby
 // počáteční bundle byl malý a layout/skeleton se vykreslil co nejdřív. Chunk pak
 // na pozadí přednačteme (viz efekt níže), ať je otevření radaru okamžité.
@@ -672,24 +674,33 @@ export default function App() {
   const isCurrentFav = favorites.some((f) => sameLocation(f, location));
 
   const toggleFavorite = useCallback(() => {
+    const isFav = favorites.some((f) => sameLocation(f, location));
+    posthog.capture(isFav ? "favorite_removed" : "favorite_added", {
+      location_name: location.name,
+    });
     setFavorites((prev) =>
       prev.some((f) => sameLocation(f, location))
         ? prev.filter((f) => !sameLocation(f, location))
         : [...prev, location]
     );
-  }, [location]);
+  }, [location, favorites]);
 
   const removeFavorite = useCallback((loc: GeoLocation) => {
+    posthog.capture("favorite_removed", { location_name: loc.name });
     setFavorites((prev) => prev.filter((f) => !sameLocation(f, loc)));
   }, []);
 
   const toggleFavoriteFor = useCallback((loc: GeoLocation) => {
+    const isFav = favorites.some((f) => sameLocation(f, loc));
+    posthog.capture(isFav ? "favorite_removed" : "favorite_added", {
+      location_name: loc.name,
+    });
     setFavorites((prev) =>
       prev.some((f) => sameLocation(f, loc))
         ? prev.filter((f) => !sameLocation(f, loc))
         : [...prev, loc]
     );
-  }, []);
+  }, [favorites]);
 
   // Aktualizace barevného motivu pozadí podle aktuálního počasí. Motiv
   // ukládáme do localStorage a nastavujeme na <html>, aby ho preload v
@@ -713,6 +724,7 @@ export default function App() {
       setError(tr("Geolokace není v tomto prohlížeči dostupná."));
       return;
     }
+    posthog.capture("geolocation_used");
     setLocating(true);
     // Modál výběru místa hned zavřeme – poloha se dohledá na pozadí a lokace
     // se vybere, jakmile ji prohlížeč vrátí.
@@ -775,9 +787,11 @@ export default function App() {
     try {
       if (navigator.share) {
         await navigator.share({ title, url });
+        posthog.capture("link_shared", { method: "native_share" });
         return;
       }
       await navigator.clipboard.writeText(url);
+      posthog.capture("link_shared", { method: "clipboard" });
       setShared(true);
       setTimeout(() => setShared(false), 1800);
     } catch {
@@ -986,7 +1000,7 @@ export default function App() {
         <button
           type="button"
           className="radar-fab"
-          onClick={() => setRadarOpen(true)}
+          onClick={() => { posthog.capture("radar_opened"); setRadarOpen(true); }}
           title={tr("Radar srážek")}
           aria-label={tr("Otevřít radar")}
         >
@@ -1089,7 +1103,7 @@ export default function App() {
           <select
             className="settings-model-select"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => { posthog.capture("weather_model_changed", { model: e.target.value }); setModel(e.target.value); }}
           >
             {WEATHER_MODELS.map((m) => (
               <option key={m.id} value={m.id}>
@@ -1102,7 +1116,7 @@ export default function App() {
           <button
             type="button"
             className={`lang-btn ${lang === "cs" ? "active" : ""}`}
-            onClick={() => setLang("cs")}
+            onClick={() => { posthog.capture("language_changed", { language: "cs" }); setLang("cs"); }}
             aria-pressed={lang === "cs"}
             title="Čeština"
           >
@@ -1111,7 +1125,7 @@ export default function App() {
           <button
             type="button"
             className={`lang-btn ${lang === "en" ? "active" : ""}`}
-            onClick={() => setLang("en")}
+            onClick={() => { posthog.capture("language_changed", { language: "en" }); setLang("en"); }}
             aria-pressed={lang === "en"}
             title="English"
           >
@@ -1149,12 +1163,14 @@ export default function App() {
           <button
             type="button"
             className="install-btn"
-            onClick={() => setNotifyOpen(true)}
+            onClick={() => { posthog.capture("notification_settings_opened"); setNotifyOpen(true); }}
           >
             <BellGlyph />
             {tr("Upozornění na počasí")}
           </button>
         </div>
+
+        <Donate />
 
         <div className="footer-links">
           <button type="button" className="footer-link-btn" onClick={shareLink}>

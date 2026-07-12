@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
 import type { GeoLocation } from "../types";
 import { searchLocations, reverseGeocode } from "../lib/openMeteo";
 import { tr } from "../lib/i18n";
@@ -94,6 +95,7 @@ export default function SearchBar({
       try {
         const r = await searchLocations(query);
         setResults(r);
+        posthog.capture("location_searched", { results_count: r.length });
       } catch {
         setResults([]);
       } finally {
@@ -144,6 +146,7 @@ export default function SearchBar({
   }, [open, onClose]);
 
   function pick(loc: GeoLocation) {
+    posthog.capture("location_selected", { location_name: loc.name, method: "search" });
     pushHistory(loc);
     onSelect(loc);
     onClose();
@@ -158,6 +161,7 @@ export default function SearchBar({
       /* název necháme jako souřadnice */
     }
     const loc: GeoLocation = { name, latitude: lat, longitude: lon };
+    posthog.capture("location_selected", { location_name: loc.name, method: "coordinates" });
     pushHistory(loc);
     onSelect(loc);
     setMapOpen(false);
