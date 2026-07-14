@@ -19,6 +19,7 @@ import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
 import Skeleton from "./components/Skeleton";
 import SmartSummary from "./components/SmartSummary";
+import Webcams from "./components/Webcams";
 import WeatherAlerts from "./components/WeatherAlerts";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
@@ -468,6 +469,7 @@ export default function App() {
       ".search-panel",
       ".mg-view-menu",
       ".dbg-modal",
+      ".webcams-scroll",
       "input[type='range']",
     ].join(",");
 
@@ -1068,6 +1070,7 @@ export default function App() {
               activeDate={selectedDate}
               onSelectDay={setSelectedDate}
             />
+            <Webcams lat={location.latitude} lon={location.longitude} />
             {selectedDay && (
               <DayDetails
                 day={selectedDay}

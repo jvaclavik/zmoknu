@@ -27,6 +27,9 @@ import { tr, getLang } from "../lib/i18n";
 import { darkStyle, loadTouristStyle, loadTouristDarkStyle } from "../lib/mapStyle";
 import { useStoredState } from "../lib/useStoredState";
 import { useBodyScrollLock } from "../lib/scrollLock";
+import { fetchWebcams, type Webcam } from "../lib/webcams";
+import { reverseGeocode } from "../lib/openMeteo";
+import WebcamModal, { WindyCourtesy } from "./WebcamModal";
 import { sameLocation } from "./FavoritesBar";
 
 type Basemap = "tourist" | "dark";
@@ -210,6 +213,15 @@ export default function RadarMap({
   );
   // Vrstva oblačnosti (družice ČHMÚ) – vždy dostupná, animuje se s časem.
   const cloudsOn = showClouds;
+  const [showWebcams, setShowWebcams] = useStoredState<boolean>(
+    "zmoknu.radarWebcams",
+    false,
+  );
+  const [webcams, setWebcams] = useState<Webcam[]>([]);
+  // Webkamera otevřená v modálu (klik na marker na mapě).
+  const [activeWebcam, setActiveWebcam] = useState<Webcam | null>(null);
+  // Moje (GPS) poloha – jen pokud už je oprávnění uděleno, ať nevyskakuje prompt.
+  const [myLoc, setMyLoc] = useState<{ lat: number; lon: number } | null>(null);
   const [omGrid, setOmGrid] = useState<OmForecastGrid | null>(null);
   const [omError, setOmError] = useState(false);
   const [accumPeriodId, setAccumPeriodId] = useStoredState<string>(
@@ -242,6 +254,7 @@ export default function RadarMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const webcamMarkersRef = useRef<maplibregl.Marker[]>([]);
   const radarSrcIds = useRef<string[]>([]);
   const failedSrcIds = useRef<Set<string>>(new Set());
   const cloudSrcIds = useRef<string[]>([]);
@@ -254,6 +267,33 @@ export default function RadarMap({
   useEffect(() => {
     if (!inCz && source === "chmi") setSource("rain");
   }, [inCz, source]);
+
+  // Zjištění mojí polohy – jen když je geolokace už povolená (žádný prompt).
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    let cancelled = false;
+    const locate = () =>
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          if (!cancelled)
+            setMyLoc({ lat: p.coords.latitude, lon: p.coords.longitude });
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+      );
+    const perms = navigator.permissions;
+    if (perms?.query) {
+      perms
+        .query({ name: "geolocation" as PermissionName })
+        .then((s) => {
+          if (!cancelled && s.state === "granted") locate();
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setChmiTick((t) => t + 1), 5 * 60 * 1000);
@@ -774,13 +814,15 @@ export default function RadarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mapReady, cloudsOn, satKey, frames, source]);
 
-  // Markery: aktuální místo + oblíbená.
+  // Markery: moje poloha (GPS) + oblíbená (hvězdička) + aktuální místo (puls).
+  // Tři vizuálně odlišené typy, ať je jasné, co je co.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
+    // Oblíbená místa – žlutý pin.
     favorites
       .filter((f) => !sameLocation(f, location))
       .forEach((f) => {
@@ -788,23 +830,87 @@ export default function RadarMap({
         el.className = "fav-marker";
         el.type = "button";
         el.title = f.name;
-        el.innerHTML = '<span class="fav-dot"></span>';
+        el.innerHTML = pinSvg;
         el.addEventListener("click", () => onSelect?.(f));
-        const m = new maplibregl.Marker({ element: el, anchor: "center" })
+        const m = new maplibregl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([f.longitude, f.latitude])
           .addTo(map);
         markersRef.current.push(m);
       });
 
+    // Moje poloha – klikací marker; po kliknutí ji nastavíme jako aktuální.
+    // Skryjeme, když prakticky splývá s aktuálním místem (ať se markery nepřekrývají).
+    const nearActive =
+      myLoc &&
+      Math.abs(myLoc.lat - location.latitude) < 0.003 &&
+      Math.abs(myLoc.lon - location.longitude) < 0.003;
+    if (myLoc && !nearActive) {
+      const meEl = document.createElement("button");
+      meEl.className = "me-marker";
+      meEl.type = "button";
+      meEl.title = tr("Moje poloha");
+      meEl.innerHTML = '<span class="me-dot"></span><span class="me-ring"></span>';
+      meEl.addEventListener("click", async () => {
+        const name = await reverseGeocode(myLoc.lat, myLoc.lon).catch(
+          () => tr("Moje poloha"),
+        );
+        onSelect?.({ name, latitude: myLoc.lat, longitude: myLoc.lon });
+      });
+      const meMarker = new maplibregl.Marker({ element: meEl, anchor: "center" })
+        .setLngLat([myLoc.lon, myLoc.lat])
+        .addTo(map);
+      markersRef.current.push(meMarker);
+    }
+
+    // Aktuální místo – modrý pin.
     const locEl = document.createElement("div");
-    locEl.className = "loc-marker";
+    locEl.className = "loc-pin";
     locEl.title = location.name;
-    locEl.innerHTML = '<span class="loc-dot"></span><span class="loc-pulse"></span>';
-    const locMarker = new maplibregl.Marker({ element: locEl, anchor: "center" })
+    locEl.innerHTML = pinSvg;
+    const locMarker = new maplibregl.Marker({ element: locEl, anchor: "bottom" })
       .setLngLat([location.longitude, location.latitude])
       .addTo(map);
     markersRef.current.push(locMarker);
-  }, [location, favorites, onSelect]);
+  }, [location, favorites, onSelect, myLoc]);
+
+  // Webkamery v okolí – stáhneme až po zapnutí přepínače (kolem aktuálního místa).
+  useEffect(() => {
+    if (!showWebcams) {
+      setWebcams([]);
+      return;
+    }
+    let cancelled = false;
+    fetchWebcams(location.latitude, location.longitude, 120, 40)
+      .then((w) => !cancelled && setWebcams(w))
+      .catch(() => !cancelled && setWebcams([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [showWebcams, location.latitude, location.longitude]);
+
+  // Markery webkamer – klik otevře modál s přehrávačem (uživatele nevedeme pryč).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    webcamMarkersRef.current.forEach((m) => m.remove());
+    webcamMarkersRef.current = [];
+    if (!showWebcams) return;
+
+    for (const w of webcams) {
+      if (w.lat == null || w.lon == null) continue;
+      const el = document.createElement("button");
+      el.className = "webcam-marker";
+      el.type = "button";
+      el.title = w.title;
+      el.innerHTML = webcamMarkerSvg;
+      el.addEventListener("click", () => setActiveWebcam(w));
+
+      const m = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([w.lon, w.lat])
+        .addTo(map);
+      webcamMarkersRef.current.push(m);
+    }
+  }, [webcams, showWebcams]);
 
   // Vycentrování při změně místa.
   useEffect(() => {
@@ -1103,6 +1209,17 @@ export default function RadarMap({
             <span className="radar-set-note">
               {tr("Oblačnost = družice ČHMÚ (orientačně umístěná).")}
             </span>
+            <label className="radar-toggle">
+              <input
+                type="checkbox"
+                checked={showWebcams}
+                onChange={(e) => setShowWebcams(e.target.checked)}
+              />
+              <span>{tr("Webkamery")}</span>
+            </label>
+            <span className="radar-set-note">
+              {tr("Webkamery v okolí zobrazené na mapě (zdroj Windy).")}
+            </span>
           </div>
         </div>
       )}
@@ -1165,8 +1282,21 @@ export default function RadarMap({
                   : "úhrn Open-Meteo"
                 : "RainViewer"}
           {cloudsOn && " · družice ČHMÚ"}
+          {showWebcams && (
+            <>
+              {" · "}
+              <WindyCourtesy />
+            </>
+          )}
         </div>
       </div>
+
+      {activeWebcam && (
+        <WebcamModal
+          webcam={activeWebcam}
+          onClose={() => setActiveWebcam(null)}
+        />
+      )}
 
       {source === "accum" ? (
         <div className="radar-bar radar-accum-bar">
@@ -1394,3 +1524,11 @@ function CompressGlyph() {
     </svg>
   );
 }
+
+// Mapový pin (teardrop). Barvu určuje `color` rodičovského elementu (CSS).
+const pinSvg =
+  '<svg class="map-pin" width="26" height="34" viewBox="0 0 24 32" aria-hidden="true"><path d="M12 .8C6.4.8 1.9 5.3 1.9 10.9c0 7.2 10.1 20.3 10.1 20.3S22.1 18.1 22.1 10.9C22.1 5.3 17.6.8 12 .8z" fill="currentColor" stroke="#fff" stroke-width="1.6"/><circle cx="12" cy="11" r="3.7" fill="#fff"/></svg>';
+
+// Ikona markeru webkamery (vkládá se do DOM elementu markeru MapLibre).
+const webcamMarkerSvg =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';

@@ -52,6 +52,17 @@ const EN: Record<string, string> = {
     "You’re offline – showing the last saved forecast.",
   "Jste offline – zobrazuji uloženou předpověď z {when} ({rel}).":
     "You’re offline – showing a saved forecast from {when} ({rel}).",
+  "Webkamery v okolí": "Nearby webcams",
+  "Otevřít na Windy": "Open on Windy",
+  "živě": "live",
+  Webkamery: "Webcams",
+  "Webkamery v okolí zobrazené na mapě (zdroj Windy).":
+    "Nearby webcams shown on the map (source: Windy).",
+  "Načítám webkamery…": "Loading webcams…",
+  "V okolí nejsou žádné webkamery.": "No webcams nearby.",
+  "Moje poloha": "My location",
+  "Webkamery poskytuje": "Webcams provided by",
+  "přidat webkameru": "add a webcam",
   "Dejte mi vědět": "Let me know",
   ", jak se vám líbí.": " how you like it.",
   "Odkaz zkopírován": "Link copied",

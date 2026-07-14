@@ -2004,6 +2004,167 @@ body::before {
 .details-body {
   padding: 6px 16px 18px;
 }
+
+/* ---- Webkamery v okolí ---------------------------------------------------- */
+.webcams-card {
+  padding: 0;
+  overflow: hidden;
+}
+.webcams-ico {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.webcams-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.webcams-body {
+  padding: 4px 16px 16px;
+}
+.webcam-player {
+  margin-bottom: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.webcam-player iframe,
+.webcam-player img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  object-fit: cover;
+}
+.webcam-player-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+.webcam-player-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.webcam-player-foot a {
+  flex-shrink: 0;
+  color: var(--accent, #4ea3ff);
+  font-weight: 600;
+  text-decoration: none;
+}
+.webcam-player-foot a:hover {
+  text-decoration: underline;
+}
+/* Vodorovný seznam náhledů – scroll do strany, ať karta neroste do výšky */
+.webcams-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  /* Vodorovný scroll patří tomuto pruhu; svislý necháme stránce. Zároveň
+     bránime spuštění systémového „zpět" gestem doprava. */
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+.webcam-item {
+  flex: 0 0 auto;
+  width: 148px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.webcam-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.webcam-item.active {
+  border-color: var(--accent, #4ea3ff);
+}
+.webcam-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: rgba(255, 255, 255, 0.06);
+}
+.webcam-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.webcam-thumb > .webcams-ico {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+.webcam-live {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #e0245e;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.webcam-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px 8px;
+}
+.webcam-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.webcam-dist {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.webcams-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.webcams-src {
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.webcams-src a {
+  color: var(--muted);
+  text-decoration: underline;
+}
 /* Nadpis skupiny detailů */
 .dd-group-title {
   font-size: 0.72rem;
@@ -3529,40 +3690,22 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 6px;
 }
 
-/* Aktuální vybrané místo – výrazná tečka s pulsem */
-.loc-marker {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-}
-.loc-dot {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  background: var(--accent);
-  border: 3px solid #fff;
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 2px rgba(91, 182, 255, 0.5),
-    0 2px 6px rgba(0, 0, 0, 0.55);
-  z-index: 2;
-}
-.loc-pulse {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border-radius: 50%;
-  background: rgba(91, 182, 255, 0.5);
-  animation: pulse 2s infinite ease-out;
-  z-index: 1;
+/* Sdílený mapový pin (teardrop). Barvu určuje `color` rodiče. */
+.map-pin {
+  display: block;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+  transition: transform 0.12s ease;
 }
 
-/* Oblíbená místa na mapě – menší, decentní kulaté tečky */
+/* Aktuální vybrané místo – modrý pin */
+.loc-pin {
+  line-height: 0;
+  color: var(--accent);
+  cursor: default;
+}
+
+/* Oblíbená místa na mapě – žlutý pin (klikací) */
 .fav-marker {
   -webkit-appearance: none;
   appearance: none;
@@ -3571,22 +3714,58 @@ input[type="range"]::-moz-range-thumb {
   margin: 0;
   padding: 0;
   line-height: 0;
+  color: #f5b301;
   cursor: pointer;
 }
-.fav-dot {
+@media (hover: hover) {
+  .fav-marker:hover .map-pin {
+    transform: scale(1.12);
+  }
+}
+/* Moje poloha (GPS) – modré kolečko s prstencem, klikací */
+.me-marker {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.me-dot {
   display: block;
   box-sizing: border-box;
-  width: 15px;
-  height: 15px;
-  background: var(--accent-warm);
-  border: 2.5px solid #fff;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow:
+    0 0 0 2px rgba(91, 182, 255, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.55);
+  z-index: 2;
   transition: transform 0.12s ease;
 }
+.me-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: rgba(91, 182, 255, 0.5);
+  animation: pulse 2s infinite ease-out;
+  z-index: 1;
+}
 @media (hover: hover) {
-  .fav-marker:hover .fav-dot {
-    transform: scale(1.25);
+  .me-marker:hover .me-dot {
+    transform: scale(1.2);
   }
 }
 @keyframes pulse {
@@ -3598,6 +3777,102 @@ input[type="range"]::-moz-range-thumb {
     transform: scale(3.2);
     opacity: 0;
   }
+}
+
+/* Webkamery na mapě radaru – marker s ikonou kamery + popup s náhledem */
+.webcam-marker {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1b2740;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s ease;
+}
+@media (hover: hover) {
+  .webcam-marker:hover {
+    transform: scale(1.15);
+  }
+}
+/* Modál s webkamerou (otevře se klikem na marker na mapě) */
+.webcam-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: rgba(3, 6, 13, 0.72);
+  backdrop-filter: blur(2px);
+}
+.webcam-modal {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--card, #0d1526);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+.webcam-modal-view {
+  background: #000;
+}
+.webcam-modal-view iframe,
+.webcam-modal-view img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  object-fit: cover;
+}
+.webcam-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.webcam-modal-info {
+  padding: 12px 14px 14px;
+}
+.webcam-modal-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.webcam-modal-meta {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.windy-courtesy {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.windy-courtesy a {
+  color: var(--muted);
+  text-decoration: underline;
 }
 
 .radar-bar {

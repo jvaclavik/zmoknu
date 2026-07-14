@@ -1,10 +1,14 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig, type PluginOption } from "vite";
+import { defineConfig, loadEnv, type PluginOption } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Lokální obsluha serverless funkcí z /api (na Vercelu je řeší runtime
 // automaticky). V devu je spustíme přes ssrLoadModule, ať fungují i na localhost.
-const DEV_API_ROUTES = ["/api/precip-accum", "/api/chmi-alerts"];
+const DEV_API_ROUTES = [
+  "/api/precip-accum",
+  "/api/chmi-alerts",
+  "/api/webcams",
+];
 const devApi = (): PluginOption => ({
   name: "dev-api",
   configureServer(server) {
@@ -25,7 +29,14 @@ const devApi = (): PluginOption => ({
 // ČHMÚ opendata neposílá CORS hlavičky → obrázky radaru nejdou použít jako
 // WebGL textura. Proxujeme je přes vlastní origin (na Vercelu to řeší rewrite
 // ve vercel.json, lokálně tento dev proxy).
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Non-VITE_ proměnné (např. WINDY_WEBCAMS_KEY) Vite do process.env sám nedává,
+  // ale dev serverless funkce z /api je čtou odtud → zpřístupníme je ručně.
+  const env = loadEnv(mode, process.cwd(), "");
+  if (env.WINDY_WEBCAMS_KEY)
+    process.env.WINDY_WEBCAMS_KEY = env.WINDY_WEBCAMS_KEY;
+
+  return {
   plugins: [
     devApi(),
     react(),
@@ -106,4 +117,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });
