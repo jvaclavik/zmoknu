@@ -159,6 +159,12 @@ export default function App() {
   // Aktuální seznam oblíbených bez nutnosti re-fetche předpovědi při jeho změně.
   const favoritesRef = useRef<GeoLocation[]>([]);
   favoritesRef.current = favorites;
+  // Aktuální předpověď (ref), ať selhání při rozšiřování historie nezahodí
+  // funkční data ani nezablokuje přepínání dní.
+  const forecastRef = useRef<Forecast | null>(null);
+  forecastRef.current = forecast;
+  // Neblokující hláška (např. „starší historii se teď nepodařilo načíst").
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +181,7 @@ export default function App() {
           setForecast(f);
           setFetchedAt(Date.now());
           setOffline(false);
+          setNotice(null);
           saveOfflineForecast(location, pastDays, model, f, favoritesRef.current);
         }
       })
@@ -192,6 +199,15 @@ export default function App() {
           setFetchedAt(saved.at);
           setOffline(true);
           setError(null);
+        } else if (forecastRef.current) {
+          // Už něco zobrazujeme – typicky rozšiřování historie šipkou doleva.
+          // Selhání nesmí zahodit funkční předpověď ani zablokovat přepínání dní;
+          // necháme původní data a jen nenápadně upozorníme (jde zkusit znovu).
+          setPendingDate(null);
+          setError(null);
+          setNotice(
+            tr("Starší historii se teď nepodařilo načíst. Zkuste to znovu."),
+          );
         } else {
           setError(e instanceof Error ? e.message : tr("Chyba načítání"));
           // Nezobrazuj stará/rozbitá data – ať je vidět jen hláška.
@@ -220,6 +236,13 @@ export default function App() {
     const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Neblokující hláška sama zmizí po chvíli.
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(null), 6000);
+    return () => window.clearTimeout(id);
+  }, [notice]);
 
   // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
   // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
@@ -413,15 +436,23 @@ export default function App() {
     }
   }, [forecast, selectedDate, pendingDate]);
 
-  // Donačtení dalšího dne historie (až ~3 měsíce zpět – limit Open-Meteo).
-  const loadMoreHistory = useCallback(() => {
-    const next = Math.min(92, pastDays + 1);
-    if (next === pastDays) return;
-    const earliest = new Date();
-    earliest.setDate(earliest.getDate() - next);
-    setPendingDate(isoDate(earliest));
-    setPastDays(next);
-  }, [pastDays]);
+  // Donačtení historie po týdnu (až ~3 měsíce zpět – limit Open-Meteo).
+  // `selectDaysAgo` = na který den po načtení skočit (krokování šipkou/gestem).
+  // Bez něj (tlačítko „Starší") jen přidáme starší dny a výběr necháme být.
+  const HISTORY_STEP = 7;
+  const loadMoreHistory = useCallback(
+    (selectDaysAgo?: number) => {
+      const next = Math.min(92, pastDays + HISTORY_STEP);
+      if (next === pastDays) return;
+      if (selectDaysAgo != null) {
+        const target = new Date();
+        target.setDate(target.getDate() - Math.min(next, selectDaysAgo));
+        setPendingDate(isoDate(target));
+      }
+      setPastDays(next);
+    },
+    [pastDays],
+  );
 
   const changeDay = useCallback(
     (delta: number) => {
@@ -429,15 +460,15 @@ export default function App() {
       const dates = forecast.daily.map((d) => d.time);
       const idx = dates.indexOf(selectedDate);
       if (idx === -1) return;
-      // Na nejstarším dni a krok doleva → zkusíme donačíst historii.
+      // Na nejstarším dni a krok doleva → donačteme týden a skočíme o den zpět.
       if (delta < 0 && idx === 0) {
-        loadMoreHistory();
+        loadMoreHistory(pastDays + 1);
         return;
       }
       const next = dates[Math.min(dates.length - 1, Math.max(0, idx + delta))];
       if (next) setSelectedDate(next);
     },
-    [forecast, selectedDate, loadMoreHistory]
+    [forecast, selectedDate, loadMoreHistory, pastDays],
   );
 
   // Na mobilu přepínej dny swipem do stran. Během vodorovného tažení zamkneme
@@ -692,6 +723,19 @@ export default function App() {
     setFavorites((prev) => prev.filter((f) => !sameLocation(f, loc)));
   }, []);
 
+  const renameFavorite = useCallback((loc: GeoLocation, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    posthog.capture("favorite_renamed", { location_name: trimmed });
+    setFavorites((prev) =>
+      prev.map((f) =>
+        f.latitude === loc.latitude && f.longitude === loc.longitude
+          ? { ...f, name: trimmed }
+          : f,
+      ),
+    );
+  }, []);
+
   const toggleFavoriteFor = useCallback((loc: GeoLocation) => {
     const isFav = favorites.some((f) => sameLocation(f, loc));
     posthog.capture(isFav ? "favorite_removed" : "favorite_added", {
@@ -880,6 +924,13 @@ export default function App() {
         <span className="ptr-spinner">
           <RefreshGlyph />
         </span>
+        <span className="ptr-label">
+          {refreshing
+            ? tr("Obnovuji…")
+            : fetchedAt != null
+              ? `${tr("Aktualizováno")} ${relUpdated(fetchedAt, nowTick)}`
+              : ""}
+        </span>
       </div>
       {swipe && (
         <div
@@ -975,7 +1026,7 @@ export default function App() {
               days={forecast.daily}
               selected={selectedDate}
               onSelect={(d) => setSelectedDate(d)}
-              onStep={changeDay}
+              onLoadPast={loadMoreHistory}
               canLoadPast={pastDays < 92}
             />
           </div>
@@ -996,6 +1047,7 @@ export default function App() {
         onToggleCurrent={toggleFavorite}
         onToggleFavorite={toggleFavoriteFor}
         onRemove={removeFavorite}
+        onRename={renameFavorite}
       />
 
       {forecast && (
@@ -1012,6 +1064,7 @@ export default function App() {
       )}
 
       {error && <div className="banner error">{error}</div>}
+      {notice && forecast && <div className="banner notice">{notice}</div>}
       {offline && forecast && (
         <div className="banner offline">
           {fetchedAt != null

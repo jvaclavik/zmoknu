@@ -40,6 +40,8 @@ export interface HourlyPoint {
   cloudMid: number;
   cloudHigh: number;
   cape: number;
+  uvIndex: number;
+  uvIndexClearSky: number;
   isDay: boolean;
 }
 

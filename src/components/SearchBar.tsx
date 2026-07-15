@@ -36,6 +36,10 @@ function coordLabel(lat: number, lon: number): string {
   return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
 
+function favKey(f: GeoLocation): string {
+  return `${f.latitude},${f.longitude}`;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -48,6 +52,7 @@ interface Props {
   onToggleCurrent: () => void;
   onToggleFavorite: (loc: GeoLocation) => void;
   onRemove: (loc: GeoLocation) => void;
+  onRename: (loc: GeoLocation, name: string) => void;
 }
 
 export default function SearchBar({
@@ -62,11 +67,15 @@ export default function SearchBar({
   onToggleCurrent,
   onToggleFavorite,
   onRemove,
+  onRename,
 }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  // Právě přejmenovávané oblíbené místo (klíč lat,lon) + rozepsaný název.
+  const [editingFav, setEditingFav] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [history, setHistory] = useStoredState<GeoLocation[]>(
     "zmoknu.searchHistory",
     [],
@@ -139,11 +148,17 @@ export default function SearchBar({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // Během přejmenování Escape zruší jen editaci, ne celý panel.
+      if (editingFav) {
+        setEditingFav(null);
+        return;
+      }
+      onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, editingFav]);
 
   function pick(loc: GeoLocation) {
     posthog.capture("location_selected", { location_name: loc.name, method: "search" });
@@ -167,6 +182,17 @@ export default function SearchBar({
     setMapOpen(false);
     onClose();
   }
+
+  const startRename = (f: GeoLocation) => {
+    setEditingFav(favKey(f));
+    setEditName(f.name);
+  };
+  const cancelRename = () => setEditingFav(null);
+  const saveRename = (f: GeoLocation) => {
+    const name = editName.trim();
+    if (name && name !== f.name) onRename(f, name);
+    setEditingFav(null);
+  };
 
   if (!open) return null;
 
@@ -203,7 +229,7 @@ export default function SearchBar({
             ref={inputRef}
             type="text"
             value={query}
-            placeholder={tr("Město, obec nebo GPS…")}
+            placeholder={tr("Adresa, město nebo GPS…")}
             onChange={(e) => setQuery(e.target.value)}
             aria-label={tr("Hledat město")}
           />
@@ -220,6 +246,15 @@ export default function SearchBar({
               <CloseX />
             </button>
           )}
+          <button
+            type="button"
+            className="locpick-mapbtn"
+            onClick={() => setMapOpen(true)}
+            aria-label={tr("Vybrat na mapě")}
+            title={tr("Vybrat na mapě")}
+          >
+            <MapGlyph />
+          </button>
         </div>
 
         <div className="locpick-body" ref={bodyRef}>
@@ -309,15 +344,6 @@ export default function SearchBar({
                 <span>
                   {locating ? tr("Zjišťuji polohu…") : tr("Použít moji polohu")}
                 </span>
-              </button>
-
-              <button
-                type="button"
-                className="locpick-locate subtle"
-                onClick={() => setMapOpen(true)}
-              >
-                <MapGlyph />
-                <span>{tr("Vybrat na mapě")}</span>
               </button>
 
               {current && (
@@ -425,30 +451,75 @@ export default function SearchBar({
                   <ul className="locpick-list">
                     {favorites.map((f) => {
                       const active = current ? sameLocation(f, current) : false;
+                      const editing = editingFav === favKey(f);
                       return (
-                        <li
-                          key={`${f.latitude},${f.longitude}`}
-                          className="locpick-row"
-                        >
-                          <button
-                            type="button"
-                            className={`locpick-pick ${active ? "active" : ""}`}
-                            onClick={() => pick(f)}
-                          >
-                            <StarGlyph filled />
-                            <span className="locpick-rowtext">
-                              <span className="locpick-name">{f.name}</span>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className="locpick-remove"
-                            onClick={() => onRemove(f)}
-                            aria-label={tr("Odebrat {name}", { name: f.name })}
-                            title={tr("Odebrat {name}", { name: f.name })}
-                          >
-                            <CloseX />
-                          </button>
+                        <li key={favKey(f)} className="locpick-row">
+                          {editing ? (
+                            <div className="locpick-rename">
+                              <StarGlyph filled />
+                              <input
+                                className="locpick-rename-input"
+                                value={editName}
+                                autoFocus
+                                onChange={(e) => setEditName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveRename(f);
+                                }}
+                                aria-label={tr("Nový název")}
+                              />
+                              <button
+                                type="button"
+                                className="locpick-rename-ok"
+                                onClick={() => saveRename(f)}
+                                aria-label={tr("Uložit")}
+                                title={tr("Uložit")}
+                              >
+                                <CheckGlyph />
+                              </button>
+                              <button
+                                type="button"
+                                className="locpick-remove"
+                                onClick={cancelRename}
+                                aria-label={tr("Zrušit úpravu")}
+                                title={tr("Zrušit úpravu")}
+                              >
+                                <CloseX />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className={`locpick-pick ${active ? "active" : ""}`}
+                                onClick={() => pick(f)}
+                              >
+                                <StarGlyph filled />
+                                <span className="locpick-rowtext">
+                                  <span className="locpick-name">{f.name}</span>
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                className="locpick-edit"
+                                onClick={() => startRename(f)}
+                                aria-label={tr("Přejmenovat {name}", {
+                                  name: f.name,
+                                })}
+                                title={tr("Přejmenovat")}
+                              >
+                                <PencilGlyph />
+                              </button>
+                              <button
+                                type="button"
+                                className="locpick-remove"
+                                onClick={() => onRemove(f)}
+                                aria-label={tr("Odebrat {name}", { name: f.name })}
+                                title={tr("Odebrat {name}", { name: f.name })}
+                              >
+                                <CloseX />
+                              </button>
+                            </>
+                          )}
                         </li>
                       );
                     })}
@@ -546,11 +617,12 @@ function SearchGlyph() {
 function LocateGlyph() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
-      <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+      <line x1="12" y1="1.5" x2="12" y2="4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="19.5" x2="12" y2="22.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="1.5" y1="12" x2="4.5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="19.5" y1="12" x2="22.5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -563,6 +635,33 @@ function StarGlyph({ filled }: { filled: boolean }) {
         fill={filled ? "#ffd166" : "none"}
         stroke={filled ? "#ffd166" : "currentColor"}
         strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PencilGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5 12.5l4.5 4.5L19 7"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

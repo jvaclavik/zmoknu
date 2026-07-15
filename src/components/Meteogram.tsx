@@ -42,6 +42,7 @@ const TAB_OM_VAR: Record<Tab, string> = {
   humidity: "relative_humidity_2m",
   dewpoint: "dew_point_2m",
   pressure: "surface_pressure",
+  uv: "uv_index",
 };
 
 type Tab =
@@ -52,13 +53,15 @@ type Tab =
   | "cloud"
   | "humidity"
   | "dewpoint"
-  | "pressure";
+  | "pressure"
+  | "uv";
 
 const ALL_TABS: Tab[] = [
   "temp",
   "feels",
   "precip",
   "wind",
+  "uv",
   "cloud",
   "humidity",
   "dewpoint",
@@ -74,6 +77,7 @@ const TAB_LABEL: Record<Tab, string> = {
   humidity: "Vlhkost",
   dewpoint: "Rosný bod",
   pressure: "Tlak",
+  uv: "UV index",
 };
 
 // Krátké vysvětlivky – k čemu je dobré danou veličinu sledovat.
@@ -86,6 +90,7 @@ const TAB_INFO: Record<Tab, string> = {
   humidity: "Relativní vlhkost vzduchu (%). Vysoká v teple je dusno, v zimě zvyšuje pocit chladu; kolem 100 % hrozí mlha nebo rosa.",
   dewpoint: "Teplota, při níž vzduch nasytí vlhkost. Čím blíž je teplotě, tím dusněji je a tím spíš vznikne mlha/rosa. Nad ~16 °C bývá dusno.",
   pressure: "Tlak vzduchu. Klesající tlak často předchází zhoršení počasí (déšť, vítr), rostoucí naopak vyjasnění a klid.",
+  uv: "Intenzita UV záření ze slunce. Vrcholí kolem poledne. Od hodnoty 3 se doporučuje ochrana (krém, brýle), od 6 je vysoká a od 8 velmi vysoká.",
 };
 
 const DEFAULT_PINNED: Record<Tab, boolean> = {
@@ -97,6 +102,7 @@ const DEFAULT_PINNED: Record<Tab, boolean> = {
   humidity: true,
   dewpoint: true,
   pressure: true,
+  uv: true,
 };
 
 // Pevné okno od 00:00 vybraného dne. Graf se vejde na šířku, nescrolluje.
@@ -177,6 +183,11 @@ export default function Meteogram({
   const [showTypeInfo, setShowTypeInfo] = useStoredState<boolean>(
     "zmoknu.mgTypeInfo",
     true,
+  );
+  // UV bez oblačnosti (clear-sky) jako referenční čára – volitelné, výchozí vyp.
+  const [showUvClearSky, setShowUvClearSky] = useStoredState<boolean>(
+    "zmoknu.mgUvClearSky",
+    false,
   );
   const [normals, setNormals] = useState<ClimateNormals | null>(null);
   const [normalLoading, setNormalLoading] = useState(false);
@@ -574,6 +585,14 @@ export default function Meteogram({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
 
+  const refLinePath = useMemo(() => {
+    if (!series.refLine || !pph) return "";
+    return series.refLine.values
+      .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${yCurve(v)}`)
+      .join(" ");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, points.length, pph]);
+
   const extraPaths = useMemo(() => {
     if (!series.extras || !pph) return [];
     return series.extras.map((ex) => ({
@@ -712,6 +731,35 @@ export default function Meteogram({
     }
     return out;
   }, [tab, series.min, series.max]);
+
+  // UV: „tvrdý" vertikální gradient – čára mění barvu podle pásma (ne plynule).
+  const uvLineStops = useMemo(() => {
+    if (tab !== "uv") return [];
+    const { min, max } = series;
+    const span = Math.max(0.001, max - min);
+    const offOf = (v: number) => (max - v) / span;
+    const stops: { offset: number; color: string }[] = [
+      { offset: 0, color: uvBandColor(max) },
+    ];
+    for (const b of [8, 6, 3]) {
+      if (b > min && b < max) {
+        const o = offOf(b);
+        stops.push({ offset: o, color: uvBandColor(b + 0.001) });
+        stops.push({ offset: o, color: uvBandColor(b - 0.001) });
+      }
+    }
+    stops.push({ offset: 1, color: uvBandColor(min) });
+    return stops;
+  }, [tab, series.min, series.max]);
+
+  // UV: vodorovné prahové čáry (odkud je záření nebezpečnější).
+  const uvThresholds = useMemo(() => {
+    if (tab !== "uv" || !pph) return [];
+    return UV_BANDS.filter((b) => b.v > series.min && b.v < series.max).map(
+      (b) => ({ ...b, y: yCurve(b.v) }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pph, series.min, series.max]);
 
   const labelValues = series.primary;
   const labelColor = tab === "feels" ? "feels" : "";
@@ -926,6 +974,16 @@ export default function Meteogram({
                 />
                 <span>{tr("Vysvětlivky u typů")}</span>
               </label>
+              {tab === "uv" && (
+                <label className="mg-view-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showUvClearSky}
+                    onChange={(e) => setShowUvClearSky(e.target.checked)}
+                  />
+                  <span>{tr("UV bez oblačnosti")}</span>
+                </label>
+              )}
               {showNormal && (
                 <div className="mg-view-hint">
                   {tr(
@@ -1254,6 +1312,24 @@ export default function Meteogram({
                 ))}
               </linearGradient>
             )}
+            {tab === "uv" && (
+              <linearGradient
+                id="grad-uvline"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={TOP_PAD}
+                x2="0"
+                y2={CURVE_BOTTOM}
+              >
+                {uvLineStops.map((s, i) => (
+                  <stop
+                    key={i}
+                    offset={`${(s.offset * 100).toFixed(1)}%`}
+                    stopColor={s.color}
+                  />
+                ))}
+              </linearGradient>
+            )}
           </defs>
 
           {/* noční pruhy podle východu/západu slunce (isDay) */}
@@ -1476,6 +1552,29 @@ export default function Meteogram({
             pph > 0 && (
               <>
                 <path d={areaPath} fill="url(#grad-primary)" />
+                {uvThresholds.map((t) => (
+                  <g key={`uvth-${t.v}`}>
+                    <line
+                      x1={0}
+                      y1={t.y}
+                      x2={width}
+                      y2={t.y}
+                      stroke={t.color}
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                      opacity="0.55"
+                    />
+                    <text
+                      x={width - 6}
+                      y={t.y - 4}
+                      className="mg-uv-thlabel"
+                      textAnchor="end"
+                      fill={t.color}
+                    >
+                      {tr(t.label)} ({t.v}+)
+                    </text>
+                  </g>
+                ))}
                 {normalBandPath && (
                   <path
                     d={normalBandPath}
@@ -1538,13 +1637,40 @@ export default function Meteogram({
                     strokeLinejoin="round"
                   />
                 )}
+                {showUvClearSky && series.refLine && refLinePath && (
+                  <>
+                    <path
+                      d={refLinePath}
+                      fill="none"
+                      stroke={series.refLine.color}
+                      strokeWidth="1.8"
+                      strokeDasharray="5 4"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      opacity="0.85"
+                    />
+                    <text
+                      x={x(0) + 4}
+                      y={Math.max(
+                        TOP_PAD + 10,
+                        yCurve(series.refLine.values[0]) - 6,
+                      )}
+                      className="mg-uv-thlabel"
+                      fill={series.refLine.color}
+                    >
+                      {tr(series.refLine.label)}
+                    </text>
+                  </>
+                )}
                 <path
                   d={linePath}
                   fill="none"
                   stroke={
                     tab === "temp" || tab === "feels"
                       ? "url(#grad-templine)"
-                      : series.stroke
+                      : tab === "uv"
+                        ? "url(#grad-uvline)"
+                        : series.stroke
                   }
                   strokeWidth="2.5"
                   strokeLinejoin="round"
@@ -1630,7 +1756,9 @@ export default function Meteogram({
                   stroke={
                     tab === "temp" || tab === "feels"
                       ? tempColor(series.primary[ci])
-                      : series.stroke
+                      : tab === "uv"
+                        ? uvColor(series.primary[ci])
+                        : series.stroke
                   }
                   strokeWidth="2"
                 />
@@ -1822,6 +1950,24 @@ function StatReadout({
         </button>
       )}
 
+      {visible("uv") && (
+        <button
+          type="button"
+          className={`mg-stat mg-stat-btn ${tab === "uv" ? "active" : ""} ${uvFlag(p.uvIndex)}`}
+          onClick={() => onTab("uv")}
+          aria-pressed={tab === "uv"}
+          title={tr("Zobrazit graf UV indexu")}
+        >
+          <UvGlyph />
+          <div className="mg-stat-v">
+            <strong style={{ color: uvColor(p.uvIndex) }}>
+              {Number.isFinite(p.uvIndex) ? Math.round(p.uvIndex) : 0}
+            </strong>
+            <span>{tr("UV index")}</span>
+          </div>
+        </button>
+      )}
+
       {visible("cloud") && (
         <button
           type="button"
@@ -1891,6 +2037,29 @@ function StatReadout({
   );
 }
 
+// Barva podle úrovně UV (WHO škála): nízké / střední / vysoké / velmi vysoké.
+function uvBandColor(uv: number): string {
+  if (uv >= 8) return "#d94ea6";
+  if (uv >= 6) return "#ff6b6b";
+  if (uv >= 3) return "#f0a33c";
+  return "#5bd99a";
+}
+// Prahy jednotlivých pásem (spodní hranice) + krátký popis.
+const UV_BANDS = [
+  { v: 3, label: "střední", color: "#f0a33c" },
+  { v: 6, label: "vysoké", color: "#ff6b6b" },
+  { v: 8, label: "velmi vysoké", color: "#d94ea6" },
+];
+function uvColor(uv: number): string {
+  if (!Number.isFinite(uv)) return "inherit";
+  return uvBandColor(uv);
+}
+function uvFlag(uv: number): string {
+  if (uv >= 8) return "flag-vhot";
+  if (uv >= 6) return "flag-hot";
+  return "";
+}
+
 // Ikonka pro řádek v dropdownu zobrazení dat.
 function TabGlyph({ tab }: { tab: Tab }) {
   switch (tab) {
@@ -1910,7 +2079,29 @@ function TabGlyph({ tab }: { tab: Tab }) {
       return <DewGlyph />;
     case "pressure":
       return <PressureGlyph />;
+    case "uv":
+      return <UvGlyph />;
   }
+}
+
+function UvGlyph() {
+  return (
+    <svg
+      className="mg-glyph"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  );
 }
 
 function ThermGlyph() {
@@ -2199,6 +2390,7 @@ interface SeriesConfig {
   secondary?: number[];
   secondaryColor?: string;
   extras?: ExtraLine[];
+  refLine?: ExtraLine;
   min: number;
   max: number;
   stroke: string;
@@ -2286,6 +2478,27 @@ function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
       max: hi + pad,
       stroke: "#e0b24d",
       fill: "#e0b24d",
+      fmt: (v) => `${Math.round(v)}`,
+    };
+  }
+  if (tab === "uv") {
+    const uv = points.map((p) => (Number.isFinite(p.uvIndex) ? p.uvIndex : 0));
+    // UV bez oblačnosti (clear-sky) jako referenční čára – rozdíl vůči reálnému
+    // UV ukazuje, kolik ubraly mraky. Když chybí, spadneme na reálné UV.
+    const clear = points.map((p, i) =>
+      Number.isFinite(p.uvIndexClearSky) ? p.uvIndexClearSky : uv[i],
+    );
+    const hi = Math.max(0, ...uv, ...clear);
+    // UV má smysl od 0; horní hranici držíme aspoň na 3, ať malé hodnoty nejsou
+    // přehnaně zvětšené (a osa odpovídá běžné UV škále).
+    const max = Math.max(3, Math.ceil(hi + 0.5));
+    return {
+      primary: uv,
+      refLine: { values: clear, color: "#f0c674", label: "bez mraků" },
+      min: 0,
+      max,
+      stroke: "#b06bff",
+      fill: "#b06bff",
       fmt: (v) => `${Math.round(v)}`,
     };
   }

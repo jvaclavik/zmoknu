@@ -7,12 +7,44 @@ const REVERSE_URL = "https://api.bigdatacloud.net/data/reverse-geocode-client";
 // Open-Meteo u některých modelů (např. ČHMÚ ALADIN bez dat pro danou lokalitu)
 // vrací nevalidní JSON s literály „nan“/„Infinity“. Před parsováním je nahradíme
 // za null, ať fetch nespadne a projeví se to jako chybějící data.
-async function fetchOmJson<T>(url: string, errMsg: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(errMsg);
-  const text = await res.text();
-  const clean = text.replace(/\bNaN\b/gi, "null").replace(/-?Infinity/gi, "null");
-  return JSON.parse(clean) as T;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchOmJson<T>(
+  url: string,
+  errMsg: string,
+  retries = 2,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        // 429 (rate limit) a 5xx jsou přechodné – při hlubší historii/více
+        // požadavcích se občas objeví. Zkusíme to znovu s krátkou pauzou.
+        const transient = res.status === 429 || res.status >= 500;
+        if (transient && attempt < retries) {
+          await sleep(400 * (attempt + 1));
+          continue;
+        }
+        throw new Error(errMsg);
+      }
+      const text = await res.text();
+      const clean = text
+        .replace(/\bNaN\b/gi, "null")
+        .replace(/-?Infinity/gi, "null");
+      return JSON.parse(clean) as T;
+    } catch (e) {
+      lastErr = e;
+      // Síťový výpadek (TypeError) je také přechodný → retry. Trvalé chyby
+      // (např. 4xx přeložené na Error(errMsg)) rovnou propustíme dál.
+      if (e instanceof TypeError && attempt < retries) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(errMsg);
 }
 
 interface RawForecast {
@@ -178,6 +210,8 @@ export async function fetchForecast(
       "cloud_cover_mid",
       "cloud_cover_high",
       "cape",
+      "uv_index",
+      "uv_index_clear_sky",
       "is_day",
     ].join(","),
     daily: [
@@ -423,6 +457,10 @@ function mapHourly(h: RawForecast["hourly"]) {
       cloudMid: Number(h.cloud_cover_mid[i]),
       cloudHigh: Number(h.cloud_cover_high[i]),
       cape: h.cape ? Number(h.cape[i]) : NaN,
+      uvIndex: h.uv_index ? Number(h.uv_index[i]) : NaN,
+      uvIndexClearSky: h.uv_index_clear_sky
+        ? Number(h.uv_index_clear_sky[i])
+        : NaN,
       isDay: Number(h.is_day[i]) === 1,
     });
   }
@@ -472,10 +510,67 @@ interface RawGeo {
   }[];
 }
 
+// Hledání místa. Primárně MapTiler geocoding (umí i ulice/adresy a čtvrti,
+// např. „Šlikova 9 Praha“ nebo „Praha Břevnov“); když není klíč nebo nic
+// nevrátí, spadneme na Open-Meteo (názvy měst/obcí).
 export async function searchLocations(query: string): Promise<GeoLocation[]> {
-  if (query.trim().length < 2) return [];
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const key = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
+  if (key) {
+    try {
+      const res = await geocodeMapTiler(q, key);
+      if (res.length) return res;
+    } catch {
+      /* spadneme na Open-Meteo */
+    }
+  }
+  return geocodeOpenMeteo(q);
+}
+
+interface MapTilerFeature {
+  text?: string;
+  place_name?: string;
+  center?: [number, number]; // [lon, lat]
+}
+
+async function geocodeMapTiler(
+  query: string,
+  key: string,
+): Promise<GeoLocation[]> {
+  const url =
+    `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json` +
+    `?key=${key}&language=cs&limit=8`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Hledání lokace selhalo.");
+  const data = (await res.json()) as { features?: MapTilerFeature[] };
+  return (data.features ?? [])
+    .map((f): GeoLocation | null => {
+      if (!f.center || f.center.length < 2) return null;
+      const [lon, lat] = f.center;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const full = f.place_name ?? f.text ?? "";
+      // Zbytek adresy za první částí bereme jako popis (PSČ, obec, země).
+      const rest = full
+        .split(",")
+        .slice(1)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(", ");
+      return {
+        name: f.text || full,
+        latitude: lat,
+        longitude: lon,
+        admin1: rest || undefined,
+      };
+    })
+    .filter((g): g is GeoLocation => g !== null);
+}
+
+async function geocodeOpenMeteo(query: string): Promise<GeoLocation[]> {
   const params = new URLSearchParams({
-    name: query.trim(),
+    name: query,
     count: "8",
     language: "cs",
     format: "json",
@@ -590,10 +685,61 @@ export function fetchClimateNormals(
 }
 
 // Reverzní geokódování pro pojmenování polohy z GPS.
+// Preferované úrovně názvu pro „moji polohu“ – od nejjemnější (čtvrť/část)
+// po hrubší (obec, okres). Adresu s číslem popisným ani PSČ nechceme.
+const REVERSE_PREF = [
+  "neighbourhood",
+  "suburb",
+  "quarter",
+  "place",
+  "locality",
+  "village",
+  "town",
+  "city",
+  "municipality",
+  "municipal_district",
+  "subregion",
+  "region",
+];
+
+async function reverseMapTiler(
+  lat: number,
+  lon: number,
+  key: string,
+): Promise<string | null> {
+  const url =
+    `https://api.maptiler.com/geocoding/${lon},${lat}.json` +
+    `?key=${key}&language=cs`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    features?: { text?: string; place_type?: string[] }[];
+  };
+  let best: { text: string; rank: number } | null = null;
+  for (const f of data.features ?? []) {
+    const type = f.place_type?.[0];
+    if (!type || !f.text) continue;
+    const rank = REVERSE_PREF.indexOf(type);
+    if (rank === -1) continue;
+    if (!best || rank < best.rank) best = { text: f.text, rank };
+  }
+  return best?.text ?? null;
+}
+
 export async function reverseGeocode(
   lat: number,
   lon: number,
 ): Promise<string> {
+  // Nejdřív MapTiler – umí čtvrti/části města (např. „Břevnov“ místo „Praha“).
+  const key = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
+  if (key) {
+    try {
+      const name = await reverseMapTiler(lat, lon, key);
+      if (name) return name;
+    } catch {
+      /* spadneme na BigDataCloud */
+    }
+  }
   try {
     const params = new URLSearchParams({
       latitude: lat.toString(),

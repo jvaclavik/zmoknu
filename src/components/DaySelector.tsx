@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import type { DailyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
@@ -11,7 +11,7 @@ interface Props {
   days: DailyPoint[];
   selected: string;
   onSelect: (date: string) => void;
-  onStep?: (delta: number) => void;
+  onLoadPast?: () => void;
   canLoadPast?: boolean;
 }
 
@@ -32,12 +32,31 @@ export default function DaySelector({
   days,
   selected,
   onSelect,
-  onStep,
+  onLoadPast,
   canLoadPast = false,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const didInit = useRef(false);
-  const idx = days.findIndex((d) => d.time === selected);
+  // Pro zachování pozice scrollu při donačtení starších dnů (prepend zleva).
+  const prevFirstRef = useRef<string | undefined>(undefined);
+  const prevScrollWidthRef = useRef(0);
+
+  // Když se dopředu vloží starší dny, kompenzujeme scrollLeft o šířku přidaného
+  // obsahu – uživatel tak zůstane vizuálně na stejném místě (nic „neuskočí").
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const newFirst = days[0]?.time;
+    const prevFirst = prevFirstRef.current;
+    if (prevFirst && newFirst !== prevFirst) {
+      const k = days.findIndex((d) => d.time === prevFirst);
+      if (k > 0) {
+        list.scrollLeft += list.scrollWidth - prevScrollWidthRef.current;
+      }
+    }
+    prevFirstRef.current = newFirst;
+    prevScrollWidthRef.current = list.scrollWidth;
+  }, [days]);
 
   // Posuň aktivní den do viditelné oblasti – jen horizontálně uvnitř lišty,
   // aby se nehýbalo svislým scrollem celé stránky. Při prvním otevření
@@ -56,21 +75,19 @@ export default function DaySelector({
 
   return (
     <div className="dayselect-wrap">
-      <button
-        type="button"
-        className="dayselect-arrow"
-        aria-label={
-          idx <= 0 && canLoadPast
-            ? tr("Načíst předchozí den")
-            : tr("Předchozí den")
-        }
-        title={idx <= 0 && canLoadPast ? tr("Načíst další den historie") : undefined}
-        disabled={idx <= 0 && !canLoadPast}
-        onClick={() => onStep?.(-1)}
-      >
-        <Chevron dir="left" />
-      </button>
       <div className="dayselect" ref={listRef}>
+        {canLoadPast && (
+          <button
+            type="button"
+            className="dayselect-loadmore"
+            onClick={() => onLoadPast?.()}
+            aria-label={tr("Načíst starší týden")}
+            title={tr("Načíst starší týden historie")}
+          >
+            <Chevron dir="left" />
+            <span className="dsl-label">{tr("Starší")}</span>
+          </button>
+        )}
         {days.map((d) => {
           const info = describeWeather(d.weatherCode);
           const date = new Date(d.time);
@@ -101,15 +118,6 @@ export default function DaySelector({
           );
         })}
       </div>
-      <button
-        type="button"
-        className="dayselect-arrow"
-        aria-label={tr("Další den")}
-        disabled={idx >= days.length - 1}
-        onClick={() => onStep?.(1)}
-      >
-        <Chevron dir="right" />
-      </button>
     </div>
   );
 }

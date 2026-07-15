@@ -218,6 +218,10 @@ export default function RadarMap({
     false,
   );
   const [webcams, setWebcams] = useState<Webcam[]>([]);
+  const [showFavs, setShowFavs] = useStoredState<boolean>(
+    "zmoknu.radarFavs",
+    true,
+  );
   // Webkamera otevřená v modálu (klik na marker na mapě).
   const [activeWebcam, setActiveWebcam] = useState<Webcam | null>(null);
   // Moje (GPS) poloha – jen pokud už je oprávnění uděleno, ať nevyskakuje prompt.
@@ -822,8 +826,9 @@ export default function RadarMap({
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Oblíbená místa – žlutý pin.
-    favorites
+    // Oblíbená místa – žlutý pin (jen když je zapnuto v nastavení).
+    if (showFavs)
+      favorites
       .filter((f) => !sameLocation(f, location))
       .forEach((f) => {
         const el = document.createElement("button");
@@ -871,7 +876,7 @@ export default function RadarMap({
       .setLngLat([location.longitude, location.latitude])
       .addTo(map);
     markersRef.current.push(locMarker);
-  }, [location, favorites, onSelect, myLoc]);
+  }, [location, favorites, onSelect, myLoc, showFavs]);
 
   // Webkamery v okolí – stáhneme až po zapnutí přepínače (kolem aktuálního místa).
   useEffect(() => {
@@ -1201,6 +1206,14 @@ export default function RadarMap({
             <label className="radar-toggle">
               <input
                 type="checkbox"
+                checked={showFavs}
+                onChange={(e) => setShowFavs(e.target.checked)}
+              />
+              <span>{tr("Oblíbená místa")}</span>
+            </label>
+            <label className="radar-toggle">
+              <input
+                type="checkbox"
                 checked={cloudsOn}
                 onChange={(e) => setShowClouds(e.target.checked)}
               />
@@ -1486,14 +1499,19 @@ function radarDayLabel(d: Date): string {
 
 function GearGlyph() {
   return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.5H10.9l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.4 2.5h4.2l.4-2.5c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }
