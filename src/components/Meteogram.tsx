@@ -558,6 +558,16 @@ export default function Meteogram({
       .filter((v, i, arr) => v > 0 && arr.indexOf(v) === i);
   }, [isPrecip, series.max]);
 
+  // Srážky: vodorovné prahové čáry intenzity (mírný / silný déšť).
+  const precipThresholds = useMemo(() => {
+    if (!isPrecip) return [];
+    return PRECIP_BANDS.filter((b) => b.v < series.max).map((b) => ({
+      ...b,
+      y: yPrecip(b.v),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrecip, series.max]);
+
   const areaPath = useMemo(() => {
     if (!points.length || !pph) return "";
     let d = `M ${x(0)} ${CURVE_BOTTOM}`;
@@ -760,6 +770,44 @@ export default function Meteogram({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, pph, series.min, series.max]);
+
+  // Vítr: vodorovné prahové čáry (střední / silný / velmi silný vítr).
+  const windThresholds = useMemo(() => {
+    if (tab !== "wind" || !pph) return [];
+    return WIND_BANDS.filter((b) => b.v > series.min && b.v < series.max).map(
+      (b) => ({ ...b, y: yCurve(b.v) }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pph, series.min, series.max]);
+
+  // Rosný bod: vodorovné prahové čáry (od kdy je dusno).
+  const dewThresholds = useMemo(() => {
+    if (tab !== "dewpoint" || !pph) return [];
+    return DEW_BANDS.filter((b) => b.v > series.min && b.v < series.max).map(
+      (b) => ({ ...b, y: yCurve(b.v) }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pph, series.min, series.max]);
+
+  // Souvislé úseky s rizikem mlhy (teplota blízko rosného bodu) – ukazují se
+  // v grafu vlhkosti a rosného bodu jako podbarvený pruh s ikonkou mlhy.
+  const fogSegments = useMemo(() => {
+    if (!(tab === "dewpoint" || tab === "humidity") || !pph) return [];
+    const segs: { startI: number; endI: number }[] = [];
+    let start = -1;
+    points.forEach((p, i) => {
+      // V grafu ukazujeme jen výraznější riziko (přísnější práh než u statu).
+      const risk = fogRisk(p.temperature, p.dewPoint, 1);
+      if (risk && start < 0) start = i;
+      if (!risk && start >= 0) {
+        segs.push({ startI: start, endI: i - 1 });
+        start = -1;
+      }
+    });
+    if (start >= 0) segs.push({ startI: start, endI: points.length - 1 });
+    return segs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pph, points]);
 
   const labelValues = series.primary;
   const labelColor = tab === "feels" ? "feels" : "";
@@ -1392,11 +1440,11 @@ export default function Meteogram({
               );
             })}
 
-          {/* hodinové linky + popisky (6/12/18) */}
+          {/* hodinové linky + popisky (0/6/12/18) */}
           {pph > 0 &&
             points.map((p, i) => {
               const d = new Date(p.time);
-              if (d.getHours() % 6 === 0 && d.getHours() !== 0) {
+              if (d.getHours() % 6 === 0) {
                 return (
                   <g key={`h-${i}`}>
                     <line
@@ -1486,6 +1534,29 @@ export default function Meteogram({
                     </text>
                   </g>
                 ))}
+                {precipThresholds.map((t) => (
+                  <g key={`pth-${t.v}`}>
+                    <line
+                      x1={0}
+                      y1={t.y}
+                      x2={width}
+                      y2={t.y}
+                      stroke={t.color}
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                      opacity="0.55"
+                    />
+                    <text
+                      x={width - 6}
+                      y={t.y - 4}
+                      className="mg-uv-thlabel"
+                      textAnchor="end"
+                      fill={t.color}
+                    >
+                      {tr(t.label)} ({t.v}+ mm)
+                    </text>
+                  </g>
+                ))}
                 {/* bouřkové úseky – svislý pruh s průhledností dle pravděpodobnosti */}
                 {stormBars.map((b) => {
                   const left = x(b.startI) - pph * 0.5;
@@ -1542,7 +1613,7 @@ export default function Meteogram({
                       className="mg-extrema precip"
                       textAnchor="middle"
                     >
-                      {b.value.toFixed(1)}
+                      {fmtPrecip(b.value)}
                     </text>
                   );
                 })}
@@ -1552,6 +1623,41 @@ export default function Meteogram({
             pph > 0 && (
               <>
                 <path d={areaPath} fill="url(#grad-primary)" />
+                {fogSegments.map((s, i) => {
+                  const left = x(s.startI) - pph * 0.5;
+                  const right = x(s.endI) + pph * 0.5;
+                  const cx = (left + right) / 2;
+                  return (
+                    <g key={`fog-${i}`}>
+                      <rect
+                        x={left}
+                        y={TOP_PAD}
+                        width={Math.max(0, right - left)}
+                        height={CURVE_BOTTOM - TOP_PAD}
+                        fill="rgba(174,188,207,0.16)"
+                      />
+                      <g
+                        transform={`translate(${cx} ${CURVE_BOTTOM - 20})`}
+                        opacity="0.9"
+                      >
+                        <path
+                          d="M-7 -3h14M-7 0h14M-7 3h11"
+                          stroke="#c3d0e0"
+                          strokeWidth="1.7"
+                          strokeLinecap="round"
+                        />
+                        <text
+                          y="15"
+                          className="mg-uv-thlabel"
+                          textAnchor="middle"
+                          fill="#c3d0e0"
+                        >
+                          {tr("mlha")}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
                 {uvThresholds.map((t) => (
                   <g key={`uvth-${t.v}`}>
                     <line
@@ -1572,6 +1678,52 @@ export default function Meteogram({
                       fill={t.color}
                     >
                       {tr(t.label)} ({t.v}+)
+                    </text>
+                  </g>
+                ))}
+                {windThresholds.map((t) => (
+                  <g key={`windth-${t.v}`}>
+                    <line
+                      x1={0}
+                      y1={t.y}
+                      x2={width}
+                      y2={t.y}
+                      stroke={t.color}
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                      opacity="0.55"
+                    />
+                    <text
+                      x={width - 6}
+                      y={t.y - 4}
+                      className="mg-uv-thlabel"
+                      textAnchor="end"
+                      fill={t.color}
+                    >
+                      {tr(t.label)} ({t.v}+ m/s)
+                    </text>
+                  </g>
+                ))}
+                {dewThresholds.map((t) => (
+                  <g key={`dewth-${t.v}`}>
+                    <line
+                      x1={0}
+                      y1={t.y}
+                      x2={width}
+                      y2={t.y}
+                      stroke={t.color}
+                      strokeWidth="1"
+                      strokeDasharray="4 4"
+                      opacity="0.55"
+                    />
+                    <text
+                      x={width - 6}
+                      y={t.y - 4}
+                      className="mg-uv-thlabel"
+                      textAnchor="end"
+                      fill={t.color}
+                    >
+                      {tr(t.label)} ({t.v}+°)
                     </text>
                   </g>
                 ))}
@@ -1831,8 +1983,14 @@ export function DaySummary({
       )}
       <div className="mg-daysum-precip" style={{ opacity: precipOp }}>
         <span className="mg-daysum-precip-main">
-          <DropMini />
-          <strong>{day.precipitationSum.toFixed(1)} mm</strong>
+          <span className="mg-daysum-drops">
+            {Array.from({
+              length: Math.max(1, dropsFor(day.precipitationSum)),
+            }).map((_, i) => (
+              <DropMini key={i} />
+            ))}
+          </span>
+          <strong>{fmtPrecip(day.precipitationSum)} mm</strong>
         </span>
         <span
           className="mg-daysum-prob"
@@ -1871,8 +2029,47 @@ function StatReadout({
   visible: (t: Tab) => boolean;
 }) {
   const info = describeWeather(p.weatherCode);
+
+  // Rovnoměrné rozložení dlaždic do řádků: zjistíme, kolik sloupců se vejde na
+  // šířku, a pak počet sloupců snížíme tak, aby při stejném počtu řádků byly
+  // řádky co nejvyrovnanější (např. 9 položek → 3+3+3 místo 4+4+1).
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(0);
+  const count = ALL_TABS.filter((t) => visible(t)).length;
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const MIN = 132;
+    const compute = () => {
+      const w = el.clientWidth;
+      if (!w || count === 0) {
+        setCols(0);
+        return;
+      }
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 10;
+      const maxCols = Math.max(1, Math.floor((w + gap) / (MIN + gap)));
+      const capped = Math.min(maxCols, count);
+      const rows = Math.ceil(count / capped);
+      setCols(Math.ceil(count / rows));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [count]);
+
   return (
-    <div className="mg-stats">
+    <div
+      className="mg-stats"
+      ref={wrapRef}
+      style={
+        cols
+          ? ({
+              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            } as CSSProperties)
+          : undefined
+      }
+    >
       {visible("temp") && (
         <button
           type="button"
@@ -1917,15 +2114,13 @@ function StatReadout({
           aria-pressed={tab === "precip"}
           title={tr("Zobrazit graf srážek")}
         >
-          <RainGlyph />
+          <RainDrops
+            n={dropsFor(p.precipitation)}
+            prob={p.precipitationProbability}
+          />
           <div className="mg-stat-v">
             <strong className="mg-precip-top">
-              {p.precipitation > 0 ? `${p.precipitation.toFixed(1)} mm` : "0 mm"}
-              <RainDrops
-                n={dropsFor(p.precipitation)}
-                prob={p.precipitationProbability}
-                small
-              />
+              {p.precipitation > 0 ? `${fmtPrecip(p.precipitation)} mm` : "0 mm"}
             </strong>
             <span>
               {tr("srážky ({prob} %)", { prob: p.precipitationProbability })}
@@ -2000,21 +2195,31 @@ function StatReadout({
         </button>
       )}
 
-      {visible("dewpoint") && (
-        <button
-          type="button"
-          className={`mg-stat mg-stat-btn ${tab === "dewpoint" ? "active" : ""}`}
-          onClick={() => onTab("dewpoint")}
-          aria-pressed={tab === "dewpoint"}
-          title={tr("Zobrazit graf rosného bodu")}
-        >
-          <DewGlyph />
-          <div className="mg-stat-v">
-            <strong>{Math.round(p.dewPoint)}°</strong>
-            <span>{tr("rosný bod")}</span>
-          </div>
-        </button>
-      )}
+      {visible("dewpoint") &&
+        (() => {
+          const fog = fogRisk(p.temperature, p.dewPoint);
+          return (
+            <button
+              type="button"
+              className={`mg-stat mg-stat-btn ${tab === "dewpoint" ? "active" : ""} ${fog ? "flag-fog" : ""}`}
+              onClick={() => onTab("dewpoint")}
+              aria-pressed={tab === "dewpoint"}
+              title={
+                fog
+                  ? `${tr("Zobrazit graf rosného bodu")} – ${tr("hrozí mlha")}`
+                  : tr("Zobrazit graf rosného bodu")
+              }
+            >
+              <DewGlyph />
+              <div className="mg-stat-v">
+                <strong>
+                  {Math.round(p.dewPoint)}°{fog && <FogGlyph />}
+                </strong>
+                <span>{tr("rosný bod")}</span>
+              </div>
+            </button>
+          );
+        })()}
 
       {visible("pressure") && (
         <button
@@ -2049,6 +2254,23 @@ const UV_BANDS = [
   { v: 3, label: "střední", color: "#f0a33c" },
   { v: 6, label: "vysoké", color: "#ff6b6b" },
   { v: 8, label: "velmi vysoké", color: "#d94ea6" },
+];
+// Prahy síly větru (m/s) – orientačně dle Beaufortovy stupnice.
+const WIND_BANDS = [
+  { v: 5, label: "střední", color: "#f0a33c" },
+  { v: 10, label: "silný", color: "#ff6b6b" },
+  { v: 15, label: "velmi silný", color: "#d94ea6" },
+];
+// Prahy rosného bodu (°C) – od kdy začíná být dusno (subjektivní vlhko).
+const DEW_BANDS = [
+  { v: 16, label: "dusno", color: "#f0a33c" },
+  { v: 18, label: "velmi dusno", color: "#d94ea6" },
+];
+// Prahy intenzity srážek (mm za hodinu) – mírný / silný / přívalový déšť.
+const PRECIP_BANDS = [
+  { v: 2.5, label: "mírný", color: "#f0a33c" },
+  { v: 7.5, label: "silný", color: "#ff6b6b" },
+  { v: 15, label: "přívalový", color: "#d94ea6" },
 ];
 function uvColor(uv: number): string {
   if (!Number.isFinite(uv)) return "inherit";
@@ -2166,35 +2388,62 @@ function windFlag(speed: number, gusts: number): string {
   return "";
 }
 
-function dropsFor(mm: number): number {
-  if (mm <= 0) return 0;
-  if (mm < 0.5) return 1;
-  if (mm < 1.5) return 2;
-  if (mm < 4) return 3;
-  if (mm < 8) return 4;
-  return 5;
+// Riziko mlhy: teplota se blíží rosnému bodu (malý rozdíl → nasycený vzduch).
+// maxSpread určuje přísnost: 2.5 °C = mlha možná, ~1 °C = mlha hodně pravděpodobná.
+function fogRisk(temp: number, dew: number, maxSpread = 2.5): boolean {
+  return (
+    Number.isFinite(temp) && Number.isFinite(dew) && temp - dew <= maxSpread
+  );
 }
 
-function RainDrops({
-  n,
-  prob,
-  small,
-}: {
-  n: number;
-  prob: number;
-  small?: boolean;
-}) {
-  // Průhlednost kapek podle šance na déšť (jako u srážkových sloupců).
-  const op = n > 0 ? (prob > 0 ? 0.25 + 0.75 * (prob / 100) : 0.5) : 1;
-  const w = small ? 8 : 11;
-  const h = small ? 10 : 14;
+function FogGlyph() {
   return (
-    <span className={`mg-drops ${small ? "small" : ""}`} aria-hidden="true">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <svg key={i} width={w} height={h} viewBox="0 0 11 14">
+    <svg
+      className="mg-fog-mini"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      role="img"
+      aria-label="mlha"
+    >
+      <title>mlha</title>
+      <path
+        d="M4 8h16M4 12h16M4 16h13M7 20h11"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// Počet „naplněných" kapek (0–4) podle úhrnu srážek.
+function dropsFor(mm: number): number {
+  if (mm <= 0) return 0;
+  if (mm < 2) return 1;
+  if (mm < 6) return 2;
+  if (mm < 15) return 3;
+  return 4;
+}
+
+// Formát srážek: celé hodnoty bez desetinné nuly (2.0 → „2"), jinak 1 desetinné místo.
+function fmtPrecip(mm: number): string {
+  const s = mm.toFixed(1);
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
+}
+
+// Čtyři kapky v mřížce 2×2 (jako ikona srážek). Modré = kolik má napršet,
+// zbytek šedé; průhlednost modrých podle šance na déšť.
+function RainDrops({ n, prob }: { n: number; prob: number }) {
+  const op = n > 0 ? (prob > 0 ? 0.25 + 0.75 * (prob / 100) : 0.5) : 1;
+  return (
+    <span className="mg-drops4 mg-glyph" aria-hidden="true">
+      {[0, 1, 2, 3].map((i) => (
+        <svg key={i} width={9} height={11} viewBox="0 0 11 14">
           <path
             d="M5.5 0S0 6 0 9.2A5.5 5.5 0 0 0 11 9.2C11 6 5.5 0 5.5 0z"
-            fill={i < n ? "#3b9bff" : "rgba(255,255,255,0.14)"}
+            fill={i < n ? "#3b9bff" : "rgba(255,255,255,0.18)"}
             opacity={i < n ? op : 1}
           />
         </svg>
@@ -2284,6 +2533,7 @@ function StormBolt({ x, y, hail }: { x: number; y: number; hail: boolean }) {
 }
 
 function HumidGlyph() {
+  // Vlhkost = kapka se znakem „%" uvnitř (relativní vlhkost v procentech).
   return (
     <svg className="mg-glyph" width="22" height="22" viewBox="0 0 24 24" fill="none">
       <path
@@ -2292,6 +2542,17 @@ function HumidGlyph() {
         strokeWidth="1.7"
         strokeLinejoin="round"
       />
+      <line
+        x1="14"
+        y1="10.6"
+        x2="10"
+        y2="16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="10.3" cy="11" r="1.05" fill="currentColor" />
+      <circle cx="13.7" cy="15.6" r="1.05" fill="currentColor" />
     </svg>
   );
 }
@@ -2301,30 +2562,39 @@ function PressureTrend({ delta }: { delta: number }) {
   let angle: number;
   let cls: string;
   let title: string;
+  // Barva podle vlivu na počasí: klesající tlak (horší počasí) = červená,
+  // stoupající (lepší počasí) = zelená, stálý = žlutá uprostřed.
+  let color: string;
   if (delta >= 2) {
     angle = -90;
     cls = "up";
     title = "prudce stoupá";
+    color = "#35c46a";
   } else if (delta >= 0.7) {
     angle = -45;
     cls = "up";
     title = "stoupá";
+    color = "#8fce5a";
   } else if (delta <= -2) {
     angle = 90;
     cls = "down";
     title = "prudce klesá";
+    color = "#ff5b5b";
   } else if (delta <= -0.7) {
     angle = 45;
     cls = "down";
     title = "klesá";
+    color = "#ff8a5b";
   } else {
     angle = 0;
     cls = "steady";
     title = "stálý";
+    color = "#e0b24d";
   }
   return (
     <svg
       className={`mg-ptrend ${cls}`}
+      style={{ color }}
       width="14"
       height="14"
       viewBox="0 0 24 24"
@@ -2347,20 +2617,23 @@ function PressureTrend({ delta }: { delta: number }) {
 }
 
 function DewGlyph() {
+  // Rosný bod = kapka kondenzující na povrchu (vodorovná čára = rosa na zemi).
   return (
     <svg className="mg-glyph" width="22" height="22" viewBox="0 0 24 24" fill="none">
       <path
-        d="M12 4s5 6 5 9.5A5 5 0 0 1 7 13.5C7 10 12 4 12 4z"
+        d="M12 4.5s4.4 4.8 4.4 8A4.4 4.4 0 0 1 7.6 12.5C7.6 9.3 12 4.5 12 4.5z"
         stroke="currentColor"
         strokeWidth="1.7"
         strokeLinejoin="round"
       />
       <path
-        d="M10 13a2 2 0 0 0 2 2"
+        d="M4 20h16"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.7"
         strokeLinecap="round"
       />
+      <circle cx="6.6" cy="17.6" r="0.95" fill="currentColor" />
+      <circle cx="17.4" cy="17.6" r="0.95" fill="currentColor" />
     </svg>
   );
 }
@@ -2408,7 +2681,7 @@ function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
       max,
       stroke: "#3b9bff",
       fill: "#3b9bff",
-      fmt: (v) => `${v.toFixed(1)} mm`,
+      fmt: (v) => `${fmtPrecip(v)} mm`,
     };
   }
   if (tab === "wind") {

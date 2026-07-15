@@ -203,6 +203,13 @@ const EN: Record<string, string> = {
     "Couldn't load older history right now. Please try again.",
   vysoké: "high",
   "velmi vysoké": "very high",
+  silný: "strong",
+  přívalový: "torrential",
+  "velmi silný": "very strong",
+  dusno: "muggy",
+  "velmi dusno": "very muggy",
+  "hrozí mlha": "fog likely",
+  mlha: "fog",
   "Intenzita UV záření ze slunce. Vrcholí kolem poledne. Od hodnoty 3 se doporučuje ochrana (krém, brýle), od 6 je vysoká a od 8 velmi vysoká.":
     "Intensity of UV radiation from the sun. Peaks around noon. From 3 protection is advised (sunscreen, sunglasses), from 6 it's high and from 8 very high.",
   "bez mraků": "clear sky",
@@ -475,6 +482,17 @@ const EN: Record<string, string> = {
   "Předchozí den": "Previous day",
   "Další den": "Next day",
   "Načíst další den historie": "Load one more day of history",
+  "Načíst další dny": "Load more days",
+  "Přizpůsobit obsah": "Customize content",
+  "Přetáhni sekce za úchyt a seřaď je. Skryté můžeš zase přidat.":
+    "Drag sections by the handle to reorder them. You can add hidden ones back.",
+  "Vše skryto – přidej sekce níže.": "Everything hidden – add sections below.",
+  "Skryté sekce": "Hidden sections",
+  Odebrat: "Remove",
+  Přidat: "Add",
+  Přetáhnout: "Drag",
+  Souhrn: "Summary",
+  "Co na sebe": "What to wear",
 
   // RadarMap
   "Nastavení radaru": "Radar settings",

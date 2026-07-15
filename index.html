@@ -79,28 +79,27 @@
         color-scheme: dark;
       }
       html {
-        background: #05080f;
+        background: linear-gradient(160deg, #05080f, #0a1120) fixed;
       }
       body {
         margin: 0;
         min-height: 100vh;
-        background: linear-gradient(160deg, #05080f, #0a1120);
-        background-attachment: fixed;
+        background: transparent;
       }
-      :root[data-sky="clear"] body {
-        background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66);
+      :root[data-sky="clear"] {
+        background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66) fixed;
       }
-      :root[data-sky="cloud"] body {
-        background: linear-gradient(160deg, #141b29, #1f2838);
+      :root[data-sky="cloud"] {
+        background: linear-gradient(160deg, #141b29, #1f2838) fixed;
       }
-      :root[data-sky="rain"] body {
-        background: linear-gradient(160deg, #0d141d, #18222e);
+      :root[data-sky="rain"] {
+        background: linear-gradient(160deg, #0d141d, #18222e) fixed;
       }
-      :root[data-sky="snow"] body {
-        background: linear-gradient(160deg, #182032, #28324d);
+      :root[data-sky="snow"] {
+        background: linear-gradient(160deg, #182032, #28324d) fixed;
       }
-      :root[data-sky="night"] body {
-        background: linear-gradient(160deg, #03060d, #080e1a);
+      :root[data-sky="night"] {
+        background: linear-gradient(160deg, #03060d, #080e1a) fixed;
       }
       /* Okamžitý skeleton ještě před spuštěním JS. Plně samostatné styly
          (v devu se index.css injektuje až přes JS), ať se skeleton zobrazí

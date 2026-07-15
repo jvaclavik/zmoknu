@@ -34,16 +34,32 @@ body {
   margin: 0;
   padding: 0;
   background-color: #05080f;
-  /* Vypnout „přetažení" (bounce/pull-to-refresh prohlížeče) – vodorovně kvůli
-     day-swipe, svisle kvůli vlastnímu pull-to-refresh a aby hlavička neposkakovala. */
-  overscroll-behavior: none;
+  /* Vodorovně „přetažení" vypnuté (kvůli day-swipe gestu). Svisle necháme
+     přirozený rubber-band bounce – na desktopu (Mac) potěší a nekoliduje s ničím.
+     Na dotykových zařízeních ho níže vypneme, aby se netloukl s vlastním
+     pull-to-refresh a neposkakovala hlavička na iOS. */
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+}
+@media (pointer: coarse) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Pozadí drží kořen (html) – propaguje se na plátno včetně oblasti „bounce"
+   (rubber-band). Body je průhledné, takže html i obsah sdílí jeden a týž
+   gradient a nemůže mezi nimi vzniknout barevný přechod. */
+html {
+  background: linear-gradient(160deg, var(--bg-1), var(--bg-2)) fixed;
+  transition: background 0.8s ease;
 }
 
 body {
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   color: var(--text);
-  background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
-  background-attachment: fixed;
+  background: transparent;
   min-height: 100vh;
   font-weight: 400;
   font-size: 16px;
@@ -52,25 +68,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  transition: background 0.8s ease;
 }
 
 /* Varianty oblohy podle počasí (ztmavené). Atribut je na <html> (:root), aby
    ho preload v index.html mohl nastavit z localStorage ještě před Reactem. */
-:root[data-sky="clear"] body {
-  background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66);
+:root[data-sky="clear"] {
+  background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66) fixed;
 }
-:root[data-sky="cloud"] body {
-  background: linear-gradient(160deg, #141b29, #1f2838);
+:root[data-sky="cloud"] {
+  background: linear-gradient(160deg, #141b29, #1f2838) fixed;
 }
-:root[data-sky="rain"] body {
-  background: linear-gradient(160deg, #0d141d, #18222e);
+:root[data-sky="rain"] {
+  background: linear-gradient(160deg, #0d141d, #18222e) fixed;
 }
-:root[data-sky="snow"] body {
-  background: linear-gradient(160deg, #182032, #28324d);
+:root[data-sky="snow"] {
+  background: linear-gradient(160deg, #182032, #28324d) fixed;
 }
-:root[data-sky="night"] body {
-  background: linear-gradient(160deg, #03060d, #080e1a);
+:root[data-sky="night"] {
+  background: linear-gradient(160deg, #03060d, #080e1a) fixed;
 }
 
 /* Krytí systémové lišty (čas/baterie) na iOS PWA – aby pod ni při scrollu
@@ -153,18 +168,41 @@ body::before {
     40px calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
-/* Topbar */
+/* Nenápadný čas poslední aktualizace schovaný pod fixním headerem – odkryje se
+   až když stránku povytáhneš nahoru (rubber-band bounce nad obsahem). */
+.last-refresh {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transform: translateY(-100%);
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Topbar – fixed, aby „nereagoval" na bounce scrollu (rubber-band). Vycentrovaný
+   a s max-width jako .app, ať brand zůstane zarovnaný s obsahem i na širokých
+   obrazovkách; frosted pozadí (::before) přeteče na plnou šířku okna. */
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1460px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: calc(12px + var(--sat, env(safe-area-inset-top, 0px))) var(--page-px)
-    12px;
-  margin: 0 calc(-1 * var(--page-px)) 12px;
+  padding: calc(12px + var(--sat, env(safe-area-inset-top, 0px)))
+    calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px))) 12px
+    calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
 /* Hlavička na dva řádky */
@@ -1263,6 +1301,28 @@ body::before {
 }
 
 /* yr.no hourly */
+/* Tlačítko „Načíst další dny" pod výhledem. */
+.yr-showmore {
+  display: block;
+  margin: 12px auto 4px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px dashed var(--card-border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+@media (hover: hover) {
+  .yr-showmore:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+}
+
 /* Segmentový přepínač kroku výhledu (1h / 6h / 24h). */
 .yr-seg {
   display: inline-flex;
@@ -2066,12 +2126,14 @@ body::before {
   font-weight: 700;
   font-size: 0.95rem;
   flex-shrink: 0;
+  /* Odsune vše za titulkem (peek/počet + chevron) doprava → chevron je vždy
+     úplně vpravo, ať je karta sbalená nebo rozbalená. */
+  margin-right: auto;
 }
 .details-peek {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
   font-size: 0.78rem;
   color: var(--muted);
   flex-wrap: wrap;
@@ -3230,12 +3292,77 @@ input[type="range"]::-moz-range-thumb {
 }
 .model-agree-tip.lvl-high {
   border-left-color: #4ccf8e;
+  --agree-c: #4ccf8e;
 }
 .model-agree-tip.lvl-medium {
   border-left-color: var(--accent-warm);
+  --agree-c: var(--accent-warm);
 }
 .model-agree-tip.lvl-low {
   border-left-color: #ff6b6b;
+  --agree-c: #ff6b6b;
+}
+/* Vizuální shrnutí shody v tooltipu */
+.agree-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.agree-level {
+  font-size: 0.82rem;
+}
+.agree-level strong {
+  color: var(--agree-c, var(--muted));
+}
+.agree-spread {
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: var(--agree-c, var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+.agree-viz {
+  margin: 2px 0 9px;
+}
+.agree-track {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.agree-mid {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: rgba(255, 255, 255, 0.18);
+}
+.agree-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--agree-c, var(--muted));
+  transform: translate(-50%, -50%);
+  /* prstenec v barvě pozadí oddělí i překrývající se tečky (velká shoda) */
+  box-shadow: 0 0 0 2px rgba(12, 18, 32, 0.98);
+}
+.agree-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.agree-explain {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 /* Mobil: jen mini ikonka (barva dle shody), text schovaný. */
 @media (max-width: 640px) {
@@ -3374,6 +3501,11 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 5px;
 }
+.mg-daysum-drops {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .mg-daysum-precip strong {
   font-size: 0.95rem;
   font-weight: 700;
@@ -3490,31 +3622,22 @@ input[type="range"]::-moz-range-thumb {
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.mg-drops {
-  display: inline-flex;
-  gap: 2px;
+/* Ikona srážek: 4 kapky v mřížce 2×2 (po dvou na řádku). */
+.mg-drops4 {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 1px 2px;
+  place-items: center;
   flex-shrink: 0;
 }
 .mg-ptrend {
   vertical-align: -2px;
 }
-.mg-ptrend.up {
-  color: #ff8a5b;
-}
-.mg-ptrend.down {
-  color: #7fb2ff;
-}
-.mg-ptrend.steady {
-  color: var(--muted);
-}
-/* Srážky: kapky nahoře, drobný text (mm + šance) pod nimi. */
+/* Srážky: hodnota (mm) a drobný text (šance). */
 .mg-precip-top {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-}
-.mg-precip-top .mg-drops.small {
-  gap: 1px;
 }
 
 /* Zvýraznění nestandardních hodnot – měníme jen obsah (text/ikonu),
@@ -3547,6 +3670,15 @@ input[type="range"]::-moz-range-thumb {
 .mg-stat.flag-humid .mg-stat-v strong,
 .mg-stat.flag-humid .mg-glyph {
   color: #4fd1b0;
+}
+.mg-stat.flag-fog .mg-stat-v strong,
+.mg-stat.flag-fog .mg-glyph {
+  color: #aebccf;
+}
+.mg-fog-mini {
+  margin-left: 4px;
+  vertical-align: -2px;
+  color: #aebccf;
 }
 
 /* Široký monitor: větší stats, ale pořád všech 8 vedle sebe. */
@@ -4858,6 +4990,141 @@ input[type="range"]::-moz-range-thumb {
   padding: 14px 16px;
   border-top: 1px solid var(--card-border);
 }
+
+/* Tlačítko „Přizpůsobit obsah" pod nastavením. */
+.customize-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px auto 0;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+@media (hover: hover) {
+  .customize-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--accent);
+  }
+}
+
+/* ---- Přizpůsobení obsahu (modal) ---------------------------------------- */
+.cz-sheet {
+  max-width: 460px;
+}
+.cz-body {
+  padding: 4px 4px 8px;
+}
+.cz-note {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.cz-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cz-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  transition: box-shadow 0.15s, transform 0.06s, border-color 0.15s;
+}
+.cz-row.dragging {
+  border-color: var(--accent);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+  transform: scale(1.02);
+}
+.cz-handle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.cz-handle:active {
+  cursor: grabbing;
+}
+.cz-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.cz-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.9;
+}
+.cz-remove:hover {
+  opacity: 1;
+}
+.cz-empty {
+  margin: 0;
+  padding: 14px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.cz-add {
+  margin-top: 20px;
+}
+.cz-add-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.cz-row-hidden {
+  opacity: 0.75;
+}
+.cz-add-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .cz-add-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
 .settings-model {
   display: inline-flex;
   align-items: center;
@@ -5130,6 +5397,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .notif-add .notif-select {
   flex: 1;
+  min-width: 0;
 }
 .notif-add-btn {
   padding: 8px 14px;
@@ -5141,6 +5409,16 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+}
+/* Na úzkých displejích select a tlačítko pod sebe, ať se „Přidat pravidlo"
+   vždy vejde a nepřetéká z řádku. */
+@media (max-width: 480px) {
+  .notif-add {
+    flex-direction: column;
+  }
+  .notif-add-btn {
+    width: 100%;
+  }
 }
 .notif-test-row {
   display: flex;

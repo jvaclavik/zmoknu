@@ -1,12 +1,18 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
+  Fragment,
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import CustomizeContent, {
+  type WidgetDef,
+} from "./components/CustomizeContent";
 import DayDetails from "./components/DayDetails";
 import DaySelector from "./components/DaySelector";
 import Donate from "./components/Donate";
@@ -116,6 +122,17 @@ function loadFavorites(): GeoLocation[] {
   return [];
 }
 
+// Přizpůsobitelné sekce hlavního obsahu (pořadí = výchozí rozvržení).
+const WIDGET_DEFS: WidgetDef[] = [
+  { id: "summary", label: "Souhrn" },
+  { id: "meteogram", label: "Meteogram" },
+  { id: "wear", label: "Co na sebe" },
+  { id: "outlook", label: "Výhled" },
+  { id: "webcams", label: "Webkamery" },
+  { id: "details", label: "Další detaily" },
+];
+const DEFAULT_WIDGETS = WIDGET_DEFS.map((w) => w.id);
+
 export default function App() {
   const { lang, setLang } = useLang();
   const [location, setLocation] = useState<GeoLocation>(loadSavedLocation);
@@ -153,6 +170,26 @@ export default function App() {
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  // Rozvržení hlavního obsahu (pořadí zapnutých sekcí + skryté sekce).
+  const [widgetEnabled, setWidgetEnabled] = useStoredState<string[]>(
+    "zmoknu.widgetsEnabled",
+    DEFAULT_WIDGETS,
+  );
+  const [widgetHidden, setWidgetHidden] = useStoredState<string[]>(
+    "zmoknu.widgetsHidden",
+    [],
+  );
+  // Normalizace: jen známé sekce, chybějící (nově přidané) doplníme na konec.
+  const { enabledOrder, hiddenOrder } = useMemo(() => {
+    const known = DEFAULT_WIDGETS;
+    const en = widgetEnabled.filter((id) => known.includes(id));
+    const hi = widgetHidden.filter(
+      (id) => known.includes(id) && !en.includes(id),
+    );
+    const missing = known.filter((id) => !en.includes(id) && !hi.includes(id));
+    return { enabledOrder: [...en, ...missing], hiddenOrder: hi };
+  }, [widgetEnabled, widgetHidden]);
   // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
   const [offline, setOffline] = useState(false);
   const lastReloadTick = useRef(0);
@@ -163,6 +200,10 @@ export default function App() {
   // funkční data ani nezablokuje přepínání dní.
   const forecastRef = useRef<Forecast | null>(null);
   forecastRef.current = forecast;
+  // Header je fixed (aby nereagoval na bounce scrollu) → obsahu doplníme horní
+  // odsazení podle jeho skutečné výšky (mění se s bezpečnou zónou, orientací…).
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerH, setHeaderH] = useState(0);
   // Neblokující hláška (např. „starší historii se teď nepodařilo načíst").
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -243,6 +284,28 @@ export default function App() {
     const id = window.setTimeout(() => setNotice(null), 6000);
     return () => window.clearTimeout(id);
   }, [notice]);
+
+  // Měření výšky fixed headeru → padding-top obsahu (aby nepodjížděl pod něj).
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderH(el.offsetHeight);
+    measure();
+    // Border-box: aby se měření spustilo i při změně paddingu (safe-area inset
+    // se na iOS občas dorovná až po prvním renderu → jinak obsah podjede header).
+    const ro = new ResizeObserver(measure);
+    ro.observe(el, { box: "border-box" });
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    // Pojistka na opožděné dotažení fontů / safe-area insetů.
+    const t = window.setTimeout(measure, 400);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      window.clearTimeout(t);
+    };
+  }, []);
 
   // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
   // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
@@ -910,7 +973,12 @@ export default function App() {
     : selectedDay?.precipitationProbabilityMax ?? 0;
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={
+        headerH ? ({ paddingTop: `${headerH + 16}px` } as CSSProperties) : undefined
+      }
+    >
       <div
         className={`ptr ${refreshing ? "refreshing" : ""}`}
         style={
@@ -948,7 +1016,16 @@ export default function App() {
           </span>
         </div>
       )}
-      <header className="topbar">
+      {fetchedAt != null && (
+        <div
+          className="last-refresh"
+          style={{ top: `${headerH}px` } as CSSProperties}
+          aria-hidden="true"
+        >
+          {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
+        </div>
+      )}
+      <header className="topbar" ref={headerRef}>
         <div className="hb-row1">
           <span className="hb-brand" aria-hidden="true">
             <img src="/logo.svg" alt="" className="hb-logo-img" />
@@ -1035,6 +1112,19 @@ export default function App() {
 
       {notifyOpen && <NotifySettings onClose={() => setNotifyOpen(false)} />}
 
+      {customizeOpen && (
+        <CustomizeContent
+          defs={WIDGET_DEFS}
+          enabled={enabledOrder}
+          hidden={hiddenOrder}
+          onChange={(en, hi) => {
+            setWidgetEnabled(en);
+            setWidgetHidden(hi);
+          }}
+          onClose={() => setCustomizeOpen(false)}
+        />
+      )}
+
       <SearchBar
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -1087,52 +1177,68 @@ export default function App() {
         <main className="content">
           <div className="col-main">
             <WeatherAlerts lat={location.latitude} lon={location.longitude} />
-            {selectedDay && (
-              <SmartSummary
-                day={selectedDay}
-                hourly={forecast.hourly}
-                date={selectedDate}
-                isToday={selectedDate === today}
-                minutely={forecast.minutely15}
-                lat={location.latitude}
-                lon={location.longitude}
-                feelsMax={feelsMax}
-                feelsMin={feelsMin}
-              />
-            )}
-            <Meteogram
-              hourly={forecast.hourly}
-              activeDate={selectedDate}
-              lat={location.latitude}
-              lon={location.longitude}
-              model={model}
-            />
-            {selectedDay && (
-              <WhatToWear
-                day={selectedDay}
-                feelsMax={feelsMax}
-                feelsMin={feelsMin}
-                wakeRainSum={wakeRainSum}
-                wakeRainProb={wakeRainProb}
-                hourly={forecast.hourly}
-                date={selectedDate}
-              />
-            )}
-            <HourlyForecast
-              hourly={forecast.hourly}
-              activeDate={selectedDate}
-              onSelectDay={setSelectedDate}
-            />
-            <Webcams lat={location.latitude} lon={location.longitude} />
-            {selectedDay && (
-              <DayDetails
-                day={selectedDay}
-                air={air[selectedDate] ?? null}
-                date={selectedDate}
-                lat={location.latitude}
-                hourly={forecast.hourly}
-              />
-            )}
+            {(() => {
+              const els: Record<string, ReactNode> = {
+                summary: selectedDay ? (
+                  <SmartSummary
+                    day={selectedDay}
+                    hourly={forecast.hourly}
+                    date={selectedDate}
+                    isToday={selectedDate === today}
+                    minutely={forecast.minutely15}
+                    lat={location.latitude}
+                    lon={location.longitude}
+                    feelsMax={feelsMax}
+                    feelsMin={feelsMin}
+                  />
+                ) : null,
+                meteogram: (
+                  <Meteogram
+                    hourly={forecast.hourly}
+                    activeDate={selectedDate}
+                    lat={location.latitude}
+                    lon={location.longitude}
+                    model={model}
+                  />
+                ),
+                wear: selectedDay ? (
+                  <WhatToWear
+                    day={selectedDay}
+                    feelsMax={feelsMax}
+                    feelsMin={feelsMin}
+                    wakeRainSum={wakeRainSum}
+                    wakeRainProb={wakeRainProb}
+                    hourly={forecast.hourly}
+                    date={selectedDate}
+                  />
+                ) : null,
+                outlook: (
+                  <HourlyForecast
+                    hourly={forecast.hourly}
+                    activeDate={selectedDate}
+                    onSelectDay={setSelectedDate}
+                  />
+                ),
+                webcams: (
+                  <Webcams
+                    lat={location.latitude}
+                    lon={location.longitude}
+                  />
+                ),
+                details: selectedDay ? (
+                  <DayDetails
+                    day={selectedDay}
+                    air={air[selectedDate] ?? null}
+                    date={selectedDate}
+                    lat={location.latitude}
+                    hourly={forecast.hourly}
+                  />
+                ) : null,
+              };
+              return enabledOrder.map((id) => (
+                <Fragment key={id}>{els[id]}</Fragment>
+              ));
+            })()}
           </div>
         </main>
       ) : null}
@@ -1189,6 +1295,18 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="customize-btn"
+        onClick={() => {
+          posthog.capture("customize_opened");
+          setCustomizeOpen(true);
+        }}
+      >
+        <GearGlyph />
+        {tr("Přizpůsobit obsah")}
+      </button>
 
       <footer className="footer">
         <p className="footer-note">
@@ -1277,6 +1395,25 @@ function BellGlyph() {
     >
       <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
       <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+function GearGlyph() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 13a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.5 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.5a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" />
     </svg>
   );
 }

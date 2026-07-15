@@ -27,6 +27,7 @@ interface Agreement {
   spread: number; // rozptyl denního maxima mezi modely (°C)
   count: number; // kolik modelů mělo pro den data
   level: "high" | "medium" | "low";
+  maxes: number[]; // denní maxima jednotlivých modelů (pro vizualizaci)
 }
 
 function agreementFor(series: ModelSeries[], date: string): Agreement | null {
@@ -41,7 +42,7 @@ function agreementFor(series: ModelSeries[], date: string): Agreement | null {
   if (maxes.length < 2) return null;
   const spread = Math.max(...maxes) - Math.min(...maxes);
   const level = spread < 2 ? "high" : spread < 4 ? "medium" : "low";
-  return { spread, count: maxes.length, level };
+  return { spread, count: maxes.length, level, maxes };
 }
 
 export default function SmartSummary({
@@ -199,11 +200,48 @@ function AgreementChip({ a }: { a: Agreement }) {
               ...(pos.top != null ? { top: pos.top } : { bottom: pos.bottom }),
             }}
           >
-            {explain}
+            <div className="agree-head">
+              <span className="agree-level">
+                {tr("Shoda modelů")}: <strong>{label}</strong>
+              </span>
+              <span className="agree-spread">±{spread}°</span>
+            </div>
+            <AgreementViz a={a} />
+            <p className="agree-explain">{explain}</p>
           </div>,
           document.body,
         )}
     </>
+  );
+}
+
+// Vizualizace shody: každá tečka = denní maximum jednoho modelu na pevné škále
+// (±6 °C kolem průměru). Těsně u sebe = velká shoda, rozházené = malá.
+function AgreementViz({ a }: { a: Agreement }) {
+  const mean = a.maxes.reduce((s, v) => s + v, 0) / a.maxes.length;
+  const HALF = 6; // půlka okna škály (°C)
+  const pct = (v: number) =>
+    Math.max(2, Math.min(98, 50 + ((v - mean) / (HALF * 2)) * 100));
+  return (
+    <div className="agree-viz" aria-hidden="true">
+      <div className="agree-track">
+        <span className="agree-mid" />
+        {a.maxes.map((v, i) => (
+          <span
+            key={i}
+            className="agree-dot"
+            style={{ left: `${pct(v)}%` }}
+          />
+        ))}
+      </div>
+      {/* Konce jsou pevné (průměr ±6 °C) → měřítko je stejné každý den,
+          takže rozptyl teček jde porovnávat mezi dny. Uprostřed je průměr. */}
+      <div className="agree-ends">
+        <span>−{HALF}°</span>
+        <span>{Math.round(mean)}°</span>
+        <span>+{HALF}°</span>
+      </div>
+    </div>
   );
 }
 

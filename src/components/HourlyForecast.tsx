@@ -57,8 +57,12 @@ function pickRep(pts: HourlyPoint[]): HourlyPoint {
   return rep;
 }
 
+// Kolik dní výhledu ukázat, než uživatel klikne na „Načíst další dny".
+const DAY_LIMIT = 7;
+
 export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Props) {
   const [step, setStep] = useStoredState<1 | 6 | 24>("zmoknu.outlookStep", 6);
+  const [expanded, setExpanded] = useState(false);
 
   const rows = useMemo<Row[]>(() => {
     // Výchozí start = dnešek. Včerejšek (a starší) ukážeme jen tehdy, když je
@@ -159,6 +163,33 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
     });
   }, [hourly, step, activeDate]);
 
+  // Výhled omezíme na prvních DAY_LIMIT kalendářních dní; zbytek se dozobrazí
+  // až po kliknutí na „Načíst další dny".
+  const { limitedRows, hasMore } = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Row[] = [];
+    let more = false;
+    for (const r of rows) {
+      const day = r.iso.slice(0, 10);
+      if (!seen.has(day)) {
+        if (seen.size >= DAY_LIMIT) {
+          more = true;
+          break;
+        }
+        seen.add(day);
+      }
+      out.push(r);
+    }
+    return { limitedRows: out, hasMore: more };
+  }, [rows]);
+
+  // Při změně kroku nebo vybraného dne začneme zase sbaleně.
+  useEffect(() => {
+    setExpanded(false);
+  }, [step, activeDate]);
+
+  const shownRows = expanded ? rows : limitedRows;
+
   // Aktuální čas – přepočítá se jednou za minutu, aby se „teď" posunulo
   // i při dlouho otevřené aplikaci.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -204,7 +235,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
             aria-selected={step === 24}
             onClick={() => setStep(24)}
           >
-            24h
+            1d
           </button>
         </div>
       </div>
@@ -218,7 +249,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
       </div>
 
       <div className="yr-list">
-        {rows.map((p) => {
+        {shownRows.map((p) => {
           const info = describeWeather(p.weatherCode);
           const key = dateKey(p.iso);
           const newDay = key !== lastDay;
@@ -310,6 +341,15 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
           );
         })}
       </div>
+      {hasMore && !expanded && (
+        <button
+          type="button"
+          className="yr-showmore"
+          onClick={() => setExpanded(true)}
+        >
+          {tr("Načíst další dny")}
+        </button>
+      )}
     </section>
   );
 }
