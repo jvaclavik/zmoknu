@@ -25,8 +25,9 @@
     <link rel="apple-touch-startup-image" href="/splash/apple-splash-1668x2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/splash/apple-splash-2048x2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#05080f" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#05080f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eaf1fb" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="Zmoknu? – přehledná předpověď počasí a radar srážek s posuvníkem času. Inspirováno Aladinem." />
     <link rel="canonical" href="https://zmoknu.vercel.app/" />
     <title>Zmoknu? – počasí a radar</title>
@@ -76,7 +77,9 @@
          appky – žádná změna barvy před skeletonem. Motiv (data-sky) na <html>
          se aplikuje přes :root[data-sky] body, shodně s index.css. */
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
+        --o: 255, 255, 255;
+        --boot-brand: #eef2fb;
       }
       html {
         background: linear-gradient(160deg, #05080f, #0a1120) fixed;
@@ -100,6 +103,31 @@
       }
       :root[data-sky="night"] {
         background: linear-gradient(160deg, #03060d, #080e1a) fixed;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --o: 15, 23, 42;
+          --boot-brand: #10203a;
+          --boot-topbar: rgba(255, 255, 255, 0.72);
+        }
+        html {
+          background: linear-gradient(160deg, #eaf1fb, #d5e3f4) fixed;
+        }
+        :root[data-sky="clear"] {
+          background: linear-gradient(160deg, #cfe6ff, #dff0ff 60%, #eef7ff) fixed;
+        }
+        :root[data-sky="cloud"] {
+          background: linear-gradient(160deg, #d6dce5, #e6ebf2) fixed;
+        }
+        :root[data-sky="rain"] {
+          background: linear-gradient(160deg, #c3ccd7, #d5dde6) fixed;
+        }
+        :root[data-sky="snow"] {
+          background: linear-gradient(160deg, #e7edf6, #f4f8fc) fixed;
+        }
+        :root[data-sky="night"] {
+          background: linear-gradient(160deg, #c7d0de, #dae1ed) fixed;
+        }
       }
       /* Okamžitý skeleton ještě před spuštěním JS. Plně samostatné styly
          (v devu se index.css injektuje až přes JS), ať se skeleton zobrazí
@@ -186,10 +214,10 @@
         left: calc(50% - 50vw);
         right: calc(50% - 50vw);
         z-index: -1;
-        background: rgba(6, 10, 18, 0.68);
+        background: var(--boot-topbar, rgba(6, 10, 18, 0.68));
         -webkit-backdrop-filter: blur(18px) saturate(140%);
         backdrop-filter: blur(18px) saturate(140%);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(var(--o), 0.1);
       }
       #boot .b-row1 {
         display: flex;
@@ -215,15 +243,15 @@
         font-weight: 800;
         font-size: 1.12rem;
         letter-spacing: -0.02em;
-        color: #eef2fb;
+        color: var(--boot-brand);
       }
       #boot .b-brand i {
-        color: #5bb6ff;
+        color: #4a97e6;
         font-style: normal;
       }
       #boot .b-card {
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(var(--o), 0.06);
+        border: 1px solid rgba(var(--o), 0.1);
         border-radius: 18px;
         padding: 18px;
         margin-bottom: 16px;
@@ -234,7 +262,7 @@
         backdrop-filter: blur(10px);
       }
       #boot .s {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--o), 0.06);
         border-radius: 8px;
       }
       #boot .line {
@@ -308,7 +336,7 @@
         align-items: center;
         gap: 12px;
         padding-top: 11px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(var(--o), 0.1);
       }
       #boot .stats {
         display: grid;
@@ -356,7 +384,7 @@
       }
       #boot .yrhead {
         padding-bottom: 6px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid rgba(var(--o), 0.08);
       }
       #boot .dayhead {
         height: 43px;
@@ -366,7 +394,7 @@
       }
       #boot .yrrow {
         height: 43px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        border-bottom: 1px solid rgba(var(--o), 0.03);
       }
       #boot .r {
         margin-left: auto;
@@ -407,7 +435,10 @@
         <div class="b-rain" id="b-rain"></div>
         <div class="b-top">
           <div class="b-row1">
-            <img src="/logo.svg" alt="" class="b-logo" />
+            <picture>
+              <source srcset="/logo-light.svg" media="(prefers-color-scheme: light)" />
+              <img src="/logo.svg" alt="" class="b-logo" />
+            </picture>
             <span class="b-brand">zmoknu<i>?</i></span>
           </div>
           <div class="b-row2">

@@ -1,15 +1,44 @@
 :root {
   color-scheme: dark;
+  /* Základ pro poloprůhledné vrstvy (karty, hovery, linky). V dark módu bílá,
+     v light módu (níže) černá – tím se stovky rgba(var(--o), …) samy převrátí. */
+  --o: 255, 255, 255;
   --bg-1: #05080f;
   --bg-2: #0a1120;
-  --card: rgba(255, 255, 255, 0.06);
-  --card-border: rgba(255, 255, 255, 0.1);
+  --card: rgba(var(--o), 0.06);
+  --card-solid: #11161f;
+  --card-border: rgba(var(--o), 0.1);
+  --panel: rgba(16, 22, 36, 0.98);
+  --topbar-bg: rgba(6, 10, 18, 0.68);
+  /* Lem (halo) textových popisků v grafu – opačný než barva písma, ať jsou
+     čitelné nad křivkou. Tmavý v dark, světlý v light. */
+  --mg-halo: rgba(11, 18, 32, 0.85);
   --text: #eef2fb;
   --muted: #9aa7c4;
   --accent: #5bb6ff;
   --accent-warm: #ffd166;
   --radius: 18px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --o: 15, 23, 42;
+    --bg-1: #eaf1fb;
+    --bg-2: #d5e3f4;
+    --card: rgba(255, 255, 255, 0.72);
+    --card-solid: #ffffff;
+    --card-border: rgba(15, 23, 42, 0.12);
+    --panel: rgba(255, 255, 255, 0.98);
+    --topbar-bg: rgba(244, 248, 253, 0.72);
+    --mg-halo: rgba(255, 255, 255, 0.9);
+    --text: #10203a;
+    --muted: #5a6b86;
+    --accent: #1f74d6;
+    --accent-warm: #b8860b;
+    --shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  }
 }
 
 * {
@@ -33,7 +62,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: #05080f;
+  background-color: var(--bg-1);
   /* Vodorovně „přetažení" vypnuté (kvůli day-swipe gestu). Svisle necháme
      přirozený rubber-band bounce – na desktopu (Mac) potěší a nekoliduje s ničím.
      Na dotykových zařízeních ho níže vypneme, aby se netloukl s vlastním
@@ -88,6 +117,25 @@ body {
   background: linear-gradient(160deg, #03060d, #080e1a) fixed;
 }
 
+/* Světlé varianty oblohy pro light mode. */
+@media (prefers-color-scheme: light) {
+  :root[data-sky="clear"] {
+    background: linear-gradient(160deg, #cfe6ff, #dff0ff 60%, #eef7ff) fixed;
+  }
+  :root[data-sky="cloud"] {
+    background: linear-gradient(160deg, #d6dce5, #e6ebf2) fixed;
+  }
+  :root[data-sky="rain"] {
+    background: linear-gradient(160deg, #c3ccd7, #d5dde6) fixed;
+  }
+  :root[data-sky="snow"] {
+    background: linear-gradient(160deg, #e7edf6, #f4f8fc) fixed;
+  }
+  :root[data-sky="night"] {
+    background: linear-gradient(160deg, #c7d0de, #dae1ed) fixed;
+  }
+}
+
 /* Krytí systémové lišty (čas/baterie) na iOS PWA – aby pod ni při scrollu
    nepodjížděl obsah. Na zařízeních bez insetu (desktop) má nulovou výšku. */
 body::before {
@@ -99,7 +147,7 @@ body::before {
   /* Vezmeme větší z nacachované hodnoty a živého env() – ať status bar zůstane
      zamaskovaný i když jedna z hodnot zrovna spadne na 0. */
   height: max(var(--sat, 0px), env(safe-area-inset-top, 0px));
-  background: #05080f;
+  background: var(--bg-1);
   z-index: 2000;
   pointer-events: none;
 }
@@ -116,7 +164,7 @@ body::before {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgba(16, 22, 36, 0.96);
+  background: var(--panel);
   border: 1px solid var(--card-border);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   opacity: var(--p, 0);
@@ -132,7 +180,7 @@ body::before {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
-  background: rgba(16, 22, 36, 0.96);
+  background: var(--panel);
   border: 1px solid var(--card-border);
   border-radius: 999px;
   padding: 2px 10px;
@@ -295,7 +343,7 @@ body::before {
      (padding, zaoblení, posun), ale je tlumený a neaktivní – naznačuje button,
      ale ještě nejde kliknout a hlavně po dotažení dat nic neposkočí. */
   color: var(--muted, rgba(226, 232, 240, 0.6));
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--o), 0.06);
   cursor: default;
 }
 .hb-today {
@@ -341,7 +389,7 @@ body::before {
     background: color-mix(in srgb, var(--tier, var(--accent-warm)) 30%, transparent);
   }
   .hb-today:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 
@@ -409,7 +457,7 @@ body::before {
   height: 42px;
   border-radius: 999px;
   background: rgba(10, 16, 26, 0.72);
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--o), 0.14);
   color: #fff;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -433,7 +481,7 @@ body::before {
   left: calc(50% - 50vw);
   right: calc(50% - 50vw);
   z-index: -1;
-  background: rgba(6, 10, 18, 0.68);
+  background: var(--topbar-bg);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   border-bottom: 1px solid var(--card-border);
@@ -476,11 +524,11 @@ body::before {
   cursor: pointer;
 }
 .favmenu-btn.open {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.08);
 }
 @media (hover: hover) {
   .favmenu-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 .favmenu-list {
@@ -515,7 +563,7 @@ body::before {
 }
 @media (hover: hover) {
   .favmenu-list button:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--o), 0.07);
   }
 }
 .favmenu-list button.active {
@@ -558,7 +606,7 @@ body::before {
 }
 @media (hover: hover) {
   .tb-dayarrow:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 .tb-dayarrow:disabled {
@@ -595,7 +643,7 @@ body::before {
 }
 @media (hover: hover) {
   .tb-today:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 .tb-day {
@@ -625,7 +673,7 @@ body::before {
 }
 @media (hover: hover) {
   .tb-day:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--o), 0.06);
   }
 }
 .tb-day.open {
@@ -647,7 +695,7 @@ body::before {
 }
 @media (hover: hover) {
   .tb-radar:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 .tb-daypanel {
@@ -748,7 +796,7 @@ body::before {
 }
 @media (hover: hover) {
   .search-trigger:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
 }
 .search-trigger > svg:first-child {
@@ -1025,7 +1073,7 @@ body::before {
   font: inherit;
   font-weight: 600;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--o), 0.06);
   border: 1px solid var(--card-border);
   border-radius: 8px;
   padding: 8px 10px;
@@ -1131,10 +1179,10 @@ body::before {
 }
 @media (hover: hover) {
   .locpick-pick:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--o), 0.06);
   }
   .locpick-star:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
     color: var(--text);
   }
   .locpick-star.on:hover {
@@ -1145,7 +1193,7 @@ body::before {
     color: #ff6b6b;
   }
   .locpick-edit:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
     color: var(--text);
   }
   .locpick-rename-ok:hover {
@@ -1154,7 +1202,7 @@ body::before {
   }
   .locpick-close:hover,
   .locpick-clear:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
   }
   .locpick-locate:hover {
     background: rgba(91, 182, 255, 0.18);
@@ -1188,7 +1236,7 @@ body::before {
 }
 @media (hover: hover) {
   .fav-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--o), 0.1);
   }
 }
 .fav-toggle.on {
@@ -1213,7 +1261,7 @@ body::before {
 }
 @media (hover: hover) {
   .fav-share:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--o), 0.1);
   }
 }
 .fav-share.ok {
@@ -1317,7 +1365,7 @@ body::before {
 }
 @media (hover: hover) {
   .yr-showmore:hover {
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(var(--o), 0.09);
     color: var(--text);
     border-color: var(--accent);
   }
@@ -1328,7 +1376,7 @@ body::before {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   border: 1px solid var(--card-border);
   border-radius: 999px;
   flex-shrink: 0;
@@ -1388,7 +1436,7 @@ body::before {
 }
 @media (hover: hover) {
   .yr-row.clickable:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--o), 0.05);
   }
 }
 .yr-head {
@@ -1398,7 +1446,7 @@ body::before {
   color: var(--muted);
   padding-top: 0;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--o), 0.08);
 }
 .yr-24 .yr-time {
   font-weight: 700;
@@ -1413,11 +1461,11 @@ body::before {
 .yr-row {
   padding-top: 6px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(var(--o), 0.03);
 }
 @media (hover: hover) {
   .yr-row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--o), 0.03);
   }
 }
 .yr-row.selected {
@@ -1494,7 +1542,7 @@ body::before {
   color: var(--accent);
 }
 .yr-dry {
-  color: rgba(255, 255, 255, 0.22);
+  color: rgba(var(--o), 0.22);
   width: 100%;
   text-align: right;
 }
@@ -1637,7 +1685,7 @@ body::before {
   }
 }
 .stat {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border-radius: 12px;
   padding: 10px 12px;
   display: flex;
@@ -1673,7 +1721,7 @@ body::before {
   height: 6px;
 }
 .hourly-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--o), 0.15);
   border-radius: 999px;
 }
 .hour {
@@ -1690,7 +1738,7 @@ body::before {
 }
 @media (hover: hover) {
   .hour:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--o), 0.05);
   }
 }
 .hour-time {
@@ -1736,7 +1784,7 @@ body::before {
   padding: 7px 8px;
   border-radius: 8px;
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--o), 0.05);
   width: 100%;
   background: transparent;
   color: var(--text);
@@ -1746,7 +1794,7 @@ body::before {
 }
 @media (hover: hover) {
   .day-row:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--o), 0.04);
   }
 }
 .day-row.active {
@@ -1778,7 +1826,7 @@ body::before {
   color: var(--muted);
 }
 .day-dry {
-  color: rgba(255, 255, 255, 0.25);
+  color: rgba(var(--o), 0.25);
 }
 .day-min {
   text-align: right;
@@ -1792,7 +1840,7 @@ body::before {
 .day-bar {
   position: relative;
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.08);
   border-radius: 999px;
 }
 .day-bar-fill {
@@ -1832,7 +1880,7 @@ body::before {
 }
 @media (hover: hover) {
   .dayselect-loadmore:hover {
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(var(--o), 0.09);
     color: var(--text);
     border-color: var(--accent);
   }
@@ -1878,7 +1926,7 @@ body::before {
 }
 @media (hover: hover) {
   .dayselect-chip:hover {
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(var(--o), 0.09);
   }
 }
 .dayselect-chip.active {
@@ -1993,7 +2041,7 @@ body::before {
   overflow: hidden;
   padding: 10px 6px 8px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border: 1px solid var(--card-border);
   text-align: center;
 }
@@ -2007,7 +2055,7 @@ body::before {
   gap: 3px;
   margin: -4px 0 14px;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   border-radius: 999px;
 }
 .wear-act {
@@ -2067,7 +2115,7 @@ body::before {
   margin: 0;
 }
 .bestwin-bad {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border-color: var(--card-border);
   color: var(--muted);
   font-size: 0.9rem;
@@ -2157,7 +2205,7 @@ body::before {
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.08);
   border-radius: 999px;
   padding: 1px 9px;
 }
@@ -2184,7 +2232,7 @@ body::before {
   gap: 10px;
   padding: 8px 10px;
   font-size: 0.82rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
 }
 .webcam-player-title {
   flex: 1;
@@ -2221,7 +2269,7 @@ body::before {
   width: 148px;
   padding: 0;
   border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -2230,7 +2278,7 @@ body::before {
   transition: border-color 0.15s, background 0.15s;
 }
 .webcam-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.08);
 }
 .webcam-item.active {
   border-color: var(--accent, #4ea3ff);
@@ -2240,7 +2288,7 @@ body::before {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--o), 0.06);
 }
 .webcam-thumb img {
   width: 100%;
@@ -2331,7 +2379,7 @@ body::before {
   gap: 10px;
   padding: 11px 12px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border: 1px solid var(--card-border);
   min-width: 0;
 }
@@ -2343,7 +2391,7 @@ body::before {
   height: 30px;
   flex: 0 0 auto;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   color: var(--accent);
   font-size: 1.05rem;
   line-height: 1;
@@ -2448,7 +2496,7 @@ body::before {
   padding: 3px 7px;
   border-radius: 8px;
   background: rgba(11, 31, 51, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--o), 0.14);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   font-size: 0.72rem;
   white-space: nowrap;
@@ -2555,15 +2603,15 @@ body::before {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.12);
+  background: rgba(var(--o), 0.05);
   color: var(--muted);
   cursor: pointer;
 }
 @media (hover: hover) {
   .mg-view-btn:hover {
     color: var(--text);
-    border-color: rgba(255, 255, 255, 0.22);
+    border-color: rgba(var(--o), 0.22);
   }
 }
 .mg-view-btn.active {
@@ -2582,13 +2630,13 @@ body::before {
   overscroll-behavior: contain;
   padding: 6px;
   border-radius: 14px;
-  background: rgba(16, 22, 36, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--panel);
+  border: 1px solid rgba(var(--o), 0.12);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
 }
 .mg-view-days {
   padding: 8px 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--o), 0.08);
   margin-bottom: 4px;
 }
 .mg-view-days-head {
@@ -2625,13 +2673,13 @@ input[type="range"]::-webkit-slider-runnable-track {
   background: linear-gradient(
     to right,
     var(--accent) var(--fill, 0%),
-    rgba(255, 255, 255, 0.18) var(--fill, 0%)
+    rgba(var(--o), 0.18) var(--fill, 0%)
   );
 }
 input[type="range"]::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--o), 0.18);
 }
 input[type="range"]::-moz-range-progress {
   height: 6px;
@@ -2668,7 +2716,7 @@ input[type="range"]::-webkit-slider-thumb {
      bez „ostrého" bílého lemu, který vypadal cize. */
   border: 3px solid rgba(9, 14, 26, 0.9);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    0 0 0 1px rgba(var(--o), 0.12) inset;
 }
 input[type="range"]::-moz-range-thumb {
   width: 22px;
@@ -2677,7 +2725,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    0 0 0 1px rgba(var(--o), 0.12) inset;
 }
 .mg-view-toggle {
   display: flex;
@@ -2687,7 +2735,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.82rem;
   color: var(--text);
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--o), 0.08);
   margin-bottom: 4px;
 }
 .mg-view-toggle input {
@@ -2713,14 +2761,14 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.76rem;
   line-height: 1.4;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(var(--o), 0.03);
+  border: 1px solid rgba(var(--o), 0.07);
   border-radius: 10px;
 }
 .mg-view-compare {
   margin-top: 4px;
   padding: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(var(--o), 0.08);
 }
 .mg-view-compare-head {
   display: flex;
@@ -2839,7 +2887,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--o), 0.14);
   color: var(--text);
   font-size: 0.68rem;
   font-weight: 700;
@@ -2854,7 +2902,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 8px 10px;
   border-radius: 8px;
   background: rgba(12, 18, 32, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(var(--o), 0.18);
   color: var(--text);
   font-size: 0.74rem;
   line-height: 1.4;
@@ -2912,7 +2960,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (hover: hover) {
   .mg-view-pick:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--o), 0.06);
   }
 }
 .mg-view-pin {
@@ -2923,7 +2971,7 @@ input[type="range"]::-moz-range-thumb {
   flex: none;
   border: none;
   background: none;
-  color: rgba(255, 255, 255, 0.28);
+  color: rgba(var(--o), 0.28);
   cursor: pointer;
   border-radius: 8px;
 }
@@ -2932,7 +2980,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (hover: hover) {
   .mg-view-pin:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--o), 0.08);
     color: var(--text);
   }
 }
@@ -2956,7 +3004,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--o), 0.1);
   color: var(--muted);
   padding: 1px 6px;
   border-radius: 999px;
@@ -3011,14 +3059,14 @@ input[type="range"]::-moz-range-thumb {
   font-size: 10px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(11, 18, 32, 0.92);
+  stroke: var(--mg-halo);
   stroke-width: 3px;
 }
 .mg-uv-thlabel {
   font-size: 9.5px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(11, 18, 32, 0.92);
+  stroke: var(--mg-halo);
   stroke-width: 3px;
 }
 .mg-nowlabel {
@@ -3074,7 +3122,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 6px 14px;
   border-radius: 999px;
   background: rgba(10, 16, 28, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--o), 0.14);
   color: var(--text);
   font-size: 0.95rem;
   font-weight: 700;
@@ -3086,7 +3134,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 11px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(11, 18, 32, 0.85);
+  stroke: var(--mg-halo);
   stroke-width: 3px;
 }
 .mg-daylabel.today {
@@ -3107,7 +3155,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 10px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(11, 18, 32, 0.9);
+  stroke: var(--mg-halo);
   stroke-width: 3px;
 }
 .mg-extrema.feels {
@@ -3123,7 +3171,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 11px;
   font-weight: 700;
   paint-order: stroke;
-  stroke: rgba(11, 18, 32, 0.85);
+  stroke: var(--mg-halo);
   stroke-width: 3px;
 }
 .mg-tip {
@@ -3144,7 +3192,7 @@ input[type="range"]::-moz-range-thumb {
 .wx-alert {
   border-radius: 14px;
   border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   overflow: hidden;
 }
 .wx-alert > summary {
@@ -3281,7 +3329,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(12, 18, 32, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(var(--o), 0.18);
   border-left: 3px solid var(--muted);
   color: var(--text);
   font-size: 0.78rem;
@@ -3329,7 +3377,7 @@ input[type="range"]::-moz-range-thumb {
   position: relative;
   height: 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--o), 0.07);
 }
 .agree-mid {
   position: absolute;
@@ -3338,7 +3386,7 @@ input[type="range"]::-moz-range-thumb {
   bottom: 2px;
   width: 1px;
   transform: translateX(-0.5px);
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--o), 0.18);
 }
 .agree-dot {
   position: absolute;
@@ -3414,7 +3462,7 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   border: 1px solid var(--card-border);
   cursor: help;
 }
@@ -3578,15 +3626,15 @@ input[type="range"]::-moz-range-thumb {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--o), 0.02);
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
 }
 @media (hover: hover) {
   .mg-stat-btn:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(var(--o), 0.07);
+    border-color: rgba(var(--o), 0.12);
   }
 }
 .mg-stat-btn.active {
@@ -3720,7 +3768,7 @@ input[type="range"]::-moz-range-thumb {
   font-variant-numeric: tabular-nums;
   color: #fff;
   background: rgba(10, 16, 26, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--o), 0.14);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   white-space: nowrap;
@@ -3736,7 +3784,7 @@ input[type="range"]::-moz-range-thumb {
   height: 34px;
   border-radius: 9px;
   border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   cursor: pointer;
   flex-shrink: 0;
@@ -3744,7 +3792,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (hover: hover) {
   .radar-expand:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(var(--o), 0.12);
   }
 }
 
@@ -3753,7 +3801,7 @@ input[type="range"]::-moz-range-thumb {
   align-self: flex-start;
   width: fit-content;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   border-radius: 999px;
   padding: 3px;
   margin-bottom: 12px;
@@ -3781,7 +3829,7 @@ input[type="range"]::-moz-range-thumb {
   gap: 4px;
   margin: -4px 0 12px 8px;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--o), 0.04);
   border-radius: 999px;
 }
 .radar-chmilen button {
@@ -3899,7 +3947,7 @@ input[type="range"]::-moz-range-thumb {
   left: 6px;
   z-index: 600;
   font-size: 0.62rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--o), 0.6);
   background: rgba(0, 0, 0, 0.35);
   padding: 1px 6px;
   border-radius: 6px;
@@ -4036,7 +4084,7 @@ input[type="range"]::-moz-range-thumb {
   max-height: 100%;
   overflow: auto;
   background: var(--card, #0d1526);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border, rgba(var(--o), 0.08));
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
 }
@@ -4104,14 +4152,14 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
   border-radius: 10px;
   border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   cursor: pointer;
   transition: background 0.15s;
 }
 @media (hover: hover) {
   .radar-ctl-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(var(--o), 0.12);
   }
 }
 .radar-ctl-btn.active {
@@ -4155,7 +4203,7 @@ input[type="range"]::-moz-range-thumb {
 .radar-seg {
   display: inline-flex;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--o), 0.05);
   border-radius: 999px;
   padding: 3px;
 }
@@ -4251,7 +4299,7 @@ input[type="range"]::-moz-range-thumb {
 .radar-scrub-line {
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--o), 0.15);
 }
 .radar-scrub-fill {
   left: 0;
@@ -4274,7 +4322,7 @@ input[type="range"]::-moz-range-thumb {
   background: #f5c542;
 }
 .radar-scrub-dot.plain {
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(var(--o), 0.55);
 }
 .radar-scrub-label {
   position: absolute;
@@ -4367,7 +4415,7 @@ input[type="range"]::-moz-range-thumb {
   height: 10px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--o), 0.14);
 }
 .radar-accum-swatch {
   flex: 1;
@@ -4476,7 +4524,7 @@ input[type="range"]::-moz-range-thumb {
   position: relative;
   overflow: hidden;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--o), 0.06);
 }
 .skel-line {
   height: 14px;
@@ -4643,7 +4691,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .skel-yrhead {
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--o), 0.08);
 }
 .skel-yrlist {
   display: flex;
@@ -4657,7 +4705,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .skel-yrrow {
   height: 43px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(var(--o), 0.03);
 }
 /* Detaily – sbalená karta bez paddingu s hlavičkou 14/16 (kopíruje .details-*) */
 .skel-details {
@@ -4679,7 +4727,7 @@ input[type="range"]::-moz-range-thumb {
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(var(--o), 0.25);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -4893,8 +4941,8 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.04);
+  border: 1px solid rgba(var(--o), 0.08);
 }
 .donate-qr {
   width: 116px;
@@ -4925,13 +4973,13 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 8px;
   font: inherit;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(var(--o), 0.05);
+  border: 1px solid rgba(var(--o), 0.1);
   color: var(--text);
 }
 @media (hover: hover) {
   .donate-copy:hover {
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(var(--o), 0.09);
   }
 }
 .donate-copy code {
@@ -5010,7 +5058,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (hover: hover) {
   .customize-btn:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--o), 0.07);
     border-color: var(--accent);
   }
 }
@@ -5122,7 +5170,7 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (hover: hover) {
   .cz-add-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--o), 0.06);
   }
 }
 .settings-model {
@@ -5135,8 +5183,8 @@ input[type="range"]::-moz-range-thumb {
 .settings-model-select {
   padding: 6px 10px;
   border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.14);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   font: inherit;
   font-size: 0.82rem;
@@ -5199,8 +5247,8 @@ input[type="range"]::-moz-range-thumb {
   max-width: 720px;
   max-height: 90vh;
   overflow: auto;
-  background: rgba(16, 22, 36, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--panel);
+  border: 1px solid rgba(var(--o), 0.12);
   border-radius: 18px;
   padding: 18px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
@@ -5221,8 +5269,8 @@ input[type="range"]::-moz-range-thumb {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.12);
+  background: rgba(var(--o), 0.05);
   color: var(--muted);
   cursor: pointer;
 }
@@ -5274,7 +5322,7 @@ input[type="range"]::-moz-range-thumb {
   text-align: center;
   font-size: 0.82rem;
   color: var(--muted);
-  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border: 1px dashed rgba(var(--o), 0.14);
   border-radius: 12px;
 }
 .notif-rules {
@@ -5288,8 +5336,8 @@ input[type="range"]::-moz-range-thumb {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.04);
+  border: 1px solid rgba(var(--o), 0.08);
 }
 .notif-rule-main {
   flex: 1;
@@ -5319,8 +5367,8 @@ input[type="range"]::-moz-range-thumb {
   width: 58px;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.14);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -5328,8 +5376,8 @@ input[type="range"]::-moz-range-thumb {
 .notif-select {
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.14);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   font: inherit;
 }
@@ -5340,7 +5388,7 @@ input[type="range"]::-moz-range-thumb {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--o), 0.12);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -5370,7 +5418,7 @@ input[type="range"]::-moz-range-thumb {
   width: 38px;
   height: 22px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--o), 0.18);
   transition: background 0.15s;
   position: relative;
 }
@@ -5446,7 +5494,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .notif-foot {
   padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(var(--o), 0.08);
   font-size: 0.74rem;
 }
 
@@ -5462,8 +5510,8 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.8rem;
   line-height: 1.45;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.03);
+  border: 1px solid rgba(var(--o), 0.08);
   border-radius: 12px;
 }
 .dbg-controls {
@@ -5493,14 +5541,14 @@ input[type="range"]::-moz-range-thumb {
 .dbg-select {
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--o), 0.14);
+  background: rgba(var(--o), 0.05);
   color: var(--text);
   font: inherit;
 }
 .dbg-preview {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--o), 0.03);
+  border: 1px solid rgba(var(--o), 0.08);
   border-radius: 14px;
   padding: 14px;
 }
@@ -5548,7 +5596,7 @@ input[type="range"]::-moz-range-thumb {
 .dbg-flags {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(var(--o), 0.08);
 }
 .dbg-flags-title {
   font-size: 0.78rem;
@@ -5567,9 +5615,9 @@ input[type="range"]::-moz-range-thumb {
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 0.74rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--o), 0.12);
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--o), 0.03);
 }
 .dbg-flag.on {
   color: #062616;
@@ -5587,7 +5635,7 @@ input[type="range"]::-moz-range-thumb {
   grid-column: 1 / -1;
   margin-top: 4px;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(var(--o), 0.08);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -5670,7 +5718,7 @@ input[type="range"]::-moz-range-thumb {
 @media (hover: hover) {
   .wear-how-btn:hover {
     color: var(--text);
-    border-color: rgba(255, 255, 255, 0.28);
+    border-color: rgba(var(--o), 0.28);
   }
 }
 @media (max-width: 640px) {
@@ -5818,5 +5866,61 @@ input[type="range"]::-moz-range-thumb {
   .footer-update-btn:hover {
     opacity: 1;
     border-color: var(--accent);
+  }
+}
+
+/* Light mode – ztmavení pastelových akcentů, které by na světlém podkladu
+   zmizely (meteogram staty, bannery, souhrn srážek). */
+@media (prefers-color-scheme: light) {
+  .mg-daysum-precip,
+  .mg-stat.flag-wet .mg-stat-v strong {
+    color: #1f74d6;
+  }
+  .mg-stat.flag-cold .mg-stat-v strong,
+  .mg-stat.flag-cold .mg-glyph {
+    color: #2f6fd0;
+  }
+  .mg-stat.flag-vcold .mg-stat-v strong,
+  .mg-stat.flag-vcold .mg-glyph {
+    color: #4457c8;
+  }
+  .mg-stat.flag-windy .mg-stat-v strong,
+  .mg-stat.flag-windy .mg-glyph,
+  .mg-stat.flag-vwindy .mg-stat-v strong,
+  .mg-stat.flag-vwindy .mg-glyph,
+  .model-agree-plain.lvl-high,
+  .model-agree.lvl-high,
+  .dbg-rule.on .dbg-rule-ico {
+    color: #178a5c;
+  }
+  .mg-stat.flag-humid .mg-stat-v strong,
+  .mg-stat.flag-humid .mg-glyph {
+    color: #0f8f72;
+  }
+  .mg-stat.flag-fog .mg-stat-v strong,
+  .mg-stat.flag-fog .mg-glyph,
+  .mg-fog-mini {
+    color: #55647d;
+  }
+  .banner.error {
+    color: #b3261e;
+  }
+  .banner.offline {
+    color: #8a5a00;
+  }
+  .banner.notice {
+    color: #1f5bb5;
+  }
+  .mg-preciplabel {
+    fill: #1f74d6;
+  }
+  .mg-extrema.precip {
+    fill: #1f74d6;
+  }
+  .mg-extrema.feels {
+    fill: #8b3fd6;
+  }
+  .mg-zoomhint {
+    background: var(--panel);
   }
 }

@@ -1028,7 +1028,10 @@ export default function App() {
       <header className="topbar" ref={headerRef}>
         <div className="hb-row1">
           <span className="hb-brand" aria-hidden="true">
-            <img src="/logo.svg" alt="" className="hb-logo-img" />
+            <picture>
+              <source srcSet="/logo-light.svg" media="(prefers-color-scheme: light)" />
+              <img src="/logo.svg" alt="" className="hb-logo-img" />
+            </picture>
           </span>
           <span className="hb-brandname">
             zmoknu<span className="hb-q">?</span>
