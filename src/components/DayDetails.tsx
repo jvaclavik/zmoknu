@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -9,6 +10,7 @@ import type { DailyPoint, HourlyPoint } from "../types";
 import type { AirQuality, LevelTier } from "../lib/airQuality";
 import { aqiLabel, pmLevel, pollenLevel } from "../lib/airQuality";
 import { stormRiskForDate } from "../lib/storm";
+import { fetchFlood, floodRisk, type FloodData } from "../lib/flood";
 import { clockTime } from "../lib/format";
 import { tr } from "../lib/i18n";
 
@@ -17,6 +19,7 @@ interface Props {
   air: AirQuality | null;
   date: string;
   lat?: number;
+  lon?: number;
   hourly?: HourlyPoint[];
 }
 
@@ -136,6 +139,12 @@ function moonInfo(dateISO: string): {
   return { ...phases[idx], illum };
 }
 
+// Krátké datum "D. M." z ISO řetězce (pro popisek vrcholu průtoku).
+function shortDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  return `${d.getDate()}. ${d.getMonth() + 1}.`;
+}
+
 function daylight(sunrise: string, sunset: string): string {
   const ms = new Date(sunset).getTime() - new Date(sunrise).getTime();
   if (!Number.isFinite(ms) || ms <= 0) return "—";
@@ -144,12 +153,40 @@ function daylight(sunrise: string, sunset: string): string {
   return `${h} h ${m} min`;
 }
 
-export default function DayDetails({ day, air, date, lat, hourly }: Props) {
+export default function DayDetails({
+  day,
+  air,
+  date,
+  lat,
+  lon,
+  hourly,
+}: Props) {
   const [open, setOpen] = useState(false);
   const uv = uvInfo(day.uvIndexMax);
   const aqi = air ? aqiLabel(air.aqi) : null;
   const pm = air ? pmLevel(air.pm25, air.pm10) : null;
   const moon = moonInfo(date);
+
+  // Riziko povodní (GloFAS) – načteme až při rozbalení detailů, ať zbytečně
+  // netáhneme data. Výsledek je cachovaný podle polohy napříč dny.
+  const [flood, setFlood] = useState<FloodData | null>(null);
+  useEffect(() => {
+    if (!open || lat == null || lon == null) return;
+    let alive = true;
+    fetchFlood(lat, lon).then((d) => {
+      if (alive) setFlood(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, lat, lon]);
+
+  const floodInfo = useMemo(() => {
+    if (!flood) return null;
+    const q = flood.byDate.get(date);
+    if (q == null) return null;
+    return { q, risk: floodRisk(q, flood.thresholds) };
+  }, [flood, date]);
 
   // Zlatá hodinka: ráno od východu, večer do západu.
   const sunriseD = new Date(day.sunrise);
@@ -268,6 +305,43 @@ export default function DayDetails({ day, air, date, lat, hourly }: Props) {
                       })}
                     </span>
                   ) : null}
+                </Tile>
+              </div>
+            </>
+          )}
+
+          {floodInfo && flood && (
+            <>
+              <div className="dd-group-title">{tr("Voda")}</div>
+              <div className="dd-grid">
+                <Tile
+                  icon="flood"
+                  label={tr("Riziko povodní")}
+                  className={floodInfo.risk.alert ? "dd-tile-alert" : ""}
+                >
+                  <div className="dd-tile-main">
+                    <LevelPill
+                      tier={floodInfo.risk.tier}
+                      text={floodInfo.risk.label}
+                    />
+                    <span className="dd-tile-value dd-tile-value-sm">
+                      {floodInfo.q.toFixed(1)}
+                      <em className="dd-tile-unit"> m³/s</em>
+                    </span>
+                  </div>
+                  {flood.peakDate !== date &&
+                  flood.peakValue >= flood.thresholds.p90 ? (
+                    <span className="dd-tile-note">
+                      {tr("vrchol {d}: {n} m³/s", {
+                        d: shortDate(flood.peakDate),
+                        n: flood.peakValue.toFixed(1),
+                      })}
+                    </span>
+                  ) : (
+                    <span className="dd-tile-note">
+                      {tr("průtok řek (GloFAS)")}
+                    </span>
+                  )}
                 </Tile>
               </div>
             </>
@@ -607,7 +681,8 @@ type DetailIconKind =
   | "dust"
   | "pollen"
   | "golden"
-  | "storm";
+  | "storm"
+  | "flood";
 
 function DetailIcon({ kind }: { kind: DetailIconKind }) {
   const c = {
@@ -682,6 +757,13 @@ function DetailIcon({ kind }: { kind: DetailIconKind }) {
         <svg {...c}>
           <path d="M7 16a4 4 0 0 1 .5-7.97 5.5 5.5 0 0 1 10.6 1.02A3.5 3.5 0 0 1 17.5 16" />
           <path d="M12.5 12l-2.5 4h3l-2 4" />
+        </svg>
+      );
+    case "flood":
+      return (
+        <svg {...c}>
+          <path d="M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z" />
+          <path d="M3 19c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2" />
         </svg>
       );
   }

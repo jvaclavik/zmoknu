@@ -1231,6 +1231,7 @@ export default function App() {
                     air={air[selectedDate] ?? null}
                     date={selectedDate}
                     lat={location.latitude}
+                    lon={location.longitude}
                     hourly={forecast.hourly}
                   />
                 ) : null,

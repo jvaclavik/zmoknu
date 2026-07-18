@@ -462,6 +462,15 @@ const EN: Record<string, string> = {
   "možné kroupy": "hail possible",
   "energie CAPE {n} J/kg": "CAPE energy {n} J/kg",
 
+  // Voda / povodně
+  Voda: "Water",
+  "Riziko povodní": "Flood risk",
+  "průtok řek (GloFAS)": "river discharge (GloFAS)",
+  "vrchol {d}: {n} m³/s": "peak {d}: {n} m³/s",
+  normální: "normal",
+  "mírně zvýšené": "slightly elevated",
+  "zvýšené": "elevated",
+
   // airQuality
   Olše: "Alder",
   Bříza: "Birch",
