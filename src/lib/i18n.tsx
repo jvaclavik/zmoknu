@@ -471,6 +471,21 @@ const EN: Record<string, string> = {
   "mírně zvýšené": "slightly elevated",
   "zvýšené": "elevated",
 
+  // Barvy oblohy / duha (Acme Labs)
+  "Barvy západu": "Sunset colors",
+  mdlé: "dull",
+  obyčejné: "ordinary",
+  pěkné: "nice",
+  parádní: "stunning",
+  "odhad z oblačnosti": "estimate from cloud cover",
+  "šance na duhu ráno": "rainbow chance in the morning",
+  "šance na duhu večer": "rainbow chance in the evening",
+
+  // Alternativní předpovědi v meteogramu
+  "Alternativní předpovědi (modely)": "Alternate predictions (models)",
+  "Plocha ukazuje rozpětí světových modelů v danou hodinu. Úzká = shoda, široká = modely se rozcházejí a předpověď je méně jistá.":
+    "The area shows the range of global models at each hour. Narrow = agreement, wide = models diverge and the forecast is less certain.",
+
   // airQuality
   Olše: "Alder",
   Bříza: "Birch",

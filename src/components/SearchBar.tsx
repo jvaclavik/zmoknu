@@ -82,6 +82,8 @@ export default function SearchBar({
   );
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Klávesová navigace (šipky nahoru/dolů + Enter) v seznamu míst.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const pushHistory = (loc: GeoLocation) =>
     setHistory(
@@ -124,6 +126,19 @@ export default function SearchBar({
       setMapOpen(false);
     }
   }, [open]);
+
+  // Při změně dotazu / výsledků / otevření zrušíme zvýraznění.
+  useEffect(() => {
+    setActiveKey(null);
+  }, [query, results, open]);
+
+  // Zvýrazněnou položku doscrollujeme do viditelné oblasti.
+  useEffect(() => {
+    if (!activeKey) return;
+    bodyRef.current
+      ?.querySelector(".nav-active")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
   // Zamkni scroll pozadí (spolehlivě i na iOS) + zavírání klávesou Escape.
   useBodyScrollLock(open);
@@ -202,6 +217,49 @@ export default function SearchBar({
     (h) => !(current && sameLocation(h, current)),
   );
 
+  // Plochý seznam vybíratelných položek ve stejném pořadí, jak jsou vykreslené.
+  const navItems: { key: string; run: () => void }[] = [];
+  if (isSearching && coords) {
+    navItems.push({
+      key: "coords",
+      run: () => pickCoords(coords.lat, coords.lon),
+    });
+  } else if (isSearching) {
+    results.forEach((r) =>
+      navItems.push({ key: `r-${r.id}-${r.latitude}`, run: () => pick(r) }),
+    );
+  } else {
+    if (current) navItems.push({ key: "current", run: onClose });
+    recent.forEach((h) =>
+      navItems.push({
+        key: `h-${h.latitude},${h.longitude}`,
+        run: () => pick(h),
+      }),
+    );
+    if (!editingFav)
+      favorites.forEach((f) =>
+        navItems.push({ key: favKey(f), run: () => pick(f) }),
+      );
+  }
+
+  const navCls = (key: string) => (activeKey === key ? " nav-active" : "");
+
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (navItems.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const idx = navItems.findIndex((n) => n.key === activeKey);
+      setActiveKey(navItems[Math.min(navItems.length - 1, idx + 1)].key);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const idx = navItems.findIndex((n) => n.key === activeKey);
+      setActiveKey(navItems[idx <= 0 ? 0 : idx - 1].key);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      (navItems.find((n) => n.key === activeKey) ?? navItems[0]).run();
+    }
+  };
+
   return (
     <div className="locpick" role="dialog" aria-modal="true">
       <button
@@ -231,6 +289,7 @@ export default function SearchBar({
             value={query}
             placeholder={tr("Adresa, město nebo GPS…")}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onSearchKey}
             aria-label={tr("Hledat město")}
           />
           {query && (
@@ -262,7 +321,7 @@ export default function SearchBar({
             <section className="locpick-section">
               <div className="locpick-label">{tr("GPS souřadnice")}</div>
               <ul className="locpick-list">
-                <li className="locpick-row">
+                <li className={`locpick-row${navCls("coords")}`}>
                   <button
                     type="button"
                     className="locpick-pick"
@@ -291,7 +350,10 @@ export default function SearchBar({
                   {results.map((r) => {
                     const fav = favorites.some((f) => sameLocation(f, r));
                     return (
-                      <li key={`${r.id}-${r.latitude}`} className="locpick-row">
+                      <li
+                        key={`${r.id}-${r.latitude}`}
+                        className={`locpick-row${navCls(`r-${r.id}-${r.latitude}`)}`}
+                      >
                         <button
                           type="button"
                           className="locpick-pick"
@@ -349,7 +411,7 @@ export default function SearchBar({
               {current && (
                 <section className="locpick-section">
                   <div className="locpick-label">{tr("Aktuální místo")}</div>
-                  <div className="locpick-row">
+                  <div className={`locpick-row${navCls("current")}`}>
                     <button
                       type="button"
                       className="locpick-pick"
@@ -404,7 +466,7 @@ export default function SearchBar({
                       return (
                         <li
                           key={`h-${h.latitude},${h.longitude}`}
-                          className="locpick-row"
+                          className={`locpick-row${navCls(`h-${h.latitude},${h.longitude}`)}`}
                         >
                           <button
                             type="button"
@@ -453,7 +515,10 @@ export default function SearchBar({
                       const active = current ? sameLocation(f, current) : false;
                       const editing = editingFav === favKey(f);
                       return (
-                        <li key={favKey(f)} className="locpick-row">
+                        <li
+                          key={favKey(f)}
+                          className={`locpick-row${navCls(favKey(f))}`}
+                        >
                           {editing ? (
                             <div className="locpick-rename">
                               <StarGlyph filled />

@@ -68,6 +68,15 @@ const ALL_TABS: Tab[] = [
   "pressure",
 ];
 
+// Globální modely pro „pás nejistoty" (alternate predictions) u teploty. Když
+// se rozcházejí, předpověď je méně jistá – pás to ukáže bez ruční konfigurace.
+// Pás nejistoty počítáme ze všech dostupných modelů (stejná sada jako „vše"
+// v porovnání). Modely, které pro danou lokalitu nevrací data (např. ČHMÚ
+// ALADIN mimo ČR nebo hodiny mimo dosah), se při výpočtu obálky přeskočí.
+const SPREAD_MODELS = WEATHER_MODELS.filter((m) => m.id !== "best_match").map(
+  (m) => m.id,
+);
+
 const TAB_LABEL: Record<Tab, string> = {
   temp: "Teplota",
   feels: "Pocitová teplota",
@@ -95,14 +104,14 @@ const TAB_INFO: Record<Tab, string> = {
 
 const DEFAULT_PINNED: Record<Tab, boolean> = {
   temp: true,
-  feels: true,
+  feels: false,
   precip: true,
   wind: true,
   cloud: true,
-  humidity: true,
-  dewpoint: true,
-  pressure: true,
-  uv: true,
+  humidity: false,
+  dewpoint: false,
+  pressure: false,
+  uv: false,
 };
 
 // Pevné okno od 00:00 vybraného dne. Graf se vejde na šířku, nescrolluje.
@@ -167,8 +176,13 @@ export default function Meteogram({
     [],
   );
   const [modelSeries, setModelSeries] = useState<ModelSeries[]>([]);
+  const [showSpread, setShowSpread] = useStoredState<boolean>(
+    "zmoknu.mgSpread",
+    true,
+  );
+  const [spreadSeries, setSpreadSeries] = useState<ModelSeries[]>([]);
   const [pinned, setPinned] = useStoredState<Record<Tab, boolean>>(
-    "zmoknu.mgPinned",
+    "zmoknu.mgPinned2",
     DEFAULT_PINNED,
   );
   const [days, setDays] = useStoredState<number>("zmoknu.mgDays", 2);
@@ -328,6 +342,27 @@ export default function Meteogram({
     };
   }, [compareModels, lat, lon, omVar]);
 
+  // Pás nejistoty (alternate predictions): stáhni globální modely pro teplotu
+  // / pocitovou a z jejich rozptylu vykresli pásmo kolem hlavní čáry.
+  const spreadEnabled = showSpread && (tab === "temp" || tab === "feels");
+  useEffect(() => {
+    if (!spreadEnabled || lat == null || lon == null) {
+      setSpreadSeries([]);
+      return;
+    }
+    let cancelled = false;
+    fetchModelSeries(lat, lon, omVar, SPREAD_MODELS)
+      .then((s) => {
+        if (!cancelled) setSpreadSeries(s);
+      })
+      .catch(() => {
+        if (!cancelled) setSpreadSeries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [spreadEnabled, lat, lon, omVar]);
+
   // Historický normál (ERA5, 30 let) – stáhne se jednou pro lokalitu při zapnutí.
   useEffect(() => {
     if (!showNormal || lat == null || lon == null) {
@@ -455,6 +490,17 @@ export default function Meteogram({
     return bands;
   }, [points]);
 
+  // Geometrie nočních pásů (levý/pravý okraj v px) pro vykreslení.
+  const nightShades = useMemo(() => {
+    if (!pph || !nightShading) return [];
+    return nightBands.map((b, bi) => ({
+      id: `night-${bi}`,
+      left: Math.max(0, x(b.startI) - pph / 2),
+      right: Math.min(width, x(b.endI) + pph / 2),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nightBands, pph, width, nightShading]);
+
   const baseSeries = useMemo(() => buildSeries(tab, points), [tab, points]);
 
   // Historický normál kreslíme jen u skutečné teploty (naše data jsou teplotní).
@@ -508,6 +554,17 @@ export default function Meteogram({
     }
     return bars;
   }, [points]);
+
+  // Které srážkové sloupce popisovat hodnotou: hlavně ty pravděpodobnější
+  // (prob ≥ 50 %). Když žádný takový není (např. model bez pravděpodobnosti),
+  // popíšeme aspoň ten s největším úhrnem, ať graf není bez čísel.
+  const precipLabelSet = useMemo(() => {
+    const probable = precipBars.filter((b) => b.prob >= 50);
+    const chosen = probable.length
+      ? probable
+      : precipBars.slice().sort((a, b) => b.value - a.value).slice(0, 1);
+    return new Set(chosen.map((b) => b.startI));
+  }, [precipBars]);
 
   // Bouřkové úseky (WMO 95/96/99) – zvýrazníme je ve srážkovém grafu,
   // průhlednost pruhu odpovídá pravděpodobnosti srážek v daném úseku.
@@ -567,17 +624,6 @@ export default function Meteogram({
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPrecip, series.max]);
-
-  const areaPath = useMemo(() => {
-    if (!points.length || !pph) return "";
-    let d = `M ${x(0)} ${CURVE_BOTTOM}`;
-    series.primary.forEach((v, i) => {
-      d += ` L ${x(i)} ${yCurve(v)}`;
-    });
-    d += ` L ${x(points.length - 1)} ${CURVE_BOTTOM} Z`;
-    return d;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, points.length, pph]);
 
   const linePath = useMemo(() => {
     if (!pph) return "";
@@ -706,6 +752,54 @@ export default function Meteogram({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelSeries, points, pph, isCloud, series]);
 
+  // Alternativní předpovědi jako vrstvené percentilové pásy: v každou hodinu
+  // seřadíme hodnoty všech modelů (+ hlavní čáru) a vykreslíme několik vnořených
+  // obálek. Užší, hustě obsazené percentily se překrývají a jsou bělejší (modely
+  // se shodují), zatímco ustřelený model roztáhne jen slabý vnější okraj.
+  const spreadBands = useMemo(() => {
+    if (!spreadEnabled || spreadSeries.length < 2 || !pph)
+      return [] as { d: string; op: number }[];
+    const perPoint: { i: number; sorted: number[] }[] = [];
+    points.forEach((p, i) => {
+      const vals: number[] = [];
+      for (const ms of spreadSeries) {
+        const v = ms.byTime.get(p.time);
+        if (v != null && Number.isFinite(v)) vals.push(v);
+      }
+      const main = series.primary[i];
+      if (Number.isFinite(main)) vals.push(main);
+      if (vals.length < 2) return;
+      vals.sort((a, b) => a - b);
+      perPoint.push({ i, sorted: vals });
+    });
+    if (perPoint.length < 2) return [];
+    const q = (s: number[], p: number) => {
+      const idx = p * (s.length - 1);
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+    };
+    // Symetrické percentilové páry od plného rozpětí (0–100 %) k jádru (37,5–62,5 %).
+    // Vrstvy se sčítají, takže střed vyjde výrazně bělejší než okraje.
+    const LEVELS = [
+      { lo: 0.0, hi: 1.0, op: 0.06 },
+      { lo: 0.125, hi: 0.875, op: 0.07 },
+      { lo: 0.25, hi: 0.75, op: 0.08 },
+      { lo: 0.375, hi: 0.625, op: 0.09 },
+    ];
+    return LEVELS.map(({ lo, hi, op }) => {
+      let d = "";
+      perPoint.forEach((pt, k) => {
+        d += `${k === 0 ? "M" : "L"} ${x(pt.i)} ${yCurve(q(pt.sorted, hi))} `;
+      });
+      for (let k = perPoint.length - 1; k >= 0; k--) {
+        d += `L ${x(perPoint[k].i)} ${yCurve(q(perPoint[k].sorted, lo))} `;
+      }
+      return { d: `${d}Z`, op };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spreadEnabled, spreadSeries, points, pph, series]);
+
   const cloudBands = useMemo(() => {
     if (!isCloud || !pph) return [];
     const layers = [
@@ -818,6 +912,30 @@ export default function Meteogram({
     () => valueLabels(points, labelValues, minGapHours),
     [points, labelValues, minGapHours],
   );
+
+  // Rozsah z alternativních předpovědí (min–max napříč modely) v daném bodě –
+  // pro popisek u teploty, např. „17° (15–20°)". Vrací null, když je pás vypnutý
+  // nebo je rozptyl zanedbatelný.
+  const spreadRangeAt = useMemo(() => {
+    if (!spreadEnabled || spreadSeries.length < 2) return null;
+    return (i: number): { min: number; max: number } | null => {
+      const p = points[i];
+      if (!p) return null;
+      const vals: number[] = [];
+      for (const ms of spreadSeries) {
+        const v = ms.byTime.get(p.time);
+        if (v != null && Number.isFinite(v)) vals.push(v);
+      }
+      const main = series.primary[i];
+      if (Number.isFinite(main)) vals.push(main);
+      if (vals.length < 2) return null;
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      if (max - min < 1) return null;
+      return { min, max };
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spreadEnabled, spreadSeries, points, series]);
 
   const pressing = useRef(false);
   // Aktivní dotyky (pointerId → poloha) pro rozpoznání pinch gesta nad grafem.
@@ -1022,6 +1140,30 @@ export default function Meteogram({
                 />
                 <span>{tr("Vysvětlivky u typů")}</span>
               </label>
+              {(tab === "temp" || tab === "feels") && (
+                <label className="mg-view-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showSpread}
+                    onChange={(e) => setShowSpread(e.target.checked)}
+                  />
+                  <span>{tr("Alternativní předpovědi (modely)")}</span>
+                  {spreadEnabled && spreadSeries.length === 0 && (
+                    <span
+                      className="spinner mg-view-spinner"
+                      role="status"
+                      aria-label={tr("Načítám…")}
+                    />
+                  )}
+                </label>
+              )}
+              {(tab === "temp" || tab === "feels") && showSpread && (
+                <div className="mg-view-hint">
+                  {tr(
+                    "Plocha ukazuje rozpětí světových modelů v danou hodinu. Úzká = shoda, široká = modely se rozcházejí a předpověď je méně jistá.",
+                  )}
+                </div>
+              )}
               {tab === "uv" && (
                 <label className="mg-view-toggle">
                   <input
@@ -1150,6 +1292,7 @@ export default function Meteogram({
           onTab={setTab}
           pressureDelta={pressureDelta}
           visible={(t) => pinned[t] || tab === t}
+          range={spreadRangeAt ? spreadRangeAt(ci) : null}
         />
       )}
 
@@ -1338,10 +1481,6 @@ export default function Meteogram({
               <stop offset="0%" stopColor={series.fill} stopOpacity="0.55" />
               <stop offset="100%" stopColor={series.fill} stopOpacity="0.04" />
             </linearGradient>
-            <linearGradient id="grad-precip" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8fd0ff" />
-              <stop offset="100%" stopColor="#2f7ff0" />
-            </linearGradient>
             {(tab === "temp" || tab === "feels") && (
               <linearGradient
                 id="grad-templine"
@@ -1380,23 +1519,19 @@ export default function Meteogram({
             )}
           </defs>
 
-          {/* noční pruhy podle východu/západu slunce (isDay) */}
+          {/* noční pruhy – plná tmavá barva (bez přechodu) */}
           {pph > 0 &&
             nightShading &&
-            nightBands.map((b, bi) => {
-              const left = Math.max(0, x(b.startI) - pph / 2);
-              const right = Math.min(width, x(b.endI) + pph / 2);
-              return (
-                <rect
-                  key={`night-${bi}`}
-                  x={left}
-                  y={TOP_PAD - 10}
-                  width={Math.max(0, right - left)}
-                  height={H - 14 - (TOP_PAD - 10)}
-                  fill="rgba(70,90,150,0.22)"
-                />
-              );
-            })}
+            nightShades.map((s) => (
+              <rect
+                key={s.id}
+                x={s.left}
+                y={TOP_PAD - 10}
+                width={Math.max(0, s.right - s.left)}
+                height={H - 14 - (TOP_PAD - 10)}
+                fill="rgba(0,0,8,0.26)"
+              />
+            ))}
 
           {/* denní pruhy + oddělovače */}
           {pph > 0 &&
@@ -1416,16 +1551,6 @@ export default function Meteogram({
                     height={H - 14 - (TOP_PAD - 10)}
                     fill={fill}
                   />
-                  {bi > 0 && (
-                    <line
-                      x1={left}
-                      y1={TOP_PAD - 12}
-                      x2={left}
-                      y2={H - 14}
-                      stroke="rgba(255,255,255,0.28)"
-                      strokeWidth="1.5"
-                    />
-                  )}
                   <text
                     x={(left + right) / 2}
                     y={13}
@@ -1440,23 +1565,26 @@ export default function Meteogram({
               );
             })}
 
-          {/* hodinové linky + popisky (0/6/12/18) */}
+          {/* hodinové popisky u 0 a 12; čára jen u 0 */}
           {pph > 0 &&
             points.map((p, i) => {
               const d = new Date(p.time);
-              if (d.getHours() % 6 === 0) {
+              const h = d.getHours();
+              if (h === 0 || h === 12) {
                 return (
                   <g key={`h-${i}`}>
-                    <line
-                      x1={x(i)}
-                      y1={TOP_PAD - 6}
-                      x2={x(i)}
-                      y2={H - 15}
-                      stroke="rgba(255,255,255,0.06)"
-                      strokeWidth="1"
-                    />
+                    {h === 0 && (
+                      <line
+                        x1={x(i)}
+                        y1={TOP_PAD - 6}
+                        x2={x(i)}
+                        y2={H - 15}
+                        stroke="rgba(255,255,255,0.06)"
+                        strokeWidth="1"
+                      />
+                    )}
                     <text x={x(i)} y={H - 3} className="mg-hourlabel">
-                      {d.getHours()}
+                      {h}
                     </text>
                   </g>
                 );
@@ -1474,7 +1602,8 @@ export default function Meteogram({
               const hb = Math.max(4, norm * (PRECIP_H - 4));
               const left = x(b.startI) - pph * 0.42;
               const right = x(b.endI) + pph * 0.42;
-              const opacity = b.prob > 0 ? 0.2 + 0.8 * (b.prob / 100) : 0.4;
+              // Krytí podle pravděpodobnosti: méně jisté srážky jsou světlejší.
+              const opacity = 0.18 + 0.82 * (Math.max(0, b.prob) / 100);
               return (
                 <rect
                   key={`p-${b.startI}`}
@@ -1483,11 +1612,43 @@ export default function Meteogram({
                   width={right - left}
                   height={hb}
                   rx="2"
-                  fill="url(#grad-precip)"
+                  fill="#1f7bff"
                   opacity={opacity}
                 />
               );
             })}
+
+          {/* hodnoty u malého pruhu – hlavně u pravděpodobnějších srážek */}
+          {pph > 0 &&
+            !isPrecip &&
+            (() => {
+              const baseline = H - 16;
+              const scale = Math.max(2, precipMax);
+              let lastX = -Infinity;
+              const out: { cx: number; y: number; v: number; prob: number }[] =
+                [];
+              for (const b of precipBars) {
+                if (!precipLabelSet.has(b.startI)) continue;
+                const cx = (x(b.startI) + x(b.endI)) / 2;
+                if (cx - lastX < 28) continue;
+                lastX = cx;
+                const norm = Math.min(1, Math.pow(b.value / scale, 0.6));
+                const hb = Math.max(4, norm * (PRECIP_H - 4));
+                out.push({ cx, y: baseline - hb - 3, v: b.value, prob: b.prob });
+              }
+              return out.map((l, i) => (
+                <text
+                  key={`psl-${i}`}
+                  x={l.cx}
+                  y={l.y}
+                  className="mg-precip-mini-val"
+                  textAnchor="middle"
+                  opacity={0.45 + 0.55 * (Math.max(0, l.prob) / 100)}
+                >
+                  {fmtPrecip(l.v)}
+                </text>
+              ));
+            })()}
 
           {isCloud ? (
             <>
@@ -1587,7 +1748,8 @@ export default function Meteogram({
                   const hb = Math.max(2, PRECIP_BASELINE - top);
                   const left = x(b.startI) - pph * 0.42;
                   const right = x(b.endI) + pph * 0.42;
-                  const opacity = b.prob > 0 ? 0.35 + 0.65 * (b.prob / 100) : 0.5;
+                  // Krytí podle pravděpodobnosti: méně jisté srážky jsou světlejší.
+                  const opacity = 0.3 + 0.7 * (Math.max(0, b.prob) / 100);
                   return (
                     <rect
                       key={`pb-${b.startI}`}
@@ -1596,33 +1758,43 @@ export default function Meteogram({
                       width={right - left}
                       height={hb}
                       rx="2"
-                      fill="url(#grad-precip)"
+                      fill="#1f7bff"
                       opacity={opacity}
                     />
                   );
                 })}
-                {/* hodnoty nad sloupci */}
-                {precipBars.map((b) => {
-                  const cx = (x(b.startI) + x(b.endI)) / 2;
-                  const top = yPrecip(b.value);
-                  return (
-                    <text
-                      key={`pl-${b.startI}`}
-                      x={cx}
-                      y={Math.max(TOP_PAD + 8, top - 5)}
-                      className="mg-extrema precip"
-                      textAnchor="middle"
-                    >
-                      {fmtPrecip(b.value)}
-                    </text>
-                  );
-                })}
+                {/* hodnoty nad sloupci – hlavně u pravděpodobnějších srážek */}
+                {precipBars
+                  .filter((b) => precipLabelSet.has(b.startI))
+                  .map((b) => {
+                    const cx = (x(b.startI) + x(b.endI)) / 2;
+                    const top = yPrecip(b.value);
+                    return (
+                      <text
+                        key={`pl-${b.startI}`}
+                        x={cx}
+                        y={Math.max(TOP_PAD + 8, top - 5)}
+                        className="mg-extrema precip"
+                        textAnchor="middle"
+                        opacity={0.45 + 0.55 * (Math.max(0, b.prob) / 100)}
+                      >
+                        {fmtPrecip(b.value)}
+                      </text>
+                    );
+                  })}
               </>
             )
           ) : (
             pph > 0 && (
               <>
-                <path d={areaPath} fill="url(#grad-primary)" />
+                {spreadBands.map((b, i) => (
+                  <path
+                    key={`sp-${i}`}
+                    d={b.d}
+                    className="mg-spread"
+                    fillOpacity={b.op}
+                  />
+                ))}
                 {fogSegments.map((s, i) => {
                   const left = x(s.startI) - pph * 0.5;
                   const right = x(s.endI) + pph * 0.5;
@@ -1785,7 +1957,7 @@ export default function Meteogram({
                     d={secondaryPath}
                     fill="none"
                     stroke={series.secondaryColor}
-                    strokeWidth="2"
+                    strokeWidth="2.6"
                     strokeLinejoin="round"
                   />
                 )}
@@ -1814,6 +1986,16 @@ export default function Meteogram({
                     </text>
                   </>
                 )}
+                {/* tmavý obrys pod hlavní čárou – kontrast vůči světlé ploše
+                    alternativních předpovědí */}
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke="rgba(11,18,32,0.85)"
+                  strokeWidth="6"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
                 <path
                   d={linePath}
                   fill="none"
@@ -1824,7 +2006,7 @@ export default function Meteogram({
                         ? "url(#grad-uvline)"
                         : series.stroke
                   }
-                  strokeWidth="2.5"
+                  strokeWidth="4"
                   strokeLinejoin="round"
                   strokeLinecap="round"
                 />
@@ -1834,7 +2016,7 @@ export default function Meteogram({
                     d={ex.d}
                     fill="none"
                     stroke={ex.color}
-                    strokeWidth="1.8"
+                    strokeWidth="2.3"
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     opacity="0.95"
@@ -2021,12 +2203,14 @@ function StatReadout({
   onTab,
   pressureDelta,
   visible,
+  range,
 }: {
   p: HourlyPoint;
   tab: Tab;
   onTab: (t: Tab) => void;
   pressureDelta: number;
   visible: (t: Tab) => boolean;
+  range?: { min: number; max: number } | null;
 }) {
   const info = describeWeather(p.weatherCode);
 
@@ -2083,7 +2267,15 @@ function StatReadout({
             <strong style={{ color: tempColor(p.temperature) }}>
               {Math.round(p.temperature)}°
             </strong>
-            <span>{tr("teplota")}</span>
+            <span>
+              {tr("teplota")}
+              {tab === "temp" && range && (
+                <em className="mg-stat-range">
+                  {" "}
+                  {Math.round(range.min)}–{Math.round(range.max)}°
+                </em>
+              )}
+            </span>
           </div>
         </button>
       )}
@@ -2101,7 +2293,15 @@ function StatReadout({
             <strong style={{ color: tempColor(p.apparentTemperature) }}>
               {Math.round(p.apparentTemperature)}°
             </strong>
-            <span>{tr("pocitově")}</span>
+            <span>
+              {tr("pocitově")}
+              {tab === "feels" && range && (
+                <em className="mg-stat-range">
+                  {" "}
+                  {Math.round(range.min)}–{Math.round(range.max)}°
+                </em>
+              )}
+            </span>
           </div>
         </button>
       )}

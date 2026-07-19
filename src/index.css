@@ -934,6 +934,11 @@ body::before {
   display: flex;
   align-items: center;
   gap: 4px;
+  border-radius: 12px;
+}
+.locpick-row.nav-active {
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .locpick-pick {
   flex: 1 1 auto;
@@ -2514,6 +2519,21 @@ body::before {
 .lvl-extreme {
   background: #e879f9;
 }
+.sky-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.sky-rainbow {
+  font-weight: 600;
+  color: #ffd9a8;
+}
+
 .lvl-dot {
   display: inline-block;
   width: 8px;
@@ -3014,6 +3034,21 @@ input[type="range"]::-moz-range-thumb {
   stroke: rgba(11, 18, 32, 0.92);
   stroke-width: 3px;
 }
+/* Hodnoty u malého srážkového pruhu (pod ostatními veličinami) */
+.mg-precip-mini-val {
+  fill: #bfe0ff;
+  font-size: 9px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(11, 18, 32, 0.92);
+  stroke-width: 2.5px;
+}
+
+/* Alternativní předpovědi (modely) – plocha obálky min–max */
+.mg-spread {
+  fill: #ffffff;
+  stroke: none;
+}
 .mg-uv-thlabel {
   font-size: 9.5px;
   font-weight: 700;
@@ -3125,6 +3160,12 @@ input[type="range"]::-moz-range-thumb {
   paint-order: stroke;
   stroke: rgba(11, 18, 32, 0.85);
   stroke-width: 3px;
+}
+/* rozsah modelů ve stats u teploty, např. „teplota 15–20°" */
+.mg-stat-range {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.85;
 }
 .mg-tip {
   fill: #eaf1ff;
@@ -3404,6 +3445,7 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 8px;
 }
+
 /* Chip shody modelů (edukace: shoda = jistota) */
 .model-agree {
   display: inline-flex;

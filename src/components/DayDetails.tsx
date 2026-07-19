@@ -10,6 +10,7 @@ import type { DailyPoint, HourlyPoint } from "../types";
 import type { AirQuality, LevelTier } from "../lib/airQuality";
 import { aqiLabel, pmLevel, pollenLevel } from "../lib/airQuality";
 import { stormRiskForDate } from "../lib/storm";
+import { skyQuality } from "../lib/skyEvents";
 import { fetchFlood, floodRisk, type FloodData } from "../lib/flood";
 import { clockTime } from "../lib/format";
 import { tr } from "../lib/i18n";
@@ -139,6 +140,14 @@ function moonInfo(dateISO: string): {
   return { ...phases[idx], illum };
 }
 
+// Barva odznaku kvality západu podle skóre (šedá → jantar → oranžová → růžová).
+function skyColor(score: number): string {
+  if (score < 35) return "linear-gradient(135deg,#8b93a4,#6f7686)";
+  if (score < 55) return "linear-gradient(135deg,#f0b45a,#e0913a)";
+  if (score < 75) return "linear-gradient(135deg,#ff9a54,#f2672e)";
+  return "linear-gradient(135deg,#ff8f6b,#e5487f)";
+}
+
 // Krátké datum "D. M." z ISO řetězce (pro popisek vrcholu průtoku).
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -202,6 +211,24 @@ export default function DayDetails({
   const storm =
     hourly && hourly.length ? stormRiskForDate(hourly, date) : null;
 
+  // Barvy oblohy při západu (a šance na duhu) – čistě z oblačnosti po patrech.
+  const sky = useMemo(
+    () =>
+      hourly && hourly.length
+        ? skyQuality(hourly, day.sunrise, day.sunset)
+        : null,
+    [hourly, day.sunrise, day.sunset],
+  );
+  const rainbow = useMemo(() => {
+    if (!sky) return null;
+    const cands = [sky.sunset, sky.sunrise].filter(
+      (s): s is NonNullable<typeof s> => !!s,
+    );
+    let best: (typeof cands)[number] | null = null;
+    for (const c of cands) if (!best || c.rainbow > best.rainbow) best = c;
+    return best && best.rainbow >= 0.35 ? best : null;
+  }, [sky]);
+
   return (
     <section className="card details-card">
       <button
@@ -260,6 +287,34 @@ export default function DayDetails({
                 <span className="dd-tile-note">
                   {tr("večer")} {clockTime(goldenPmStart)}–{clockTime(sunsetD)}
                 </span>
+              </Tile>
+            )}
+            {sky?.sunset && (
+              <Tile emoji="🌇" label={tr("Barvy západu")}>
+                <div className="dd-tile-main">
+                  <span
+                    className="sky-pill"
+                    style={{ background: skyColor(sky.sunset.score) }}
+                  >
+                    {tr(sky.sunset.label)}
+                  </span>
+                  <span className="dd-tile-value dd-tile-value-sm">
+                    {sky.sunset.score}
+                    <em className="dd-tile-unit"> /100</em>
+                  </span>
+                </div>
+                {rainbow ? (
+                  <span className="dd-tile-note sky-rainbow">
+                    🌈{" "}
+                    {rainbow.kind === "sunrise"
+                      ? tr("šance na duhu ráno")
+                      : tr("šance na duhu večer")}
+                  </span>
+                ) : (
+                  <span className="dd-tile-note">
+                    {tr("odhad z oblačnosti")}
+                  </span>
+                )}
               </Tile>
             )}
             {lat != null && (

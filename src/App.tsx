@@ -863,6 +863,22 @@ export default function App() {
   const [radarOpen, setRadarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shared, setShared] = useState(false);
+
+  // Klávesové zkratky: Opt/Alt+L přepíná modal lokace, Opt/Alt+D skočí na dnešek.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey) return;
+      if (e.key === "l" || e.key === "L" || e.code === "KeyL") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      } else if (e.key === "d" || e.key === "D" || e.code === "KeyD") {
+        e.preventDefault();
+        setSelectedDate(todayISO());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const dayBtnRef = useRef<HTMLButtonElement>(null);
   const dayPanelRef = useRef<HTMLDivElement>(null);
   const [dayArrowX, setDayArrowX] = useState<number | null>(null);
