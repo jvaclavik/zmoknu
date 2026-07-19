@@ -1,4 +1,7 @@
+import { isLightPalette } from "./themeState";
+
 // Sdílená teplotní barevná škála (meteogram, klimatická heatmapa).
+// Tmavá varianta je světlá/jasná (dobře čitelná na tmavém pozadí).
 export const TEMP_COLORS: [number, [number, number, number]][] = [
   [34, [239, 68, 68]],
   [29, [249, 115, 22]],
@@ -12,8 +15,23 @@ export const TEMP_COLORS: [number, [number, number, number]][] = [
   [-12, [167, 139, 250]],
 ];
 
+// Světlá varianta – tmavší a sytější odstíny (~úroveň 600), aby měly na světlém
+// pozadí dostatečný kontrast (žlutá a limetka jinak na bílé „zmizí").
+export const TEMP_COLORS_LIGHT: [number, [number, number, number]][] = [
+  [34, [220, 38, 38]],
+  [29, [234, 88, 12]],
+  [24, [217, 119, 6]],
+  [19, [180, 120, 0]],
+  [14, [101, 150, 13]],
+  [9, [22, 150, 74]],
+  [4, [2, 132, 199]],
+  [-1, [37, 99, 235]],
+  [-6, [79, 70, 229]],
+  [-12, [124, 58, 237]],
+];
+
 export function tempColor(t: number): string {
-  const stops = TEMP_COLORS;
+  const stops = isLightPalette() ? TEMP_COLORS_LIGHT : TEMP_COLORS;
   if (t >= stops[0][0]) return rgb(stops[0][1]);
   const last = stops[stops.length - 1];
   if (t <= last[0]) return rgb(last[1]);

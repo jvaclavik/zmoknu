@@ -7,13 +7,15 @@ interface Props {
   className?: string;
 }
 
-const SUN = "#ffd166";
-const MOON = "#cfd8ff";
-const CLOUD = "#dfe7f5";
-const CLOUD_DARK = "#9aa7c4";
-const RAIN = "#5bb6ff";
-const SNOW = "#eaf4ff";
-const BOLT = "#ffd166";
+// Barvy jsou CSS proměnné (viz index.css), takže se v light režimu přebarví na
+// kontrastnější tmavší odstíny bez nutnosti přepočtu v JS.
+const SUN = "var(--wi-sun)";
+const MOON = "var(--wi-moon)";
+const CLOUD = "var(--wi-cloud)";
+const CLOUD_DARK = "var(--wi-cloud-dark)";
+const RAIN = "var(--wi-rain)";
+const SNOW = "var(--wi-snow)";
+const BOLT = "var(--wi-bolt)";
 
 function Sun() {
   return (

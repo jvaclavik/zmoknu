@@ -69,6 +69,22 @@
           }
           if (sky) document.documentElement.dataset.sky = sky;
         } catch (e) {}
+        // Světlý/tmavý motiv nastavíme hned – dle uloženého nastavení, jinak
+        // podle systému. Zabrání to bliknutí (flash) při startu.
+        try {
+          var raw = localStorage.getItem("zmoknu.theme");
+          var mode = raw ? JSON.parse(raw) : "dark";
+          var dark;
+          if (mode === "light") dark = false;
+          else if (mode === "dark") dark = true;
+          else
+            dark =
+              !window.matchMedia ||
+              window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
       })();
     </script>
     <style>
@@ -100,6 +116,47 @@
       }
       :root[data-sky="night"] {
         background: linear-gradient(160deg, #03060d, #080e1a) fixed;
+      }
+      /* Světlý motiv – pozadí a barvy skeletonu. */
+      :root[data-theme="light"] {
+        color-scheme: light;
+        background: linear-gradient(160deg, #eaf1fb, #d6e2f3) fixed;
+      }
+      :root[data-theme="light"][data-sky="clear"] {
+        background: linear-gradient(160deg, #dcecff, #eaf4ff 60%, #f3f8ff) fixed;
+      }
+      :root[data-theme="light"][data-sky="cloud"] {
+        background: linear-gradient(160deg, #dde5f1, #eef1f7) fixed;
+      }
+      :root[data-theme="light"][data-sky="rain"] {
+        background: linear-gradient(160deg, #d5dfea, #e5ebf3) fixed;
+      }
+      :root[data-theme="light"][data-sky="snow"] {
+        background: linear-gradient(160deg, #e8eef7, #f5f8fc) fixed;
+      }
+      :root[data-theme="light"][data-sky="night"] {
+        background: linear-gradient(160deg, #cdd7ea, #dce4f2) fixed;
+      }
+      :root[data-theme="light"] #boot .b-top::before {
+        background: rgba(255, 255, 255, 0.72);
+        border-bottom-color: rgba(28, 40, 66, 0.12);
+      }
+      :root[data-theme="light"] #boot .b-brand {
+        color: #131826;
+      }
+      :root[data-theme="light"] #boot .b-card {
+        background: rgba(28, 40, 66, 0.05);
+        border-color: rgba(28, 40, 66, 0.1);
+      }
+      :root[data-theme="light"] #boot .s {
+        background: rgba(28, 40, 66, 0.07);
+      }
+      :root[data-theme="light"] #boot .foot,
+      :root[data-theme="light"] #boot .yrhead {
+        border-color: rgba(28, 40, 66, 0.12);
+      }
+      :root[data-theme="light"] #boot .yrrow {
+        border-color: rgba(28, 40, 66, 0.06);
       }
       /* Okamžitý skeleton ještě před spuštěním JS. Plně samostatné styly
          (v devu se index.css injektuje až přes JS), ať se skeleton zobrazí
@@ -208,8 +265,11 @@
       #boot .b-logo {
         height: 30px;
         width: 29px;
-        object-fit: contain;
         display: block;
+        background: url(/logo.svg) center / contain no-repeat;
+      }
+      :root[data-theme="light"] #boot .b-logo {
+        background-image: url(/logo-light.svg);
       }
       #boot .b-brand {
         font-weight: 800;
@@ -407,7 +467,7 @@
         <div class="b-rain" id="b-rain"></div>
         <div class="b-top">
           <div class="b-row1">
-            <img src="/logo.svg" alt="" class="b-logo" />
+            <span class="b-logo" aria-hidden="true"></span>
             <span class="b-brand">zmoknu<i>?</i></span>
           </div>
           <div class="b-row2">

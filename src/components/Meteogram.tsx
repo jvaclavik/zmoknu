@@ -13,6 +13,7 @@ import { tr, getLang } from "../lib/i18n";
 import { dayHeader } from "../lib/format";
 import { useStoredState } from "../lib/useStoredState";
 import { tempColor } from "../lib/tempColor";
+import { isLightPalette } from "../lib/themeState";
 import { TIER_COLOR, TIER_LABEL, tempTier } from "../lib/tiers";
 import {
   fetchModelSeries,
@@ -30,6 +31,7 @@ interface Props {
   lat?: number;
   lon?: number;
   model?: string;
+  theme?: "light" | "dark";
 }
 
 // Mapování tabu na hodinovou proměnnou Open-Meteo (pro multimód).
@@ -169,6 +171,7 @@ export default function Meteogram({
   lat,
   lon,
   model = "best_match",
+  theme = "dark",
 }: Props) {
   const [tab, setTab] = useStoredState<Tab>("zmoknu.mgTab", "temp");
   const [compareModels, setCompareModels] = useStoredState<string[]>(
@@ -834,7 +837,7 @@ export default function Meteogram({
       out.push({ offset: off, color: tempColor(t) });
     }
     return out;
-  }, [tab, series.min, series.max]);
+  }, [tab, series.min, series.max, theme]);
 
   // UV: „tvrdý" vertikální gradient – čára mění barvu podle pásma (ne plynule).
   const uvLineStops = useMemo(() => {
@@ -1529,7 +1532,7 @@ export default function Meteogram({
                 y={TOP_PAD - 10}
                 width={Math.max(0, s.right - s.left)}
                 height={H - 14 - (TOP_PAD - 10)}
-                fill="rgba(0,0,8,0.26)"
+                fill={theme === "light" ? "rgba(30,45,80,0.08)" : "rgba(0,0,8,0.26)"}
               />
             ))}
 
@@ -1541,7 +1544,11 @@ export default function Meteogram({
               const isToday = b.dateStr === todayStr;
               const isActive = b.dateStr === activeKey;
               const isPast = b.dateStr < todayStr;
-              const fill = isPast ? "rgba(0,0,0,0.22)" : "transparent";
+              const fill = isPast
+                ? theme === "light"
+                  ? "rgba(20,30,55,0.07)"
+                  : "rgba(0,0,0,0.22)"
+                : "transparent";
               return (
                 <g key={`band-${bi}`}>
                   <rect
@@ -1986,12 +1993,17 @@ export default function Meteogram({
                     </text>
                   </>
                 )}
-                {/* tmavý obrys pod hlavní čárou – kontrast vůči světlé ploše
-                    alternativních předpovědí */}
+                {/* obrys (halo) pod hlavní čárou – kontrast vůči ploše
+                    alternativních předpovědí. V light režimu je plocha tmavá,
+                    proto je obrys světlý. */}
                 <path
                   d={linePath}
                   fill="none"
-                  stroke="rgba(11,18,32,0.85)"
+                  stroke={
+                    theme === "light"
+                      ? "rgba(238,242,248,0.9)"
+                      : "rgba(11,18,32,0.85)"
+                  }
                   strokeWidth="6"
                   strokeLinejoin="round"
                   strokeLinecap="round"
@@ -2046,7 +2058,11 @@ export default function Meteogram({
                 y1={TOP_PAD - 4}
                 x2={nowX}
                 y2={H - 15}
-                stroke="rgba(255,209,102,0.7)"
+                stroke={
+                  theme === "light"
+                    ? "rgba(196,124,0,0.9)"
+                    : "rgba(255,209,102,0.7)"
+                }
                 strokeWidth="1.5"
                 strokeDasharray="3 3"
               />
@@ -2060,9 +2076,15 @@ export default function Meteogram({
                     width={32}
                     height={15}
                     rx="7.5"
-                    fill="rgba(255,209,102,0.92)"
+                    fill={theme === "light" ? "#b9750a" : "rgba(255,209,102,0.92)"}
                   />
-                  <text x={0} y={11} className="mg-nowlabel" textAnchor="middle">
+                  <text
+                    x={0}
+                    y={11}
+                    className="mg-nowlabel"
+                    textAnchor="middle"
+                    fill={theme === "light" ? "#fff" : undefined}
+                  >
                     {tr("Teď")}
                   </text>
                 </g>
@@ -2190,7 +2212,7 @@ function DropMini() {
     <svg width="12" height="15" viewBox="0 0 11 14" aria-hidden="true">
       <path
         d="M5.5 0S0 6 0 9.2A5.5 5.5 0 0 0 11 9.2C11 6 5.5 0 5.5 0z"
-        fill="#3b9bff"
+        fill={isLightPalette() ? "#0f6fe0" : "#3b9bff"}
       />
     </svg>
   );
@@ -2637,13 +2659,16 @@ function fmtPrecip(mm: number): string {
 // zbytek šedé; průhlednost modrých podle šance na déšť.
 function RainDrops({ n, prob }: { n: number; prob: number }) {
   const op = n > 0 ? (prob > 0 ? 0.25 + 0.75 * (prob / 100) : 0.5) : 1;
+  const light = isLightPalette();
+  const activeFill = light ? "#0f6fe0" : "#3b9bff";
+  const emptyFill = light ? "rgba(28,40,66,0.28)" : "rgba(255,255,255,0.18)";
   return (
     <span className="mg-drops4 mg-glyph" aria-hidden="true">
       {[0, 1, 2, 3].map((i) => (
         <svg key={i} width={9} height={11} viewBox="0 0 11 14">
           <path
             d="M5.5 0S0 6 0 9.2A5.5 5.5 0 0 0 11 9.2C11 6 5.5 0 5.5 0z"
-            fill={i < n ? "#3b9bff" : "rgba(255,255,255,0.18)"}
+            fill={i < n ? activeFill : emptyFill}
             opacity={i < n ? op : 1}
           />
         </svg>

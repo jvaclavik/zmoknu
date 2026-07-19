@@ -4,7 +4,7 @@ import type { DailyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
 import { isSameDay, shortDay } from "../lib/format";
 import { tr } from "../lib/i18n";
-import { TIER_COLOR, tempTier } from "../lib/tiers";
+import { tierColor, tempTier } from "../lib/tiers";
 import WeatherIcon from "./WeatherIcon";
 
 interface Props {
@@ -93,8 +93,9 @@ export default function DaySelector({
           const date = new Date(d.time);
           const active = d.time === selected;
           const today = isSameDay(date, new Date());
-          const tierColor = TIER_COLOR[tempTier(d.tempMax)];
-          const style = { "--tier": tierColor } as CSSProperties;
+          const style = {
+            "--tier": tierColor(tempTier(d.tempMax)),
+          } as CSSProperties;
           return (
             <button
               key={d.time}

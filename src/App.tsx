@@ -40,7 +40,8 @@ import {
 } from "./lib/openMeteo";
 import { runAlertChecks } from "./lib/notify";
 import { fetchRadar } from "./lib/rainviewer";
-import { tempTier, TIER_COLOR } from "./lib/tiers";
+import { tempTier, tierColor } from "./lib/tiers";
+import { setThemePalette } from "./lib/themeState";
 import { useStoredState } from "./lib/useStoredState";
 import { describeWeather } from "./lib/weatherCodes";
 import type { Forecast, GeoLocation, RadarData } from "./types";
@@ -52,6 +53,8 @@ const importRadarMap = () => import("./components/RadarMap");
 const RadarMap = lazy(importRadarMap);
 
 type RadarStatus = "loading" | "ok" | "error";
+
+type ThemeMode = "system" | "light" | "dark";
 
 const DEFAULT_LOCATION: GeoLocation = {
   name: "Praha",
@@ -864,7 +867,47 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [shared, setShared] = useState(false);
 
-  // Klávesové zkratky: Opt/Alt+L přepíná modal lokace, Opt/Alt+D skočí na dnešek.
+  // Motiv: "system" sleduje nastavení OS, "light"/"dark" je ruční volba.
+  const [themeMode, setThemeMode] = useStoredState<ThemeMode>(
+    "zmoknu.theme",
+    "dark",
+  );
+  const [systemDark, setSystemDark] = useState(
+    () =>
+      typeof window === "undefined" ||
+      !window.matchMedia ||
+      window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => setSystemDark(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const resolvedTheme: "light" | "dark" =
+    themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
+  // Nastavíme paletu barevných utilit synchronně během renderu, aby ji potomci
+  // (tempColor/tierColor) při tomto renderu už četli správně.
+  setThemePalette(resolvedTheme);
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta)
+      meta.setAttribute(
+        "content",
+        resolvedTheme === "light" ? "#eef2f8" : "#05080f",
+      );
+  }, [resolvedTheme]);
+  // Cyklus motivu: Systém → Světlý → Tmavý → Systém.
+  const cycleTheme = () => {
+    const order: ThemeMode[] = ["system", "light", "dark"];
+    const next = order[(order.indexOf(themeMode) + 1) % order.length];
+    setThemeMode(next);
+  };
+
+  // Klávesové zkratky: Opt/Alt+L přepíná modal lokace, Opt/Alt+D skočí na dnešek,
+  // Opt/Alt+T cyklí motiv (systém → světlý → tmavý).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey) return;
@@ -874,11 +917,15 @@ export default function App() {
       } else if (e.key === "d" || e.key === "D" || e.code === "KeyD") {
         e.preventDefault();
         setSelectedDate(todayISO());
+      } else if (e.key === "t" || e.key === "T" || e.code === "KeyT") {
+        e.preventDefault();
+        cycleTheme();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeMode, setThemeMode]);
   const dayBtnRef = useRef<HTMLButtonElement>(null);
   const dayPanelRef = useRef<HTMLDivElement>(null);
   const [dayArrowX, setDayArrowX] = useState<number | null>(null);
@@ -1044,7 +1091,11 @@ export default function App() {
       <header className="topbar" ref={headerRef}>
         <div className="hb-row1">
           <span className="hb-brand" aria-hidden="true">
-            <img src="/logo.svg" alt="" className="hb-logo-img" />
+            <img
+              src={resolvedTheme === "light" ? "/logo-light.svg" : "/logo.svg"}
+              alt=""
+              className="hb-logo-img"
+            />
           </span>
           <span className="hb-brandname">
             zmoknu<span className="hb-q">?</span>
@@ -1084,7 +1135,7 @@ export default function App() {
                 style={
                   selectedDay
                     ? ({
-                        "--tier": TIER_COLOR[tempTier(selectedDay.tempMax)],
+                        "--tier": tierColor(tempTier(selectedDay.tempMax)),
                       } as CSSProperties)
                     : undefined
                 }
@@ -1109,7 +1160,7 @@ export default function App() {
               {
                 "--arrow-x": dayArrowX != null ? `${dayArrowX}px` : "50%",
                 "--tier": selectedDay
-                  ? TIER_COLOR[tempTier(selectedDay.tempMax)]
+                  ? tierColor(tempTier(selectedDay.tempMax))
                   : undefined,
               } as CSSProperties
             }
@@ -1215,6 +1266,7 @@ export default function App() {
                     lat={location.latitude}
                     lon={location.longitude}
                     model={model}
+                    theme={resolvedTheme}
                   />
                 ),
                 wear: selectedDay ? (
@@ -1311,6 +1363,31 @@ export default function App() {
             <FlagEN />
           </button>
         </div>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={() => {
+            posthog.capture("theme_toggled", { from: themeMode });
+            cycleTheme();
+          }}
+          aria-label={tr("Přepnout režim (systém/světlý/tmavý)")}
+          title={tr("Přepnout režim (systém/světlý/tmavý)")}
+        >
+          {themeMode === "system" ? (
+            <SystemGlyph />
+          ) : themeMode === "light" ? (
+            <SunGlyph />
+          ) : (
+            <MoonGlyph />
+          )}
+          <span>
+            {themeMode === "system"
+              ? tr("Podle systému")
+              : themeMode === "light"
+                ? tr("Světlý režim")
+                : tr("Tmavý režim")}
+          </span>
+        </button>
       </div>
 
       <button
@@ -1412,6 +1489,62 @@ function BellGlyph() {
     >
       <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
       <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+function SunGlyph() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+    </svg>
+  );
+}
+
+function MoonGlyph() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+    </svg>
+  );
+}
+
+function SystemGlyph() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
     </svg>
   );
 }

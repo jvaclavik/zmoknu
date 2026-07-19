@@ -508,6 +508,11 @@ const EN: Record<string, string> = {
   "Načíst další den historie": "Load one more day of history",
   "Načíst další dny": "Load more days",
   "Přizpůsobit obsah": "Customize content",
+  "Přepnout režim (systém/světlý/tmavý)":
+    "Switch mode (system/light/dark)",
+  "Podle systému": "System",
+  "Světlý režim": "Light mode",
+  "Tmavý režim": "Dark mode",
   "Přetáhni sekce za úchyt a seřaď je. Skryté můžeš zase přidat.":
     "Drag sections by the handle to reorder them. You can add hidden ones back.",
   "Vše skryto – přidej sekce níže.": "Everything hidden – add sections below.",

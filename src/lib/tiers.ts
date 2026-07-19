@@ -1,3 +1,5 @@
+import { isLightPalette } from "./themeState";
+
 export type Tier = "hot" | "warm" | "mild" | "cool" | "cold" | "freezing";
 
 // Teplotní tón podle denní maximální teploty.
@@ -27,3 +29,18 @@ export const TIER_COLOR: Record<Tier, string> = {
   cold: "#7f9be0",
   freezing: "#a9d2ff",
 };
+
+// Světlá varianta – tmavší/sytější odstíny, aby byly čitelné jako text i na
+// světlém pozadí (světle žlutá a světle modrá jinak na bílé „mizí").
+export const TIER_COLOR_LIGHT: Record<Tier, string> = {
+  hot: "#d64524",
+  warm: "#c07d00",
+  mild: "#16a06a",
+  cool: "#1f7fd6",
+  cold: "#4a5fc4",
+  freezing: "#3f7bce",
+};
+
+export function tierColor(tier: Tier): string {
+  return isLightPalette() ? TIER_COLOR_LIGHT[tier] : TIER_COLOR[tier];
+}
