@@ -115,8 +115,13 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
       const precipitationProbability = Math.max(
         ...pts.map((p) => p.precipitationProbability),
       );
-      const tempMax = Math.max(...pts.map((p) => p.temperature));
-      const tempMin = Math.min(...pts.map((p) => p.temperature));
+      // Jen platné teploty – když část bloku chybí (model mimo horizont),
+      // nesmí NaN „nakazit" celý blok.
+      const finiteTemps = pts
+        .map((p) => p.temperature)
+        .filter((v) => Number.isFinite(v));
+      const tempMax = finiteTemps.length ? Math.max(...finiteTemps) : NaN;
+      const tempMin = finiteTemps.length ? Math.min(...finiteTemps) : NaN;
 
       const rep = pickRep(pts);
       const windPt = pts.reduce(
@@ -285,29 +290,46 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
                 <span className="yr-time">{p.timeLabel}</span>
                 <span className="yr-icon">
                   {p.icons ? (
-                    p.icons.map((ic, idx) => (
-                      <WeatherIcon
-                        key={idx}
-                        kind={describeWeather(ic.code).icon}
-                        isDay={ic.isDay}
-                        size={24}
-                      />
-                    ))
-                  ) : (
+                    p.icons.map((ic, idx) =>
+                      Number.isFinite(ic.code) ? (
+                        <WeatherIcon
+                          key={idx}
+                          kind={describeWeather(ic.code).icon}
+                          isDay={ic.isDay}
+                          size={24}
+                        />
+                      ) : (
+                        <span key={idx} className="yr-missing">
+                          ?
+                        </span>
+                      ),
+                    )
+                  ) : Number.isFinite(p.weatherCode) ? (
                     <WeatherIcon kind={info.icon} isDay={p.isDay} size={30} />
+                  ) : (
+                    <span className="yr-missing">?</span>
                   )}
                 </span>
                 <span className="yr-temp">
-                  {p.grouped && p.tempMin !== p.tempMax && (
-                    <span className="yr-temp-min">
-                      <span style={{ color: tempColor(p.tempMin) }}>
-                        {Math.round(p.tempMin)}°
+                  {p.grouped &&
+                    Number.isFinite(p.tempMin) &&
+                    Number.isFinite(p.tempMax) &&
+                    p.tempMin !== p.tempMax && (
+                      <span className="yr-temp-min">
+                        <span style={{ color: tempColor(p.tempMin) }}>
+                          {Math.round(p.tempMin)}°
+                        </span>
+                        <span className="yr-temp-sep"> / </span>
                       </span>
-                      <span className="yr-temp-sep"> / </span>
-                    </span>
-                  )}
-                  <span style={{ color: tempColor(p.tempMax) }}>
-                    {Math.round(p.tempMax)}°
+                    )}
+                  <span
+                    style={
+                      Number.isFinite(p.tempMax)
+                        ? { color: tempColor(p.tempMax) }
+                        : undefined
+                    }
+                  >
+                    {Number.isFinite(p.tempMax) ? `${Math.round(p.tempMax)}°` : "?"}
                   </span>
                 </span>
                 <span

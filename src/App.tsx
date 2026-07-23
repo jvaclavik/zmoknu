@@ -31,7 +31,7 @@ import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
 import { dayHeader, isoDate, todayISO } from "./lib/format";
 import { tr, useLang } from "./lib/i18n";
-import { DEFAULT_MODEL, WEATHER_MODELS } from "./lib/models";
+import { DEFAULT_MODEL, WEATHER_MODELS, modelLabel } from "./lib/models";
 import {
   fetchForecast,
   getOfflineForecast,
@@ -1035,6 +1035,12 @@ export default function App() {
     ? Math.max(...wakeHours.map((h) => h.precipitationProbability))
     : selectedDay?.precipitationProbabilityMax ?? 0;
 
+  // Má vybraný den vůbec data? Krátkodobé/regionální modely (např. ČHMÚ) je
+  // nemají pro vzdálené dny → skryjeme denní widgety a nabídneme jiný model.
+  const dayHasData =
+    (selectedDay != null && Number.isFinite(selectedDay.weatherCode)) ||
+    dayHours.some((h) => Number.isFinite(h.temperature));
+
   return (
     <div
       className="app"
@@ -1244,9 +1250,28 @@ export default function App() {
         <main className="content">
           <div className="col-main">
             <WeatherAlerts lat={location.latitude} lon={location.longitude} />
+            {!dayHasData && (
+              <div className="banner notice nodata-notice">
+                <span>
+                  {tr(
+                    "Pro tento den nemá model {model} předpověď – nejde dál než jeho horizont.",
+                    { model: modelLabel(model) },
+                  )}
+                </span>
+                {model !== DEFAULT_MODEL && (
+                  <button
+                    type="button"
+                    className="nodata-switch"
+                    onClick={() => setModel(DEFAULT_MODEL)}
+                  >
+                    {tr("Přepnout na Automaticky")}
+                  </button>
+                )}
+              </div>
+            )}
             {(() => {
               const els: Record<string, ReactNode> = {
-                summary: selectedDay ? (
+                summary: selectedDay && dayHasData ? (
                   <SmartSummary
                     day={selectedDay}
                     hourly={forecast.hourly}
@@ -1259,7 +1284,7 @@ export default function App() {
                     feelsMin={feelsMin}
                   />
                 ) : null,
-                meteogram: (
+                meteogram: dayHasData ? (
                   <Meteogram
                     hourly={forecast.hourly}
                     activeDate={selectedDate}
@@ -1268,8 +1293,8 @@ export default function App() {
                     model={model}
                     theme={resolvedTheme}
                   />
-                ),
-                wear: selectedDay ? (
+                ) : null,
+                wear: selectedDay && dayHasData ? (
                   <WhatToWear
                     day={selectedDay}
                     feelsMax={feelsMax}
@@ -1293,7 +1318,7 @@ export default function App() {
                     lon={location.longitude}
                   />
                 ),
-                details: selectedDay ? (
+                details: selectedDay && dayHasData ? (
                   <DayDetails
                     day={selectedDay}
                     air={air[selectedDate] ?? null}
@@ -1338,7 +1363,7 @@ export default function App() {
           >
             {WEATHER_MODELS.map((m) => (
               <option key={m.id} value={m.id}>
-                {tr(m.label)}
+                {m.flag} {tr(m.label)}
               </option>
             ))}
           </select>

@@ -93,6 +93,8 @@ export default function DaySelector({
           const date = new Date(d.time);
           const active = d.time === selected;
           const today = isSameDay(date, new Date());
+          // Den bez dat (model mimo horizont): „?" místo teplot a ikony.
+          const noData = !Number.isFinite(d.weatherCode);
           const style = {
             "--tier": tierColor(tempTier(d.tempMax)),
           } as CSSProperties;
@@ -107,13 +109,21 @@ export default function DaySelector({
               <span className="ds-date">
                 {date.getDate()}.{date.getMonth() + 1}.
               </span>
-              <WeatherIcon kind={info.icon} isDay size={28} />
+              {noData ? (
+                <span className="ds-missing">?</span>
+              ) : (
+                <WeatherIcon kind={info.icon} isDay size={28} />
+              )}
               <span className="ds-temps">
-                <em>{Math.round(d.tempMax)}°</em>
-                <i>{Math.round(d.tempMin)}°</i>
+                <em>{Number.isFinite(d.tempMax) ? `${Math.round(d.tempMax)}°` : "?"}</em>
+                <i>{Number.isFinite(d.tempMin) ? `${Math.round(d.tempMin)}°` : "?"}</i>
               </span>
               <span className="ds-mm">
-                {d.precipitationSum > 0 ? `${d.precipitationSum.toFixed(1)} mm` : "—"}
+                {noData
+                  ? "—"
+                  : d.precipitationSum > 0
+                    ? `${d.precipitationSum.toFixed(1)} mm`
+                    : "—"}
               </span>
             </button>
           );

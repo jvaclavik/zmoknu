@@ -436,16 +436,22 @@ export async function fetchModelSeries(
   });
 }
 
+// Chybějící (null) hodnota → NaN, ať se nezaměňuje s platnou 0. Number(null)
+// je totiž 0, takže by se dny bez dat (např. ČHMÚ mimo horizont) tvářily jako
+// „teplota 0 °C". NaN pak umožní čáru nekreslit a psát „?".
+const num = (v: number | string | null | undefined): number =>
+  v == null ? NaN : Number(v);
+
 function mapHourly(h: RawForecast["hourly"]) {
   const out = [];
   for (let i = 0; i < h.time.length; i++) {
     out.push({
       time: String(h.time[i]),
-      temperature: Number(h.temperature_2m[i]),
-      apparentTemperature: Number(h.apparent_temperature[i]),
+      temperature: num(h.temperature_2m[i]),
+      apparentTemperature: num(h.apparent_temperature[i]),
       precipitation: Number(h.precipitation[i]),
       precipitationProbability: Number(h.precipitation_probability[i]),
-      weatherCode: Number(h.weather_code[i]),
+      weatherCode: num(h.weather_code[i]),
       windSpeed: Number(h.wind_speed_10m[i]),
       windGusts: Number(h.wind_gusts_10m[i]),
       windDirection: Number(h.wind_direction_10m[i]),
@@ -484,9 +490,9 @@ function mapDaily(d: RawForecast["daily"]) {
   for (let i = 0; i < d.time.length; i++) {
     out.push({
       time: String(d.time[i]),
-      weatherCode: Number(d.weather_code[i]),
-      tempMax: Number(d.temperature_2m_max[i]),
-      tempMin: Number(d.temperature_2m_min[i]),
+      weatherCode: num(d.weather_code[i]),
+      tempMax: num(d.temperature_2m_max[i]),
+      tempMin: num(d.temperature_2m_min[i]),
       precipitationSum: Number(d.precipitation_sum[i]),
       precipitationProbabilityMax: Number(d.precipitation_probability_max[i]),
       windSpeedMax: Number(d.wind_speed_10m_max[i]),

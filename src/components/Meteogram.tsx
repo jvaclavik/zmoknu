@@ -117,11 +117,14 @@ const DEFAULT_PINNED: Record<Tab, boolean> = {
 };
 
 // Pevné okno od 00:00 vybraného dne. Graf se vejde na šířku, nescrolluje.
-const H = 240;
+const H = 264;
 // Nahoře necháme dva řádky: název dne + plovoucí popisek vybrané hodiny.
 const TOP_PAD = 48;
-const PRECIP_H = 58;
-const CURVE_BOTTOM = H - PRECIP_H - 8;
+// Horní pruh pro „visící" mini srážky (u ostatních veličin než srážky).
+const MINI_H = 46;
+// Spodní okraj křivky – jen úzký proužek na hodinové popisky (srážky už jsou
+// nahoře, takže spodní rezervu nepotřebujeme).
+const CURVE_BOTTOM = H - 22;
 
 const DAY_SHORT_CS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const DAY_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -453,6 +456,77 @@ export default function Meteogram({
 
   const activeKey = activeDate || todayStr;
 
+  // Popisek dne: "Dnes"/"Zítra"/"Včera", jinak zkratka + datum.
+  const dayLabelFor = (b: { date: Date; dateStr: string }) => {
+    if (b.dateStr === todayStr) return tr("Dnes");
+    const diff = Math.round(
+      (Date.parse(b.dateStr) - Date.parse(todayStr)) / 86400000,
+    );
+    if (diff === 1) return tr("Zítra");
+    if (diff === -1) return tr("Včera");
+    return `${dayShort()[b.date.getDay()]} ${b.date.getDate()}.${b.date.getMonth() + 1}.`;
+  };
+
+  // Výrazný rám + pill s popiskem vybraného dne. Kreslí se buď v pozadí
+  // (většina záložek), nebo v overlay nad plochou alternativní předpovědi.
+  const renderDayHi = (
+    left: number,
+    right: number,
+    label: string,
+    isToday: boolean,
+  ) => {
+    const bandTop = TOP_PAD - 10;
+    const bandBottom = H - 14;
+    const cx = (left + right) / 2;
+    const pillW = Math.max(34, label.length * 6.6 + 14);
+    return (
+      <>
+        <rect
+          x={left}
+          y={bandTop}
+          width={right - left}
+          height={3}
+          fill="var(--accent)"
+          opacity="0.95"
+        />
+        <line
+          x1={left}
+          y1={bandTop}
+          x2={left}
+          y2={bandBottom}
+          stroke="var(--accent)"
+          strokeWidth="1"
+          opacity="0.35"
+        />
+        <line
+          x1={right}
+          y1={bandTop}
+          x2={right}
+          y2={bandBottom}
+          stroke="var(--accent)"
+          strokeWidth="1"
+          opacity="0.35"
+        />
+        <rect
+          x={cx - pillW / 2}
+          y={2}
+          width={pillW}
+          height={17}
+          rx="8.5"
+          fill="var(--accent)"
+        />
+        <text
+          x={cx}
+          y={14}
+          className={`mg-daylabel selected ${isToday ? "today" : ""}`}
+          textAnchor="middle"
+        >
+          {label}
+        </text>
+      </>
+    );
+  };
+
   const dayBands = useMemo(() => {
     const bands: { startI: number; endI: number; date: Date; dateStr: string }[] =
       [];
@@ -599,9 +673,14 @@ export default function Meteogram({
     return bars;
   }, [points]);
 
+  // Horní okraj křivky. U ostatních veličin než srážky posuneme křivku pod
+  // horní pruh s mini srážkami, aby se nepřekrývaly. U tabu srážek kreslíme
+  // odshora jako dřív.
+  const curveTop = isPrecip ? TOP_PAD : TOP_PAD + MINI_H;
+
   const yCurve = (v: number) => {
     const t = (v - series.min) / Math.max(0.001, series.max - series.min);
-    return CURVE_BOTTOM - t * (CURVE_BOTTOM - TOP_PAD);
+    return CURVE_BOTTOM - t * (CURVE_BOTTOM - curveTop);
   };
 
   // U tabu srážek kreslíme sloupce od úplného spodku grafu (víc místa).
@@ -628,27 +707,38 @@ export default function Meteogram({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPrecip, series.max]);
 
+  // Čára s mezerami: kde chybí data (NaN), pero se zvedne a po datech se
+  // začne kreslit znovu (nová „M"). Nekreslíme tedy propad na 0.
+  const buildLine = (values: number[]) => {
+    let d = "";
+    let pen = false;
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (!Number.isFinite(v)) {
+        pen = false;
+        continue;
+      }
+      d += `${pen ? "L" : "M"} ${x(i)} ${yCurve(v)} `;
+      pen = true;
+    }
+    return d.trim();
+  };
+
   const linePath = useMemo(() => {
     if (!pph) return "";
-    return series.primary
-      .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${yCurve(v)}`)
-      .join(" ");
+    return buildLine(series.primary);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
 
   const secondaryPath = useMemo(() => {
     if (!series.secondary || !pph) return "";
-    return series.secondary
-      .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${yCurve(v)}`)
-      .join(" ");
+    return buildLine(series.secondary);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
 
   const refLinePath = useMemo(() => {
     if (!series.refLine || !pph) return "";
-    return series.refLine.values
-      .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${yCurve(v)}`)
-      .join(" ");
+    return buildLine(series.refLine.values);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
 
@@ -656,9 +746,7 @@ export default function Meteogram({
     if (!series.extras || !pph) return [];
     return series.extras.map((ex) => ({
       color: ex.color,
-      d: ex.values
-        .map((v, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${yCurve(v)}`)
-        .join(" "),
+      d: buildLine(ex.values),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, points.length, pph]);
@@ -810,9 +898,9 @@ export default function Meteogram({
       { values: points.map((p) => p.cloudMid), color: "#aeb9d2", label: "střední" },
       { values: points.map((p) => p.cloudLow), color: "#6f8ac9", label: "nízká" },
     ];
-    const bandH = (CURVE_BOTTOM - TOP_PAD) / 3;
+    const bandH = (CURVE_BOTTOM - curveTop) / 3;
     return layers.map((l, idx) => {
-      const centerY = TOP_PAD + bandH * (idx + 0.5);
+      const centerY = curveTop + bandH * (idx + 0.5);
       const half = bandH * 0.42;
       let d = "";
       l.values.forEach((v, i) => {
@@ -1267,7 +1355,9 @@ export default function Meteogram({
                           className="mg-view-swatch"
                           style={{ background: m.color }}
                         />
-                        <span>{m.short}</span>
+                        <span>
+                          {m.flag} {m.short}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -1468,11 +1558,15 @@ export default function Meteogram({
                   className={`mg-icon ${slot % 2 === 0 ? "row-a" : "row-b"}`}
                   style={{ left: x(i) }}
                 >
-                  <WeatherIcon
-                    kind={describeWeather(p.weatherCode).icon}
-                    isDay={p.isDay}
-                    size={20}
-                  />
+                  {Number.isFinite(p.weatherCode) ? (
+                    <WeatherIcon
+                      kind={describeWeather(p.weatherCode).icon}
+                      isDay={p.isDay}
+                      size={20}
+                    />
+                  ) : (
+                    <span className="mg-icon-missing">?</span>
+                  )}
                 </span>
               );
             })}
@@ -1489,7 +1583,7 @@ export default function Meteogram({
                 id="grad-templine"
                 gradientUnits="userSpaceOnUse"
                 x1="0"
-                y1={TOP_PAD}
+                y1={curveTop}
                 x2="0"
                 y2={CURVE_BOTTOM}
               >
@@ -1507,7 +1601,7 @@ export default function Meteogram({
                 id="grad-uvline"
                 gradientUnits="userSpaceOnUse"
                 x1="0"
-                y1={TOP_PAD}
+                y1={curveTop}
                 x2="0"
                 y2={CURVE_BOTTOM}
               >
@@ -1549,25 +1643,47 @@ export default function Meteogram({
                   ? "rgba(20,30,55,0.07)"
                   : "rgba(0,0,0,0.22)"
                 : "transparent";
+              const bandTop = TOP_PAD - 10;
+              const bandBottom = H - 14;
+              const label = dayLabelFor(b);
+              const cx = (left + right) / 2;
               return (
                 <g key={`band-${bi}`}>
                   <rect
                     x={left}
-                    y={TOP_PAD - 10}
+                    y={bandTop}
                     width={right - left}
-                    height={H - 14 - (TOP_PAD - 10)}
+                    height={bandBottom - bandTop}
                     fill={fill}
                   />
-                  <text
-                    x={(left + right) / 2}
-                    y={13}
-                    className={`mg-daylabel ${isActive ? "selected" : ""} ${isToday ? "today" : ""}`}
-                    textAnchor="middle"
-                  >
-                    {isToday
-                      ? tr("Dnes")
-                      : `${dayShort()[b.date.getDay()]} ${b.date.getDate()}.${b.date.getMonth() + 1}.`}
-                  </text>
+                  {/* Jemný tint vybraného dne v pozadí (kvůli čitelnosti pod
+                      křivkami). Výrazný rám kreslíme rovnou tady, POKUD není
+                      zapnutá plocha alternativní předpovědi – jinak by nad ní
+                      musel jít do overlay (viz níže) a nesmí zakrývat popisky
+                      osy (např. u srážek). */}
+                  {isActive && (
+                    <rect
+                      x={left}
+                      y={bandTop}
+                      width={right - left}
+                      height={bandBottom - bandTop}
+                      fill="var(--accent)"
+                      opacity={theme === "light" ? 0.06 : 0.08}
+                    />
+                  )}
+                  {isActive &&
+                    spreadBands.length === 0 &&
+                    renderDayHi(left, right, label, isToday)}
+                  {!isActive && (
+                    <text
+                      x={cx}
+                      y={13}
+                      className={`mg-daylabel ${isToday ? "today" : ""}`}
+                      textAnchor="middle"
+                    >
+                      {label}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -1586,7 +1702,7 @@ export default function Meteogram({
                         y1={TOP_PAD - 6}
                         x2={x(i)}
                         y2={H - 15}
-                        stroke="rgba(255,255,255,0.06)"
+                        stroke="rgba(var(--ov-rgb),0.06)"
                         strokeWidth="1"
                       />
                     )}
@@ -1599,14 +1715,15 @@ export default function Meteogram({
               return null;
             })}
 
-          {/* srážkové sloupce – malý pruh dole (u ostatních veličin) */}
+          {/* srážkové sloupce – malý pruh nahoře, „visí" od horního okraje
+              křivkové plochy dolů (u ostatních veličin než srážky) */}
           {pph > 0 &&
             !isPrecip &&
             precipBars.map((b) => {
-              const baseline = H - 16;
+              const top = TOP_PAD;
               const scale = Math.max(2, precipMax);
               const norm = Math.min(1, Math.pow(b.value / scale, 0.6));
-              const hb = Math.max(4, norm * (PRECIP_H - 4));
+              const hb = Math.max(4, norm * (MINI_H - 16));
               const left = x(b.startI) - pph * 0.42;
               const right = x(b.endI) + pph * 0.42;
               // Krytí podle pravděpodobnosti: méně jisté srážky jsou světlejší.
@@ -1615,7 +1732,7 @@ export default function Meteogram({
                 <rect
                   key={`p-${b.startI}`}
                   x={left}
-                  y={baseline - hb}
+                  y={top}
                   width={right - left}
                   height={hb}
                   rx="2"
@@ -1629,7 +1746,7 @@ export default function Meteogram({
           {pph > 0 &&
             !isPrecip &&
             (() => {
-              const baseline = H - 16;
+              const top = TOP_PAD;
               const scale = Math.max(2, precipMax);
               let lastX = -Infinity;
               const out: { cx: number; y: number; v: number; prob: number }[] =
@@ -1640,8 +1757,8 @@ export default function Meteogram({
                 if (cx - lastX < 28) continue;
                 lastX = cx;
                 const norm = Math.min(1, Math.pow(b.value / scale, 0.6));
-                const hb = Math.max(4, norm * (PRECIP_H - 4));
-                out.push({ cx, y: baseline - hb - 3, v: b.value, prob: b.prob });
+                const hb = Math.max(4, norm * (MINI_H - 16));
+                out.push({ cx, y: top + hb + 11, v: b.value, prob: b.prob });
               }
               return out.map((l, i) => (
                 <text
@@ -1810,9 +1927,9 @@ export default function Meteogram({
                     <g key={`fog-${i}`}>
                       <rect
                         x={left}
-                        y={TOP_PAD}
+                        y={curveTop}
                         width={Math.max(0, right - left)}
-                        height={CURVE_BOTTOM - TOP_PAD}
+                        height={CURVE_BOTTOM - curveTop}
                         fill="rgba(174,188,207,0.16)"
                       />
                       <g
@@ -1983,7 +2100,7 @@ export default function Meteogram({
                     <text
                       x={x(0) + 4}
                       y={Math.max(
-                        TOP_PAD + 10,
+                        curveTop + 10,
                         yCurve(series.refLine.values[0]) - 6,
                       )}
                       className="mg-uv-thlabel"
@@ -2049,6 +2166,27 @@ export default function Meteogram({
             )
           )}
 
+          {/* Rám a popisek vybraného dne – při zapnuté ploše alternativní
+              předpovědi ho kreslíme až tady (nad plochou), aby ji zvýraznění
+              nikdy nepřekryla. */}
+          {pph > 0 &&
+            spreadBands.length > 0 &&
+            dayBands.map((b, bi) => {
+              if (b.dateStr !== activeKey) return null;
+              const left = b.startI * pph;
+              const right = (b.endI + 1) * pph;
+              return (
+                <g key={`band-hi-${bi}`}>
+                  {renderDayHi(
+                    left,
+                    right,
+                    dayLabelFor(b),
+                    b.dateStr === todayStr,
+                  )}
+                </g>
+              );
+            })}
+
           {/* značka "teď" – posouvá se plynule podle času; popisek nahoře,
               schová se, když je blízko kurzoru (aby se nepřekrýval). */}
           {nowX >= 0 && pph > 0 && (
@@ -2060,11 +2198,11 @@ export default function Meteogram({
                 y2={H - 15}
                 stroke={
                   theme === "light"
-                    ? "rgba(196,124,0,0.9)"
-                    : "rgba(255,209,102,0.7)"
+                    ? "rgba(196,124,0,0.95)"
+                    : "rgba(255,209,102,0.9)"
                 }
-                strokeWidth="1.5"
-                strokeDasharray="3 3"
+                strokeWidth="2"
+                strokeDasharray="4 3"
               />
               {Math.abs(nowX - x(ci)) > 44 && (
                 <g
@@ -2103,7 +2241,7 @@ export default function Meteogram({
                 stroke="rgba(255,255,255,0.85)"
                 strokeWidth="1.5"
               />
-              {!isCloud && !isPrecip && (
+              {!isCloud && !isPrecip && Number.isFinite(series.primary[ci]) && (
                 <circle
                   cx={x(ci)}
                   cy={yCurve(series.primary[ci])}
@@ -2154,21 +2292,40 @@ export function DaySummary({
   hideTone?: boolean;
 }) {
   const info = describeWeather(day.weatherCode);
+  // Den bez dat (např. ČHMÚ mimo horizont): nekreslíme falešné 0, jen „?".
+  const noData = !Number.isFinite(day.weatherCode);
   const prob = day.precipitationProbabilityMax ?? 0;
   const precipOp = day.precipitationSum > 0 ? 0.3 + 0.7 * (prob / 100) : 0.4;
-  const hasFeels = feelsMax != null && feelsMin != null;
+  const hasFeels =
+    Number.isFinite(feelsMax ?? NaN) && Number.isFinite(feelsMin ?? NaN);
   const tier = tempTier(feelsMax ?? day.tempMax);
   return (
     <div className="mg-daysum">
-      <WeatherIcon kind={info.icon} isDay size={36} />
+      {noData ? (
+        <span className="mg-daysum-missing">?</span>
+      ) : (
+        <WeatherIcon kind={info.icon} isDay size={36} />
+      )}
       <div className="mg-daysum-main">
         <strong className="mg-daysum-temp">
-          <span style={{ color: tempColor(day.tempMin) }}>
-            {Math.round(day.tempMin)}°
+          <span
+            style={
+              Number.isFinite(day.tempMin)
+                ? { color: tempColor(day.tempMin) }
+                : undefined
+            }
+          >
+            {Number.isFinite(day.tempMin) ? `${Math.round(day.tempMin)}°` : "?"}
           </span>
           <span className="mg-daysum-sep"> / </span>
-          <span style={{ color: tempColor(day.tempMax) }}>
-            {Math.round(day.tempMax)}°
+          <span
+            style={
+              Number.isFinite(day.tempMax)
+                ? { color: tempColor(day.tempMax) }
+                : undefined
+            }
+          >
+            {Number.isFinite(day.tempMax) ? `${Math.round(day.tempMax)}°` : "?"}
           </span>
         </strong>
         {hasFeels && (
@@ -2177,7 +2334,7 @@ export function DaySummary({
           </span>
         )}
       </div>
-      {!hideTone && (
+      {!hideTone && !noData && (
         <span
           className="mg-daysum-tone"
           style={{ background: TIER_COLOR[tier] }}
@@ -2185,24 +2342,26 @@ export function DaySummary({
           {tr(TIER_LABEL[tier])}
         </span>
       )}
-      <div className="mg-daysum-precip" style={{ opacity: precipOp }}>
-        <span className="mg-daysum-precip-main">
-          <span className="mg-daysum-drops">
-            {Array.from({
-              length: Math.max(1, dropsFor(day.precipitationSum)),
-            }).map((_, i) => (
-              <DropMini key={i} />
-            ))}
+      {!noData && (
+        <div className="mg-daysum-precip" style={{ opacity: precipOp }}>
+          <span className="mg-daysum-precip-main">
+            <span className="mg-daysum-drops">
+              {Array.from({
+                length: Math.max(1, dropsFor(day.precipitationSum)),
+              }).map((_, i) => (
+                <DropMini key={i} />
+              ))}
+            </span>
+            <strong>{fmtPrecip(day.precipitationSum)} mm</strong>
           </span>
-          <strong>{fmtPrecip(day.precipitationSum)} mm</strong>
-        </span>
-        <span
-          className="mg-daysum-prob"
-          style={prob > 0 ? undefined : { visibility: "hidden" }}
-        >
-          {prob > 0 ? tr("{prob}% šance", { prob }) : tr("0% šance")}
-        </span>
-      </div>
+          <span
+            className="mg-daysum-prob"
+            style={prob > 0 ? undefined : { visibility: "hidden" }}
+          >
+            {prob > 0 ? tr("{prob}% šance", { prob }) : tr("0% šance")}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -2284,10 +2443,22 @@ function StatReadout({
           aria-pressed={tab === "temp"}
           title={tr("Zobrazit graf teploty")}
         >
-          <WeatherIcon kind={info.icon} isDay={p.isDay} size={30} />
+          {Number.isFinite(p.weatherCode) ? (
+            <WeatherIcon kind={info.icon} isDay={p.isDay} size={30} />
+          ) : (
+            <span className="mg-stat-missing">?</span>
+          )}
           <div className="mg-stat-v">
-            <strong style={{ color: tempColor(p.temperature) }}>
-              {Math.round(p.temperature)}°
+            <strong
+              style={
+                Number.isFinite(p.temperature)
+                  ? { color: tempColor(p.temperature) }
+                  : undefined
+              }
+            >
+              {Number.isFinite(p.temperature)
+                ? `${Math.round(p.temperature)}°`
+                : "?"}
             </strong>
             <span>
               {tr("teplota")}
@@ -2312,8 +2483,16 @@ function StatReadout({
         >
           <PersonGlyph />
           <div className="mg-stat-v">
-            <strong style={{ color: tempColor(p.apparentTemperature) }}>
-              {Math.round(p.apparentTemperature)}°
+            <strong
+              style={
+                Number.isFinite(p.apparentTemperature)
+                  ? { color: tempColor(p.apparentTemperature) }
+                  : undefined
+              }
+            >
+              {Number.isFinite(p.apparentTemperature)
+                ? `${Math.round(p.apparentTemperature)}°`
+                : "?"}
             </strong>
             <span>
               {tr("pocitově")}
@@ -3002,8 +3181,9 @@ function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
   }
   if (tab === "feels") {
     const feels = points.map((p) => p.apparentTemperature);
-    const lo = Math.min(...feels);
-    const hi = Math.max(...feels);
+    const finite = feels.filter((v) => Number.isFinite(v));
+    const lo = finite.length ? Math.min(...finite) : 0;
+    const hi = finite.length ? Math.max(...finite) : 1;
     const pad = Math.max(0.5, (hi - lo) * 0.06);
     return {
       primary: feels,
@@ -3015,8 +3195,9 @@ function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
     };
   }
   const temps = points.map((p) => p.temperature);
-  const lo = Math.min(...temps);
-  const hi = Math.max(...temps);
+  const finiteTemps = temps.filter((v) => Number.isFinite(v));
+  const lo = finiteTemps.length ? Math.min(...finiteTemps) : 0;
+  const hi = finiteTemps.length ? Math.max(...finiteTemps) : 1;
   // Menší padding = vyšší amplituda (křivka využije víc výšky grafu).
   const pad = Math.max(0.5, (hi - lo) * 0.06);
   return {
@@ -3044,15 +3225,17 @@ function valueLabels(points: HourlyPoint[], values: number[], minGap = 2) {
   };
 
   for (let i = 1; i < n - 1; i++) {
+    if (!Number.isFinite(values[i])) continue;
     if (values[i] > values[i - 1] && values[i] >= values[i + 1])
       cands.push({ i, kind: "max", prio: 3 });
     else if (values[i] < values[i - 1] && values[i] <= values[i + 1])
       cands.push({ i, kind: "min", prio: 3 });
   }
-  cands.push({ i: 0, kind: localKind(0), prio: 2 });
-  cands.push({ i: n - 1, kind: localKind(n - 1), prio: 2 });
+  if (Number.isFinite(values[0])) cands.push({ i: 0, kind: localKind(0), prio: 2 });
+  if (Number.isFinite(values[n - 1]))
+    cands.push({ i: n - 1, kind: localKind(n - 1), prio: 2 });
   points.forEach((p, i) => {
-    if (new Date(p.time).getHours() % 6 === 0)
+    if (Number.isFinite(values[i]) && new Date(p.time).getHours() % 6 === 0)
       cands.push({ i, kind: localKind(i), prio: 1 });
   });
 

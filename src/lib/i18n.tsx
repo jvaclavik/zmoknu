@@ -618,15 +618,29 @@ const EN: Record<string, string> = {
     "None yet. Search for a place and add it with the star.",
   "Odebrat {name}": "Remove {name}",
 
+  "Pro tento den nemá model {model} předpověď – nejde dál než jeho horizont.":
+    "The {model} model has no forecast for this day – it doesn't reach beyond its horizon.",
+  "Přepnout na Automaticky": "Switch to Automatic",
+
   // models
   "Automaticky (nejlepší shoda)": "Automatic (best match)",
-  "ČHMÚ ALADIN (Česko, 1 km)": "ČHMÚ ALADIN (Czechia, 1 km)",
-  "ICON · DWD (Německo)": "ICON · DWD (Germany)",
+  "DWD ICON (Německo)": "DWD ICON (Germany)",
+  "NOAA GFS (USA)": "NOAA GFS (USA)",
+  "Météo-France (ARPEGE/AROME)": "Météo-France (ARPEGE/AROME)",
   "ECMWF IFS (Evropa)": "ECMWF IFS (Europe)",
-  "GFS · NOAA (USA)": "GFS · NOAA (USA)",
-  "Météo-France (AROME/ARPEGE)": "Météo-France (AROME/ARPEGE)",
   "UK Met Office": "UK Met Office",
+  "KMA (Korea)": "KMA (Korea)",
+  "JMA (Japonsko)": "JMA (Japan)",
+  "MeteoSwiss ICON-CH (Švýcarsko)": "MeteoSwiss ICON-CH (Switzerland)",
+  "MET Norway (Norsko)": "MET Norway (Norway)",
   "GEM (Kanada)": "GEM (Canada)",
+  "BOM ACCESS-G (Austrálie)": "BOM ACCESS-G (Australia)",
+  "CMA GRAPES (Čína)": "CMA GRAPES (China)",
+  "KNMI HARMONIE (Nizozemsko)": "KNMI HARMONIE (Netherlands)",
+  "DMI HARMONIE (Dánsko)": "DMI HARMONIE (Denmark)",
+  "ItaliaMeteo ARPAE (Itálie)": "ItaliaMeteo ARPAE (Italy)",
+  "GeoSphere AROME (Rakousko)": "GeoSphere AROME (Austria)",
+  "ČHMÚ ALADIN (Česko, 1 km)": "ČHMÚ ALADIN (Czechia, 1 km)",
 };
 
 // Přeloží text podle aktuálního jazyka. Podporuje {placeholder} náhrady.
