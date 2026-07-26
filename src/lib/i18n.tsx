@@ -507,6 +507,8 @@ const EN: Record<string, string> = {
   "Alternativní předpovědi (modely)": "Alternate predictions (models)",
   "Plocha ukazuje rozpětí světových modelů v danou hodinu. Úzká = shoda, široká = modely se rozcházejí a předpověď je méně jistá.":
     "The area shows the range of global models at each hour. Narrow = agreement, wide = models diverge and the forecast is less certain.",
+  "Svislé úsečky ukazují rozpětí úhrnu srážek napříč modely v danou hodinu. Krátká = modely se shodují, dlouhá = rozcházejí se (někdy déšť, jindy sucho).":
+    "The vertical bars show the range of precipitation totals across models at each hour. Short = models agree, long = they diverge (rain in some, dry in others).",
 
   // airQuality
   Olše: "Alder",

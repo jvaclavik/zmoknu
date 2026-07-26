@@ -66,6 +66,7 @@ const DEFAULT_LOCATION: GeoLocation = {
 
 const STORAGE_KEY = "zmoknu.location";
 const FAV_KEY = "zmoknu.favorites";
+const HISTORY_MAX = 8;
 
 // Lokace z URL (deep-link), např. ?lat=50.08&lon=14.42&name=Praha.
 function locationFromUrl(): GeoLocation | null {
@@ -140,6 +141,18 @@ export default function App() {
   const { lang, setLang } = useLang();
   const [location, setLocation] = useState<GeoLocation>(loadSavedLocation);
   const [favorites, setFavorites] = useState<GeoLocation[]>(loadFavorites);
+  // Historie naposledy vybraných míst (sdílená s vyhledáváním; slouží i k
+  // offline použití – uložená místa jde otevřít bez sítě).
+  const [history, setHistory] = useStoredState<GeoLocation[]>(
+    "zmoknu.searchHistory",
+    [],
+  );
+  // „Sledovat moji polohu": když si uživatel zvolí „Použít moji polohu", zjistíme
+  // ji i při příštím spuštění (dokud si ručně nevybere jiné místo).
+  const [followLocation, setFollowLocation] = useStoredState<boolean>(
+    "zmoknu.followLocation",
+    false,
+  );
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [radar, setRadar] = useState<RadarData | null>(null);
   const [radarStatus, setRadarStatus] = useState<RadarStatus>("loading");
@@ -567,6 +580,7 @@ export default function App() {
       ".mg-view-menu",
       ".dbg-modal",
       ".webcams-scroll",
+      ".dd-daylight-plot",
       "input[type='range']",
     ].join(",");
 
@@ -831,29 +845,73 @@ export default function App() {
     }
   }, [forecast]);
 
-  const handleLocate = useCallback(() => {
-    if (!navigator.geolocation) {
-      setError(tr("Geolokace není v tomto prohlížeči dostupná."));
-      return;
-    }
-    posthog.capture("geolocation_used");
-    setLocating(true);
-    // Modál výběru místa hned zavřeme – poloha se dohledá na pozadí a lokace
-    // se vybere, jakmile ji prohlížeč vrátí.
-    setSearchOpen(false);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const name = await reverseGeocode(latitude, longitude);
-        setLocation({ name, latitude, longitude });
-        setLocating(false);
-      },
-      () => {
-        setError(tr("Polohu se nepodařilo zjistit."));
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+  // Přidá místo na začátek historie (bez duplicit, omezeno na HISTORY_MAX).
+  const pushHistory = useCallback(
+    (loc: GeoLocation) =>
+      setHistory(
+        [loc, ...history.filter((h) => !sameLocation(h, loc))].slice(
+          0,
+          HISTORY_MAX,
+        ),
+      ),
+    [history, setHistory],
+  );
+
+  // Ruční výběr místa (vyhledávání, oblíbené, mapa) → přestaneme sledovat polohu.
+  const selectLocation = useCallback(
+    (loc: GeoLocation) => {
+      setFollowLocation(false);
+      setLocation(loc);
+    },
+    [setFollowLocation],
+  );
+
+  // Zjistí aktuální polohu z prohlížeče. Při ručním spuštění (tlačítko) hlásíme
+  // chyby a logujeme událost; při automatickém (po startu appky) běží tiše.
+  const runGeolocate = useCallback(
+    (opts?: { auto?: boolean }) => {
+      if (!navigator.geolocation) {
+        if (!opts?.auto)
+          setError(tr("Geolokace není v tomto prohlížeči dostupná."));
+        return;
+      }
+      if (!opts?.auto) posthog.capture("geolocation_used");
+      setLocating(true);
+      // Modál výběru místa hned zavřeme – poloha se dohledá na pozadí a lokace
+      // se vybere, jakmile ji prohlížeč vrátí.
+      setSearchOpen(false);
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const name = await reverseGeocode(latitude, longitude);
+          const loc: GeoLocation = { name, latitude, longitude };
+          // Zapamatujeme si volbu i pro příště a místo uložíme do historie
+          // (kvůli offline použití a rychlému opětovnému výběru).
+          setFollowLocation(true);
+          pushHistory(loc);
+          setLocation(loc);
+          setLocating(false);
+        },
+        () => {
+          if (!opts?.auto) setError(tr("Polohu se nepodařilo zjistit."));
+          setLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    },
+    [pushHistory, setFollowLocation],
+  );
+
+  const handleLocate = useCallback(() => runGeolocate(), [runGeolocate]);
+
+  // Po startu appky obnovíme sledování polohy, pokud si ho uživatel zvolil.
+  // Neděláme to, když je lokace určená odkazem (deep-link) – ten má přednost.
+  const autoLocatedRef = useRef(false);
+  useEffect(() => {
+    if (autoLocatedRef.current) return;
+    autoLocatedRef.current = true;
+    if (followLocation && !locationFromUrl()) runGeolocate({ auto: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedDay =
@@ -1202,7 +1260,7 @@ export default function App() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         current={location}
-        onSelect={setLocation}
+        onSelect={selectLocation}
         onLocate={handleLocate}
         locating={locating}
         favorites={favorites}
@@ -1211,6 +1269,9 @@ export default function App() {
         onToggleFavorite={toggleFavoriteFor}
         onRemove={removeFavorite}
         onRename={renameFavorite}
+        history={history}
+        onPushHistory={pushHistory}
+        onClearHistory={() => setHistory([])}
       />
 
       {forecast && (
@@ -1344,7 +1405,7 @@ export default function App() {
             radar={radar}
             radarStatus={radarStatus}
             favorites={favorites}
-            onSelect={setLocation}
+            onSelect={selectLocation}
             modal
             onClose={() => setRadarOpen(false)}
           />

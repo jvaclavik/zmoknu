@@ -25,6 +25,11 @@ function norm(s: string): string {
     .toLowerCase();
 }
 
+// Čas z ISO řetězce v ms (NaN, když je neplatný – takové segmenty neslepujeme).
+function tms(s: string): number {
+  return Date.parse(s);
+}
+
 // Kanonické „tokeny" krajů, kterými párujeme uživatelovu polohu s areaDesc.
 const KRAJ_TOKENS = [
   "praha",
@@ -208,27 +213,66 @@ export default async function handler(
       return;
     }
 
-    const seen = new Set<string>();
-    const alerts: Alert[] = [];
+    // Výstrahy pro daný kraj seskupíme podle jevu (event + úroveň + typ). ČHMÚ
+    // totiž tentýž jev publikuje jako víc <info> bloků (různé ORP nebo denní
+    // segmenty vícedenní výstrahy) s odlišným onset, ale stejným názvem – bez
+    // sloučení by uživatel viděl tutéž výstrahu několikrát.
+    const groups = new Map<string, ParsedInfo[]>();
     for (const info of data.cs) {
       if (!info.areas.some((a) => a.includes(token))) continue;
-      const key = `${info.event}|${info.level}|${info.onset}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const enInfo = data.en.get(`${info.type}|${info.onset}`);
-      alerts.push({
-        event: info.event,
-        eventEn: enInfo?.event ?? info.event,
-        level: info.level,
-        color: COLOR_BY_LEVEL[info.level] ?? "yellow",
-        type: info.type,
-        onset: info.onset,
-        expires: info.expires,
-        description: info.description,
-        descriptionEn: enInfo?.description ?? info.description,
-      });
+      const key = `${info.event}|${info.level}|${info.type}`;
+      const g = groups.get(key);
+      if (g) g.push(info);
+      else groups.set(key, [info]);
     }
-    alerts.sort((a, b) => b.level - a.level);
+
+    const buildAlert = (rep: ParsedInfo, onset: string, expires: string): Alert => {
+      const enInfo = data.en.get(`${rep.type}|${rep.onset}`);
+      return {
+        event: rep.event,
+        eventEn: enInfo?.event ?? rep.event,
+        level: rep.level,
+        color: COLOR_BY_LEVEL[rep.level] ?? "yellow",
+        type: rep.type,
+        onset,
+        expires,
+        description: rep.description,
+        descriptionEn: enInfo?.description ?? rep.description,
+      };
+    };
+
+    // Navazující segmenty (překryv nebo mezera do ~24 h, tj. i přes noc)
+    // považujeme za jednu epizodu; delší mezera = samostatná výstraha.
+    const GAP_MS = 24 * 60 * 60 * 1000;
+    const alerts: Alert[] = [];
+    for (const infos of groups.values()) {
+      infos.sort((a, b) => tms(a.onset) - tms(b.onset));
+      let cur: { rep: ParsedInfo; onset: string; expires: string } | null = null;
+      const flush = () => {
+        if (cur) alerts.push(buildAlert(cur.rep, cur.onset, cur.expires));
+        cur = null;
+      };
+      for (const info of infos) {
+        const on = tms(info.onset);
+        const exp = tms(info.expires);
+        const curExp = cur ? tms(cur.expires) : NaN;
+        const mergeable =
+          cur != null &&
+          Number.isFinite(on) &&
+          Number.isFinite(curExp) &&
+          on <= curExp + GAP_MS;
+        if (cur && mergeable) {
+          if (!Number.isFinite(exp) || exp > curExp) cur.expires = info.expires;
+          // Reprezentanta necháme s popisem, když ho původní neměl.
+          if (!cur.rep.description && info.description) cur.rep = info;
+        } else {
+          flush();
+          cur = { rep: info, onset: info.onset, expires: info.expires };
+        }
+      }
+      flush();
+    }
+    alerts.sort((a, b) => b.level - a.level || tms(a.onset) - tms(b.onset));
     send({ region: subdivision, alerts });
   } catch (err) {
     res.statusCode = 502;

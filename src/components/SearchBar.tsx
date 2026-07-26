@@ -3,13 +3,10 @@ import posthog from "posthog-js";
 import type { GeoLocation } from "../types";
 import { searchLocations, reverseGeocode } from "../lib/openMeteo";
 import { tr } from "../lib/i18n";
-import { useStoredState } from "../lib/useStoredState";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import { sameLocation } from "./FavoritesBar";
 // MapPicker tahá maplibre-gl – načteme ho až při otevření mapy.
 const MapPicker = lazy(() => import("./MapPicker"));
-
-const HISTORY_MAX = 8;
 
 // Rozpozná zadané GPS souřadnice ve formátu „lat, lon" (desetinné stupně),
 // volitelně s příponou N/S/E/W. Vrací null, když to souřadnice nejsou.
@@ -53,6 +50,9 @@ interface Props {
   onToggleFavorite: (loc: GeoLocation) => void;
   onRemove: (loc: GeoLocation) => void;
   onRename: (loc: GeoLocation, name: string) => void;
+  history: GeoLocation[];
+  onPushHistory: (loc: GeoLocation) => void;
+  onClearHistory: () => void;
 }
 
 export default function SearchBar({
@@ -68,6 +68,9 @@ export default function SearchBar({
   onToggleFavorite,
   onRemove,
   onRename,
+  history,
+  onPushHistory,
+  onClearHistory,
 }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoLocation[]>([]);
@@ -76,22 +79,10 @@ export default function SearchBar({
   // Právě přejmenovávané oblíbené místo (klíč lat,lon) + rozepsaný název.
   const [editingFav, setEditingFav] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [history, setHistory] = useStoredState<GeoLocation[]>(
-    "zmoknu.searchHistory",
-    [],
-  );
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   // Klávesová navigace (šipky nahoru/dolů + Enter) v seznamu míst.
   const [activeKey, setActiveKey] = useState<string | null>(null);
-
-  const pushHistory = (loc: GeoLocation) =>
-    setHistory(
-      [loc, ...history.filter((h) => !sameLocation(h, loc))].slice(
-        0,
-        HISTORY_MAX,
-      ),
-    );
 
   const coords = parseCoords(query);
 
@@ -177,7 +168,7 @@ export default function SearchBar({
 
   function pick(loc: GeoLocation) {
     posthog.capture("location_selected", { location_name: loc.name, method: "search" });
-    pushHistory(loc);
+    onPushHistory(loc);
     onSelect(loc);
     onClose();
   }
@@ -192,7 +183,7 @@ export default function SearchBar({
     }
     const loc: GeoLocation = { name, latitude: lat, longitude: lon };
     posthog.capture("location_selected", { location_name: loc.name, method: "coordinates" });
-    pushHistory(loc);
+    onPushHistory(loc);
     onSelect(loc);
     setMapOpen(false);
     onClose();
@@ -455,7 +446,7 @@ export default function SearchBar({
                     <button
                       type="button"
                       className="locpick-clearall"
-                      onClick={() => setHistory([])}
+                      onClick={onClearHistory}
                     >
                       {tr("Vymazat")}
                     </button>

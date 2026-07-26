@@ -350,7 +350,8 @@ export default function Meteogram({
 
   // Pás nejistoty (alternate predictions): stáhni globální modely pro teplotu
   // / pocitovou a z jejich rozptylu vykresli pásmo kolem hlavní čáry.
-  const spreadEnabled = showSpread && (tab === "temp" || tab === "feels");
+  const spreadEnabled =
+    showSpread && (tab === "temp" || tab === "feels" || tab === "precip");
   useEffect(() => {
     if (!spreadEnabled || lat == null || lon == null) {
       setSpreadSeries([]);
@@ -643,6 +644,52 @@ export default function Meteogram({
     return new Set(chosen.map((b) => b.startI));
   }, [precipBars]);
 
+  // Rozptyl srážek napříč modely (zobrazení nejistoty přímo v grafu, jen na
+  // záložce Srážky se zapnutým přepínačem). Pro každou hodinu min/max/medián
+  // úhrnu z modelů (+ hlavní čára). Srážky mají nesymetrické rozdělení, takže
+  // rozptyl ukazujeme jako rozpětí (min–max), ne jako symetrickou odchylku.
+  const precipSpread = useMemo(() => {
+    if (!isPrecip || !spreadEnabled || spreadSeries.length < 2) return null;
+    return points.map((p) => {
+      const vals: number[] = [];
+      for (const ms of spreadSeries) {
+        const v = ms.byTime.get(p.time);
+        if (v != null && Number.isFinite(v)) vals.push(v);
+      }
+      if (Number.isFinite(p.precipitation)) vals.push(p.precipitation);
+      if (vals.length < 2) return null;
+      vals.sort((a, b) => a - b);
+      const half = vals.length / 2;
+      const median =
+        vals.length % 2
+          ? vals[(vals.length - 1) / 2]
+          : (vals[half - 1] + vals[half]) / 2;
+      return { min: vals[0], max: vals[vals.length - 1], median };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrecip, spreadEnabled, spreadSeries, points]);
+
+  const precipSpreadMax = useMemo(() => {
+    if (!precipSpread) return 0;
+    let m = 0;
+    for (const r of precipSpread) if (r) m = Math.max(m, r.max);
+    return m;
+  }, [precipSpread]);
+
+  // Nejvyšší hodinový úhrn napříč porovnávanými modely (jen v tabu srážek),
+  // ať se srážková osa roztáhne i pro čáry modelů a nepřetečou mimo graf.
+  const compareMaxPrecip = useMemo(() => {
+    if (!isPrecip || !modelSeries.length) return 0;
+    let m = 0;
+    for (const p of points) {
+      for (const ms of modelSeries) {
+        const v = ms.byTime.get(p.time);
+        if (v != null && Number.isFinite(v)) m = Math.max(m, v);
+      }
+    }
+    return m;
+  }, [isPrecip, modelSeries, points]);
+
   // Bouřkové úseky (WMO 95/96/99) – zvýrazníme je ve srážkovém grafu,
   // průhlednost pruhu odpovídá pravděpodobnosti srážek v daném úseku.
   const stormBars = useMemo(() => {
@@ -683,29 +730,35 @@ export default function Meteogram({
     return CURVE_BOTTOM - t * (CURVE_BOTTOM - curveTop);
   };
 
-  // U tabu srážek kreslíme sloupce od úplného spodku grafu (víc místa).
+  // U tabu srážek kreslíme sloupce od úplného spodku grafu (víc místa). Když je
+  // zapnutý rozptyl modelů a některý model „vidí" víc srážek než hlavní čára,
+  // roztáhneme měřítko, aby se úsečky nejistoty vešly (sdílené se sloupci).
   const PRECIP_BASELINE = H - 16;
+  const precipPeak = Math.max(precipSpreadMax, compareMaxPrecip);
+  const precipScaleMax =
+    precipPeak > series.max ? niceMax(precipPeak) : series.max;
   const yPrecip = (v: number) =>
-    PRECIP_BASELINE - (v / Math.max(0.001, series.max)) * (PRECIP_BASELINE - TOP_PAD);
+    PRECIP_BASELINE -
+    (v / Math.max(0.001, precipScaleMax)) * (PRECIP_BASELINE - TOP_PAD);
 
   // Vodorovné osové linky pro velký graf srážek (hodnoty v mm).
   const precipTicks = useMemo(() => {
     if (!isPrecip) return [];
-    const max = series.max;
+    const max = precipScaleMax;
     return [0.25, 0.5, 0.75, 1]
       .map((f) => Math.round(max * f * 10) / 10)
       .filter((v, i, arr) => v > 0 && arr.indexOf(v) === i);
-  }, [isPrecip, series.max]);
+  }, [isPrecip, precipScaleMax]);
 
   // Srážky: vodorovné prahové čáry intenzity (mírný / silný déšť).
   const precipThresholds = useMemo(() => {
     if (!isPrecip) return [];
-    return PRECIP_BANDS.filter((b) => b.v < series.max).map((b) => ({
+    return PRECIP_BANDS.filter((b) => b.v < precipScaleMax).map((b) => ({
       ...b,
       y: yPrecip(b.v),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPrecip, series.max]);
+  }, [isPrecip, precipScaleMax]);
 
   // Čára s mezerami: kde chybí data (NaN), pero se zvedne a po datech se
   // začne kreslit znovu (nová „M"). Nekreslíme tedy propad na 0.
@@ -824,6 +877,8 @@ export default function Meteogram({
   // Multimód: čáry jednotlivých modelů pro aktuální veličinu (stejná osa Y).
   const compareLines = useMemo(() => {
     if (!modelSeries.length || !pph || isCloud) return [];
+    // U srážek kreslíme čáry na srážkovou osu (yPrecip), jinak na osu veličiny.
+    const yFn = isPrecip ? yPrecip : yCurve;
     return modelSeries
       .map((ms) => {
         let d = "";
@@ -834,14 +889,14 @@ export default function Meteogram({
             pen = false;
             return;
           }
-          d += `${pen ? "L" : "M"} ${x(i)} ${yCurve(v)} `;
+          d += `${pen ? "L" : "M"} ${x(i)} ${yFn(v)} `;
           pen = true;
         });
         return { model: ms.model, color: modelColor(ms.model), d: d.trim() };
       })
       .filter((l) => l.d);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelSeries, points, pph, isCloud, series]);
+  }, [modelSeries, points, pph, isCloud, series, isPrecip, precipScaleMax]);
 
   // Alternativní předpovědi jako vrstvené percentilové pásy: v každou hodinu
   // seřadíme hodnoty všech modelů (+ hlavní čáru) a vykreslíme několik vnořených
@@ -890,6 +945,29 @@ export default function Meteogram({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spreadEnabled, spreadSeries, points, pph, series]);
+
+  // Rozptyl srážek jako jemný pás (obálka min–max napříč modely), podobně
+  // nenápadný jako plocha nejistoty u teploty. Kde je pás úzký, modely se
+  // shodují; kde se rozšíří, rozcházejí se (někdy déšť, jindy sucho).
+  const precipSpreadArea = useMemo(() => {
+    if (!isPrecip || !precipSpread || !pph) return null;
+    let any = false;
+    const bot: [number, number][] = [];
+    let top = "";
+    points.forEach((p, i) => {
+      const r = precipSpread[i];
+      const maxV = r ? r.max : p.precipitation;
+      const minV = r ? Math.max(0, r.min) : p.precipitation;
+      if (r && r.max - r.min >= 0.05) any = true;
+      top += `${i === 0 ? "M" : "L"} ${x(i)} ${yPrecip(maxV)} `;
+      bot.push([x(i), yPrecip(minV)]);
+    });
+    if (!any) return null;
+    let d = top;
+    for (let i = bot.length - 1; i >= 0; i--) d += `L ${bot[i][0]} ${bot[i][1]} `;
+    return `${d}Z`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrecip, precipSpread, points, pph, precipScaleMax]);
 
   const cloudBands = useMemo(() => {
     if (!isCloud || !pph) return [];
@@ -1231,7 +1309,7 @@ export default function Meteogram({
                 />
                 <span>{tr("Vysvětlivky u typů")}</span>
               </label>
-              {(tab === "temp" || tab === "feels") && (
+              {(tab === "temp" || tab === "feels" || tab === "precip") && (
                 <label className="mg-view-toggle">
                   <input
                     type="checkbox"
@@ -1252,6 +1330,13 @@ export default function Meteogram({
                 <div className="mg-view-hint">
                   {tr(
                     "Plocha ukazuje rozpětí světových modelů v danou hodinu. Úzká = shoda, široká = modely se rozcházejí a předpověď je méně jistá.",
+                  )}
+                </div>
+              )}
+              {tab === "precip" && showSpread && (
+                <div className="mg-view-hint">
+                  {tr(
+                    "Svislé úsečky ukazují rozpětí úhrnu srážek napříč modely v danou hodinu. Krátká = modely se shodují, dlouhá = rozcházejí se (někdy déšť, jindy sucho).",
                   )}
                 </div>
               )}
@@ -1842,6 +1927,12 @@ export default function Meteogram({
                     </text>
                   </g>
                 ))}
+                {/* rozptyl modelů: jemný pás min–max úhrnu pod sloupci
+                    (nenápadný, jako plocha nejistoty u teploty). Úzký = shoda,
+                    široký = modely se rozcházejí. */}
+                {precipSpreadArea && (
+                  <path d={precipSpreadArea} className="mg-precip-spread" />
+                )}
                 {/* bouřkové úseky – svislý pruh s průhledností dle pravděpodobnosti */}
                 {stormBars.map((b) => {
                   const left = x(b.startI) - pph * 0.5;
@@ -1866,6 +1957,21 @@ export default function Meteogram({
                     </g>
                   );
                 })}
+                {/* porovnání modelů: hodinové čáry úhrnu (jako u teploty).
+                    Kreslíme je pod sloupce, ať hlavní modré sloupce zůstanou navrchu. */}
+                {compareLines.map((cl) => (
+                  <path
+                    key={`cmp-p-${cl.model}`}
+                    d={cl.d}
+                    fill="none"
+                    stroke={cl.color}
+                    strokeWidth="1.6"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    strokeDasharray="4 3"
+                    opacity="0.85"
+                  />
+                ))}
                 {/* velké srážkové sloupce – od spodku grafu */}
                 {precipBars.map((b) => {
                   const top = yPrecip(b.value);

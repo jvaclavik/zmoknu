@@ -7,6 +7,18 @@ interface Props {
   lon: number;
 }
 
+// Pojistka proti duplicitám (server by je už měl slučovat): zahodíme výstrahy
+// se shodným jevem, úrovní a časem platnosti, ať se tatáž nezobrazí vícekrát.
+function dedupeAlerts(alerts: ChmiAlert[]): ChmiAlert[] {
+  const seen = new Set<string>();
+  return alerts.filter((a) => {
+    const key = `${a.event}|${a.level}|${a.onset}|${a.expires}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function fmtRange(expires: string): string {
   const en = getLang() === "en";
   const e = new Date(expires);
@@ -30,7 +42,7 @@ export default function WeatherAlerts({ lat, lon }: Props) {
     let cancelled = false;
     setAlerts([]);
     fetchChmiAlerts(lat, lon)
-      .then((a) => !cancelled && setAlerts(a))
+      .then((a) => !cancelled && setAlerts(dedupeAlerts(a)))
       .catch(() => !cancelled && setAlerts([]));
     return () => {
       cancelled = true;

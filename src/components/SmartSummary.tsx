@@ -5,6 +5,7 @@ import { daySummary } from "../lib/summary";
 import { computeNowcast } from "../lib/nowcast";
 import { fetchModelSeries, type ModelSeries } from "../lib/openMeteo";
 import { getLang, tr } from "../lib/i18n";
+import { WEATHER_MODELS } from "../lib/models";
 import { DaySummary } from "./Meteogram";
 import { TIER_COLOR, TIER_LABEL, tempTier } from "../lib/tiers";
 
@@ -20,11 +21,14 @@ interface Props {
   feelsMin?: number;
 }
 
-// Světové modely pro porovnání shody (edukace: shoda = jistota).
-const AGREE_MODELS = ["icon_seamless", "ecmwf_ifs025", "gfs_seamless", "gem_seamless"];
+// Pro shodu porovnáváme všechny modely nabízené v appce (kromě automatického
+// „best_match"). Regionální modely bez dat pro danou lokalitu se samy vynechají.
+const AGREE_MODELS = WEATHER_MODELS.filter((m) => m.id !== "best_match").map(
+  (m) => m.id,
+);
 
 interface Agreement {
-  spread: number; // rozptyl denního maxima mezi modely (°C)
+  spread: number; // typická odchylka denního maxima mezi modely (°C, směr. odch.)
   count: number; // kolik modelů mělo pro den data
   level: "high" | "medium" | "low";
   maxes: number[]; // denní maxima jednotlivých modelů (pro vizualizaci)
@@ -40,8 +44,13 @@ function agreementFor(series: ModelSeries[], date: string): Agreement | null {
     if (m > -Infinity) maxes.push(m);
   }
   if (maxes.length < 2) return null;
-  const spread = Math.max(...maxes) - Math.min(...maxes);
-  const level = spread < 2 ? "high" : spread < 4 ? "medium" : "low";
+  // Směrodatná odchylka je robustní vůči počtu modelů i ojedinělým odlehlým
+  // hodnotám (jeden „ustřelený" model shodu nezboří jako u prostého max−min).
+  const mean = maxes.reduce((s, v) => s + v, 0) / maxes.length;
+  const variance =
+    maxes.reduce((s, v) => s + (v - mean) ** 2, 0) / maxes.length;
+  const spread = Math.sqrt(variance);
+  const level = spread < 1 ? "high" : spread < 2 ? "medium" : "low";
   return { spread, count: maxes.length, level, maxes };
 }
 
@@ -113,8 +122,8 @@ function AgreementChip({ a }: { a: Agreement }) {
         : tr("nízká");
   const spread = a.spread.toFixed(a.spread < 10 ? 1 : 0);
   const explain = en
-    ? `Agreement of ${a.count} global models (ICON, ECMWF, GFS, GEM). When they agree the forecast is more certain; here they differ by ${spread}° in the day's high, so confidence is ${label}.`
-    : `Shoda ${a.count} světových modelů (ICON, ECMWF, GFS, GEM). Když se shodují, je předpověď jistější; tady se v denním maximu liší o ${spread}°, takže jistota je ${label}.`;
+    ? `Agreement across ${a.count} global and regional models. When they agree the forecast is more certain; here the day's highs differ by about ${spread}° on average, so confidence is ${label}.`
+    : `Shoda ${a.count} světových i regionálních modelů. Když se shodují, je předpověď jistější; tady se denní maxima liší typicky o ${spread}°, takže jistota je ${label}.`;
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{

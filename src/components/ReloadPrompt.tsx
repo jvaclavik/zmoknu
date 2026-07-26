@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { tr, useLang } from "../lib/i18n";
 
@@ -7,6 +8,9 @@ const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
 export default function ReloadPrompt() {
   useLang();
+  // „Později" schová jen vyskakovací výzvu (tlačítko v patičce zůstává), aby
+  // uživatel mohl aktualizovat později, až se mu to bude hodit.
+  const [dismissed, setDismissed] = useState(false);
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
@@ -33,13 +37,49 @@ export default function ReloadPrompt() {
   if (!needRefresh) return null;
 
   return (
-    <button
-      type="button"
-      className="footer-update-btn"
-      onClick={() => updateServiceWorker(true)}
-    >
-      <span className="footer-update-dot" aria-hidden="true" />
-      {tr("Aktualizovat aplikaci")}
-    </button>
+    <>
+      {/* Trvalé tlačítko v patičce – zůstane i po zavření vyskakovací výzvy. */}
+      <button
+        type="button"
+        className="footer-update-btn"
+        onClick={() => updateServiceWorker(true)}
+      >
+        <span className="footer-update-dot" aria-hidden="true" />
+        {tr("Aktualizovat aplikaci")}
+      </button>
+
+      {/* Vyskakovací výzva – aktivně upozorní na novou verzi. */}
+      {!dismissed && (
+        <div
+          className="update-prompt"
+          role="dialog"
+          aria-live="polite"
+          aria-label={tr("Je dostupná nová verze aplikace.")}
+        >
+          <div className="update-prompt-body">
+            <span className="update-prompt-dot" aria-hidden="true" />
+            <span className="update-prompt-text">
+              {tr("Je dostupná nová verze aplikace.")}
+            </span>
+          </div>
+          <div className="update-prompt-actions">
+            <button
+              type="button"
+              className="update-prompt-later"
+              onClick={() => setDismissed(true)}
+            >
+              {tr("Později")}
+            </button>
+            <button
+              type="button"
+              className="update-prompt-btn"
+              onClick={() => updateServiceWorker(true)}
+            >
+              {tr("Aktualizovat")}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
