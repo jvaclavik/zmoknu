@@ -1,5 +1,6 @@
 import type { DailyPoint, HourlyPoint } from "../types";
 import { describeWeather } from "./weatherCodes";
+import { locDate } from "./format";
 import { getLang } from "./i18n";
 
 // Přehledná věta o počasí vybraného dne, složená z dat (bez API). Cíl: na první
@@ -109,7 +110,7 @@ export function daySummary(
     const t = precipType(h.weatherCode);
     if (wet && t) {
       anyPrecip = true;
-      const p = partOfDay(new Date(h.time).getHours());
+      const p = partOfDay(locDate(h.time).getHours());
       const cur = wetParts.get(p);
       if (!cur) wetParts.set(p, { count: 1, type: t });
       else cur.count += 1;
@@ -161,7 +162,7 @@ export function daySummary(
   const fogMorning = rows.some(
     (h) =>
       [45, 48].includes(h.weatherCode) &&
-      partOfDay(new Date(h.time).getHours()) === "morning",
+      partOfDay(locDate(h.time).getHours()) === "morning",
   );
   if (gust >= 17 || wind >= 12) {
     extra = en

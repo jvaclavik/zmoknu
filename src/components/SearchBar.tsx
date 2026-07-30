@@ -107,10 +107,13 @@ export default function SearchBar({
     return () => clearTimeout(t);
   }, [query]);
 
-  // Po otevření panelu rovnou zaměříme input a vyčistíme starý dotaz.
+  // Po otevření panelu zaměříme input a vyčistíme starý dotaz. Na dotykových
+  // zařízeních fokus vynecháme, ať hned nevyskočí klávesnice – na desktopu ho
+  // ponecháme pro rychlé psaní.
   useEffect(() => {
     if (open) {
-      inputRef.current?.focus();
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+      if (!coarse) inputRef.current?.focus();
     } else {
       setQuery("");
       setResults([]);

@@ -1,5 +1,33 @@
 import { getLang } from "./i18n";
 
+// --- Časová zóna lokality ---------------------------------------------------
+// Open-Meteo vrací „naivní" lokální časy lokality bez offsetu (např.
+// "2026-07-30T14:00"). Aby se zobrazovaly ve správné zóně lokality nezávisle na
+// zóně zařízení, přeparsujeme řetězec jako UTC (tím z něj uděláme přesně ten
+// nástěnný čas) a posuneme o offset zařízení. Výsledný Date pak přes běžné
+// .getHours()/.getDate()/… vrací nástěnný čas lokality. Relativní porovnání dvou
+// takto vzniklých Date (i s `zonedNow`) sedí – oba mají stejný posun zařízení.
+function parseNaiveAsUtcMs(iso: string): number {
+  if (!iso.includes("T")) return Date.parse(`${iso}T12:00:00Z`); // jen datum
+  return Date.parse(iso.length <= 16 ? `${iso}:00Z` : `${iso}Z`);
+}
+
+export function locDate(iso: string): Date {
+  const utcMs = parseNaiveAsUtcMs(iso);
+  if (Number.isNaN(utcMs)) return new Date(iso);
+  const tzMin = new Date(utcMs).getTimezoneOffset();
+  return new Date(utcMs + tzMin * 60000);
+}
+
+// Aktuální „nástěnný" čas v zóně lokality. Bez offsetu (např. starší offline
+// data) spadneme na zónu zařízení – tedy původní chování.
+export function zonedNow(offsetSec?: number): Date {
+  if (offsetSec == null) return new Date();
+  const wallUtcMs = Date.now() + offsetSec * 1000;
+  const tzMin = new Date(wallUtcMs).getTimezoneOffset();
+  return new Date(wallUtcMs + tzMin * 60000);
+}
+
 const DAY_NAMES_CS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const DAY_NAMES_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_LONG_CS = [
@@ -29,24 +57,24 @@ function dayLong() {
 }
 
 export function shortDay(iso: string): string {
-  return dayNames()[new Date(iso).getDay()];
+  return dayNames()[locDate(iso).getDay()];
 }
 
 export function longDay(iso: string): string {
-  return dayLong()[new Date(iso).getDay()];
+  return dayLong()[locDate(iso).getDay()];
 }
 
 export function dayAndDate(iso: string): string {
-  const d = new Date(iso);
+  const d = locDate(iso);
   return `${dayLong()[d.getDay()]} ${d.getDate()}. ${d.getMonth() + 1}.`;
 }
 
-export function dayHeader(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const tomorrow = new Date();
+export function dayHeader(iso: string, offsetSec?: number): string {
+  const d = locDate(iso);
+  const today = zonedNow(offsetSec);
+  const tomorrow = zonedNow(offsetSec);
   tomorrow.setDate(today.getDate() + 1);
-  const yesterday = new Date();
+  const yesterday = zonedNow(offsetSec);
   yesterday.setDate(today.getDate() - 1);
   const en = getLang() === "en";
   if (isSameDay(d, today)) return en ? "Today" : "Dnes";
@@ -65,12 +93,12 @@ export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export function todayISO(): string {
-  return isoDate(new Date());
+export function todayISO(offsetSec?: number): string {
+  return isoDate(zonedNow(offsetSec));
 }
 
 export function hourLabel(iso: string): string {
-  const d = new Date(iso);
+  const d = locDate(iso);
   return `${d.getHours()}:00`;
 }
 

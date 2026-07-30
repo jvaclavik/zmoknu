@@ -1,6 +1,6 @@
 import type { Minutely15 } from "../types";
 import { getLang } from "./i18n";
-import { clockTime } from "./format";
+import { clockTime, locDate, zonedNow } from "./format";
 
 // Krátkodobá předpověď srážek („za 20 min začne pršet") z 15min dat Open-Meteo.
 // Není to radar – jde o modelovou předpověď, ale s 15min krokem funguje dobře
@@ -24,9 +24,14 @@ function rel(fromMs: number, toMs: number): string {
     : `kolem ${clockTime(new Date(toMs))}`;
 }
 
-export function computeNowcast(m: Minutely15 | undefined, now = Date.now()): Nowcast | null {
+export function computeNowcast(
+  m: Minutely15 | undefined,
+  offsetSec?: number,
+  now = zonedNow(offsetSec).getTime(),
+): Nowcast | null {
   if (!m || !m.time.length) return null;
-  const times = m.time.map((t) => new Date(t).getTime());
+  // Časy i „teď" jsou ve stejném (lokalitním) posunu, takže rozdíly sedí.
+  const times = m.time.map((t) => locDate(t).getTime());
   const p = m.precipitation;
 
   // Aktuální slot = poslední, jehož čas už začal.

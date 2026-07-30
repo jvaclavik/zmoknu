@@ -1,5 +1,6 @@
 import type { Forecast } from "../types";
 import { describeWeather } from "./weatherCodes";
+import { locDate, zonedNow } from "./format";
 import { tr } from "./i18n";
 
 // Lokální (klientská) upozornění na počasí. Fungují, dokud je aplikace otevřená
@@ -201,11 +202,12 @@ function hourLabel(iso: string): string {
   return iso.length >= 16 ? iso.slice(11, 16) : iso;
 }
 
-// Hodinové body v okně [teď−1 h, teď + hours].
+// Hodinové body v okně [teď−1 h, teď + hours]. „Teď" i časy bodů jsou ve stejném
+// (lokalitním) posunu, takže porovnání sedí nezávisle na zóně zařízení.
 function upcomingHours(fc: Forecast, hours: number, now: number) {
   const end = now + hours * 3600e3;
   return fc.hourly.filter((h) => {
-    const t = new Date(h.time).getTime();
+    const t = locDate(h.time).getTime();
     return t >= now - 3600e3 && t <= end;
   });
 }
@@ -235,7 +237,7 @@ function evalOne(
       const mm = fc.minutely15;
       if (mm) {
         for (let i = 0; i < mm.time.length; i++) {
-          const t = new Date(mm.time[i]).getTime();
+          const t = locDate(mm.time[i]).getTime();
           if (t < now) continue;
           if (t > now + rule.withinHours * 3600e3) break;
           if (mm.precipitation[i] * 4 >= rate) {
@@ -254,7 +256,7 @@ function evalOne(
       // Hodinové srážky jsou přímo v mm/h.
       const h = hrs.find(
         (p) =>
-          new Date(p.time).getTime() >= now &&
+          locDate(p.time).getTime() >= now &&
           p.precipitation >= rate &&
           p.precipitationProbability >= 40,
       );
@@ -281,7 +283,7 @@ function evalOne(
         };
       const h = hrs.find(
         (p) =>
-          new Date(p.time).getTime() >= now && p.temperature <= rule.threshold,
+          locDate(p.time).getTime() >= now && p.temperature <= rule.threshold,
       );
       if (h)
         return {
@@ -307,7 +309,7 @@ function evalOne(
         };
       const h = hrs.find(
         (p) =>
-          new Date(p.time).getTime() >= now && p.temperature >= rule.threshold,
+          locDate(p.time).getTime() >= now && p.temperature >= rule.threshold,
       );
       if (h)
         return {
@@ -333,7 +335,7 @@ function evalOne(
         };
       const h = hrs.find(
         (p) =>
-          new Date(p.time).getTime() >= now && p.windGusts >= rule.threshold,
+          locDate(p.time).getTime() >= now && p.windGusts >= rule.threshold,
       );
       if (h)
         return {
@@ -355,7 +357,7 @@ function evalOne(
           body: tr("Právě sněží – {loc}", { loc }),
         };
       const h = hrs.find(
-        (p) => new Date(p.time).getTime() >= now && isSnow(p.weatherCode),
+        (p) => locDate(p.time).getTime() >= now && isSnow(p.weatherCode),
       );
       if (h)
         return {
@@ -375,7 +377,7 @@ export function evaluateRules(
   fc: Forecast,
   rules: AlertRule[],
   loc: string,
-  now = Date.now(),
+  now = zonedNow(fc.utcOffsetSeconds).getTime(),
 ): AlertHit[] {
   const hits: AlertHit[] = [];
   for (const r of rules) {
@@ -418,19 +420,21 @@ export async function showAlert(title: string, body: string): Promise<void> {
 export async function runAlertChecks(
   fc: Forecast,
   loc: string,
-  now = Date.now(),
 ): Promise<void> {
   if (notifyPermission() !== "granted") return;
   const rules = loadRules();
   if (!rules.some((r) => r.enabled)) return;
-  const hits = evaluateRules(fc, rules, loc, now);
+  // Vyhodnocení proti předpovědi běží v čase lokality (výchozí v evaluateRules),
+  // ale cooldown/„naposledy odpáleno" držíme na reálném čase zařízení.
+  const hits = evaluateRules(fc, rules, loc);
   if (!hits.length) return;
+  const realNow = Date.now();
   const fired = loadFired();
   let changed = false;
   for (const h of hits) {
-    if (now - (fired[h.ruleId] ?? 0) < COOLDOWN_MS) continue;
+    if (realNow - (fired[h.ruleId] ?? 0) < COOLDOWN_MS) continue;
     await showAlert(h.title, h.body);
-    fired[h.ruleId] = now;
+    fired[h.ruleId] = realNow;
     changed = true;
   }
   if (changed) saveFired(fired);

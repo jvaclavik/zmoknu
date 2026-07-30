@@ -288,6 +288,7 @@ export async function fetchForecast(
 
   const result: Forecast = {
     timezone: data.timezone,
+    utcOffsetSeconds: Number(data.utc_offset_seconds) || 0,
     minutely15,
     current: {
       time: String(c.time),

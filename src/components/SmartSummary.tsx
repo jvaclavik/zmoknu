@@ -17,6 +17,7 @@ interface Props {
   minutely?: Minutely15;
   lat: number;
   lon: number;
+  utcOffset?: number;
   feelsMax?: number;
   feelsMin?: number;
 }
@@ -62,11 +63,12 @@ export default function SmartSummary({
   minutely,
   lat,
   lon,
+  utcOffset,
   feelsMax,
   feelsMin,
 }: Props) {
   const text = daySummary(day, hourly, date);
-  const nowcast = isToday ? computeNowcast(minutely) : null;
+  const nowcast = isToday ? computeNowcast(minutely, utcOffset) : null;
 
   const [series, setSeries] = useState<ModelSeries[] | null>(null);
   useEffect(() => {

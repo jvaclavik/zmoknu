@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import type { DailyPoint, HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
 import { tr, getLang } from "../lib/i18n";
-import { dayHeader } from "../lib/format";
+import { dayHeader, locDate, zonedNow } from "../lib/format";
 import { useStoredState } from "../lib/useStoredState";
 import { tempColor } from "../lib/tempColor";
 import { isLightPalette } from "../lib/themeState";
@@ -32,6 +32,7 @@ interface Props {
   lon?: number;
   model?: string;
   theme?: "light" | "dark";
+  utcOffset?: number;
 }
 
 // Mapování tabu na hodinovou proměnnou Open-Meteo (pro multimód).
@@ -175,6 +176,7 @@ export default function Meteogram({
   lon,
   model = "best_match",
   theme = "dark",
+  utcOffset,
 }: Props) {
   const [tab, setTab] = useStoredState<Tab>("zmoknu.mgTab", "temp");
   const [compareModels, setCompareModels] = useStoredState<string[]>(
@@ -228,15 +230,20 @@ export default function Meteogram({
   const togglePin = (t: Tab) =>
     setPinned({ ...pinned, [t]: !pinned[t] });
 
-  // Menu vykreslujeme přes portál mimo kartu (karta má overflow:hidden a
-  // ořízla by ho). Pozici odvodíme z tlačítka a přepočítáme při scrollu/resize.
-  useEffect(() => {
-    if (!viewOpen) return;
+  // Menu vykreslujeme přes portál mimo kartu (karta má overflow:hidden a ořízla
+  // by ho). Pozici počítáme synchronně (useLayoutEffect) ještě před vykreslením,
+  // ať menu nikdy neproblikne na staré/mimo-obrazovkové pozici. Při zavření
+  // pozici vynulujeme, takže se při dalším otevření spočítá vždy načisto.
+  useLayoutEffect(() => {
+    if (!viewOpen) {
+      setMenuPos(null);
+      return;
+    }
     const place = () => {
       const b = viewBtnRef.current;
       if (!b) return;
       const r = b.getBoundingClientRect();
-      const right = window.innerWidth - r.right;
+      const right = Math.max(8, window.innerWidth - r.right);
       const gap = 6;
       const margin = 8;
       const below = window.innerHeight - r.bottom - margin - gap;
@@ -244,13 +251,11 @@ export default function Meteogram({
       // Otevři dolů, pokud je tam víc místa; jinak nad tlačítko. Výšku vždy ořízni
       // dostupným prostorem (obsah se pak scrolluje) – ať menu nepřeteče z okna.
       if (below >= above) {
-        setMenuPos({ top: r.bottom + gap, right, maxH: Math.min(below, 560) });
+        const maxH = Math.min(Math.max(below, 120), 560);
+        setMenuPos({ top: r.bottom + gap, right, maxH });
       } else {
-        setMenuPos({
-          bottom: window.innerHeight - r.top + gap,
-          right,
-          maxH: Math.min(above, 560),
-        });
+        const maxH = Math.min(Math.max(above, 120), 560);
+        setMenuPos({ bottom: window.innerHeight - r.top + gap, right, maxH });
       }
     };
     place();
@@ -262,17 +267,19 @@ export default function Meteogram({
     };
   }, [viewOpen]);
 
-  // Zavření dropdownu při kliknutí mimo (tlačítko i portálové menu).
+  // Zavření dropdownu při kliknutí/ťuknutí mimo. Klik na samotné tlačítko řeší
+  // jeho onClick (toggle), proto ho tu explicitně ignorujeme – jinak by se menu
+  // stihlo zavřít a hned zase otevřít (nebo naopak) a stav by se rozešel.
   useEffect(() => {
     if (!viewOpen) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (viewRef.current?.contains(t)) return;
+      if (viewBtnRef.current?.contains(t)) return;
       if (viewMenuRef.current?.contains(t)) return;
       setViewOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [viewOpen]);
 
   // Změř šířku plochy grafu (bez scrollu se vše vejde na tuto šířku).
@@ -287,7 +294,7 @@ export default function Meteogram({
     return () => ro.disconnect();
   }, []);
 
-  const todayStr = isoLocal(new Date());
+  const todayStr = isoLocal(zonedNow(utcOffset));
 
   // Počet zobrazených dní volí uživatel (1–7) v nabídce zobrazení dat nebo
   // pinch gestem nad grafem.
@@ -297,7 +304,7 @@ export default function Meteogram({
   const points = useMemo(() => {
     const base = activeDate || todayStr;
     let start = hourly.findIndex(
-      (h) => h.time.slice(0, 10) === base && new Date(h.time).getHours() === 0,
+      (h) => h.time.slice(0, 10) === base && locDate(h.time).getHours() === 0,
     );
     if (start === -1) start = hourly.findIndex((h) => h.time.slice(0, 10) >= base);
     if (start === -1) start = 0;
@@ -411,39 +418,45 @@ export default function Meteogram({
   );
   const allCompared = compareIds.every((id) => compareModels.includes(id));
 
+  // „Teď" počítáme v zóně lokality: časy bodů (locDate) i aktuální čas
+  // (zonedNow) mají stejný posun zařízení, takže porovnání sedí i v cizí zóně.
+  // Tik jednou za minutu posouvá značku i při dlouho otevřené appce.
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   // Index "teď" – jen když je aktuální čas uvnitř okna.
   const nowIndex = useMemo(() => {
     if (!points.length) return -1;
-    const now = Date.now();
-    const first = new Date(points[0].time).getTime();
-    const last = new Date(points[points.length - 1].time).getTime();
+    const now = zonedNow(utcOffset).getTime();
+    const first = locDate(points[0].time).getTime();
+    const last = locDate(points[points.length - 1].time).getTime();
     if (now < first - 1_800_000 || now > last + 1_800_000) return -1;
     let best = 0;
     let bestDiff = Infinity;
     points.forEach((p, i) => {
-      const diff = Math.abs(new Date(p.time).getTime() - now);
+      const diff = Math.abs(locDate(p.time).getTime() - now);
       if (diff < bestDiff) {
         bestDiff = diff;
         best = i;
       }
     });
     return best;
-  }, [points]);
+  }, [points, utcOffset, nowTick]);
 
   // Spojitá X pozice "teď" (posouvá se podle času, ne skokově po hodinách).
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
   const nowX = useMemo(() => {
     if (!points.length || !pph) return -1;
-    const first = new Date(points[0].time).getTime();
-    const last = new Date(points[points.length - 1].time).getTime();
-    if (nowMs < first - 1_800_000 || nowMs > last + 1_800_000) return -1;
-    const fi = (nowMs - first) / 3_600_000;
+    const now = zonedNow(utcOffset).getTime();
+    const first = locDate(points[0].time).getTime();
+    const last = locDate(points[points.length - 1].time).getTime();
+    if (now < first - 1_800_000 || now > last + 1_800_000) return -1;
+    const fi = (now - first) / 3_600_000;
     return x(fi);
-  }, [points, pph, nowMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, pph, utcOffset, nowTick]);
 
   const [cursor, setCursor] = useState(0);
   useEffect(() => {
@@ -540,7 +553,7 @@ export default function Meteogram({
         bands.push({
           startI,
           endI: i - 1,
-          date: new Date(points[i - 1].time),
+          date: locDate(points[i - 1].time),
           dateStr: prevStr,
         });
         startI = i;
@@ -1219,7 +1232,7 @@ export default function Meteogram({
             Meteogram
           </h2>
           <span className="mg-head-when">
-            {cursorDayTimeLabel(active.time)}
+            {cursorDayTimeLabel(active.time, utcOffset)}
           </span>
         </div>
         <div className="mg-dataview" ref={viewRef}>
@@ -1235,6 +1248,7 @@ export default function Meteogram({
             <EyeGlyph />
           </button>
           {viewOpen &&
+            menuPos &&
             createPortal(
               <div
                 ref={viewMenuRef}
@@ -1242,11 +1256,11 @@ export default function Meteogram({
                 role="menu"
                 style={{
                   position: "fixed",
-                  right: menuPos?.right ?? 0,
-                  ...(menuPos?.bottom != null
+                  right: menuPos.right,
+                  ...(menuPos.bottom != null
                     ? { bottom: menuPos.bottom }
-                    : { top: menuPos?.top ?? 0 }),
-                  maxHeight: menuPos?.maxH,
+                    : { top: menuPos.top ?? 0 }),
+                  maxHeight: menuPos.maxH,
                 }}
               >
               <div className="mg-view-days">
@@ -1634,7 +1648,7 @@ export default function Meteogram({
         <div className="mg-icons">
           {pph > 0 &&
             points.map((p, i) => {
-              const hr = new Date(p.time).getHours();
+              const hr = locDate(p.time).getHours();
               if (hr % iconStep !== 0) return null;
               const slot = hr / iconStep;
               return (
@@ -1776,7 +1790,7 @@ export default function Meteogram({
           {/* hodinové popisky u 0 a 12; čára jen u 0 */}
           {pph > 0 &&
             points.map((p, i) => {
-              const d = new Date(p.time);
+              const d = locDate(p.time);
               const h = d.getHours();
               if (h === 0 || h === 12) {
                 return (
@@ -1858,6 +1872,31 @@ export default function Meteogram({
                 </text>
               ));
             })()}
+
+          {/* bouřkové úseky i mimo srážkový tab (např. v teplotě) – jemný svislý
+              pruh přes celý graf a ikona blesku nahoře. Kreslíme před křivkou,
+              ať křivka zůstane čitelná navrchu. */}
+          {pph > 0 &&
+            !isPrecip &&
+            stormBars.map((b) => {
+              const left = x(b.startI) - pph * 0.5;
+              const right = x(b.endI) + pph * 0.5;
+              const op = 0.09 + 0.2 * (Math.max(0, b.prob) / 100);
+              const cx = (left + right) / 2;
+              return (
+                <g key={`storm-nt-${b.startI}`}>
+                  <rect
+                    x={left}
+                    y={TOP_PAD}
+                    width={Math.max(0, right - left)}
+                    height={CURVE_BOTTOM - TOP_PAD}
+                    fill="rgba(168,120,255,1)"
+                    opacity={op}
+                  />
+                  <StormBolt x={cx} y={TOP_PAD + 9} hail={b.hail} />
+                </g>
+              );
+            })}
 
           {isCloud ? (
             <>
@@ -3181,6 +3220,18 @@ interface SeriesConfig {
   fmt: (v: number) => string;
 }
 
+// Přepočet hodinových „preceding-hour" průměrů (interval [t−1 h, t], střed
+// t−30 min) na odhad okamžité hodnoty v čase značky t: lineární interpolace
+// mezi středy sousedních intervalů vyjde jako průměr této a následující hodiny.
+// U posledního bodu okna (chybí následující) necháme syrovou hodnotu.
+function recenterMeanToInstant(arr: number[]): number[] {
+  return arr.map((v, i) => {
+    if (!Number.isFinite(v)) return v;
+    const next = arr[i + 1];
+    return Number.isFinite(next) ? (v + next) / 2 : v;
+  });
+}
+
 function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
   if (tab === "precip") {
     const precip = points.map((p) => p.precipitation);
@@ -3265,12 +3316,23 @@ function buildSeries(tab: Tab, points: HourlyPoint[]): SeriesConfig {
     };
   }
   if (tab === "uv") {
-    const uv = points.map((p) => (Number.isFinite(p.uvIndex) ? p.uvIndex : 0));
+    // Open-Meteo dává hodinové UV jako průměr za PŘEDCHOZÍ hodinu (potvrzeno
+    // autorem API i porovnáním se shortwave_radiation), tj. hodnota u značky t
+    // reprezentuje interval [t−1 h, t] se středem v t−30 min. Kdybychom kreslili
+    // syrovou hodnotu na značku t, celá křivka by se posunula ~30–60 min doprava
+    // a vrchol by neseděl na solární poledne. Přepočítáme proto průměry na odhad
+    // okamžité hodnoty přímo v čase značky (lineární interpolace mezi středy
+    // sousedních intervalů = průměr této a následující hodiny).
+    const uvRaw = points.map((p) =>
+      Number.isFinite(p.uvIndex) ? p.uvIndex : 0,
+    );
+    const clearRaw = points.map((p, i) =>
+      Number.isFinite(p.uvIndexClearSky) ? p.uvIndexClearSky : uvRaw[i],
+    );
+    const uv = recenterMeanToInstant(uvRaw);
     // UV bez oblačnosti (clear-sky) jako referenční čára – rozdíl vůči reálnému
     // UV ukazuje, kolik ubraly mraky. Když chybí, spadneme na reálné UV.
-    const clear = points.map((p, i) =>
-      Number.isFinite(p.uvIndexClearSky) ? p.uvIndexClearSky : uv[i],
-    );
+    const clear = recenterMeanToInstant(clearRaw);
     const hi = Math.max(0, ...uv, ...clear);
     // UV má smysl od 0; horní hranici držíme aspoň na 3, ať malé hodnoty nejsou
     // přehnaně zvětšené (a osa odpovídá běžné UV škále).
@@ -3341,7 +3403,7 @@ function valueLabels(points: HourlyPoint[], values: number[], minGap = 2) {
   if (Number.isFinite(values[n - 1]))
     cands.push({ i: n - 1, kind: localKind(n - 1), prio: 2 });
   points.forEach((p, i) => {
-    if (Number.isFinite(values[i]) && new Date(p.time).getHours() % 6 === 0)
+    if (Number.isFinite(values[i]) && locDate(p.time).getHours() % 6 === 0)
       cands.push({ i, kind: localKind(i), prio: 1 });
   });
 
@@ -3459,18 +3521,18 @@ function ptDist(a: { x: number; y: number }, b: { x: number; y: number }) {
 }
 
 function cursorTimeLabel(iso: string): string {
-  const d = new Date(iso);
+  const d = locDate(iso);
   return `${dayShort()[d.getDay()]}, ${d.getHours()}:00`;
 }
 
 // Popisek dne + hodiny pro nadpis meteogramu (Dnes/Zítra/Včera + čas).
-function cursorDayTimeLabel(iso: string): string {
-  const d = new Date(iso);
-  return `${dayHeader(iso)} ${d.getHours()}:00`;
+function cursorDayTimeLabel(iso: string, offsetSec?: number): string {
+  const d = locDate(iso);
+  return `${dayHeader(iso, offsetSec)} ${d.getHours()}:00`;
 }
 
 function dayShortLabel(date: string): string {
-  const d = new Date(date + "T12:00:00");
+  const d = locDate(date);
   return `${dayShort()[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
 }
 

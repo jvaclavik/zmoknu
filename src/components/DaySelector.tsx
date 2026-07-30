@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import type { DailyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
-import { isSameDay, shortDay } from "../lib/format";
+import { isSameDay, locDate, shortDay, zonedNow } from "../lib/format";
 import { tr } from "../lib/i18n";
 import { tierColor, tempTier } from "../lib/tiers";
 import WeatherIcon from "./WeatherIcon";
@@ -13,14 +13,15 @@ interface Props {
   onSelect: (date: string) => void;
   onLoadPast?: () => void;
   canLoadPast?: boolean;
+  utcOffset?: number;
 }
 
-function label(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const tomorrow = new Date();
+function label(iso: string, offsetSec?: number): string {
+  const d = locDate(iso);
+  const today = zonedNow(offsetSec);
+  const tomorrow = zonedNow(offsetSec);
   tomorrow.setDate(today.getDate() + 1);
-  const yesterday = new Date();
+  const yesterday = zonedNow(offsetSec);
   yesterday.setDate(today.getDate() - 1);
   if (isSameDay(d, today)) return tr("Dnes");
   if (isSameDay(d, tomorrow)) return tr("Zítra");
@@ -34,6 +35,7 @@ export default function DaySelector({
   onSelect,
   onLoadPast,
   canLoadPast = false,
+  utcOffset,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const didInit = useRef(false);
@@ -90,9 +92,9 @@ export default function DaySelector({
         )}
         {days.map((d) => {
           const info = describeWeather(d.weatherCode);
-          const date = new Date(d.time);
+          const date = locDate(d.time);
           const active = d.time === selected;
-          const today = isSameDay(date, new Date());
+          const today = isSameDay(date, zonedNow(utcOffset));
           // Den bez dat (model mimo horizont): „?" místo teplot a ikony.
           const noData = !Number.isFinite(d.weatherCode);
           const style = {
@@ -105,7 +107,7 @@ export default function DaySelector({
               style={style}
               onClick={() => onSelect(d.time)}
             >
-              <span className="ds-label">{label(d.time)}</span>
+              <span className="ds-label">{label(d.time, utcOffset)}</span>
               <span className="ds-date">
                 {date.getDate()}.{date.getMonth() + 1}.
               </span>

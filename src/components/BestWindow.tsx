@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
+import { locDate } from "../lib/format";
 import { tr } from "../lib/i18n";
 import WeatherIcon from "./WeatherIcon";
 
@@ -33,15 +34,15 @@ export default function BestWindow({ hourly, date }: Props) {
   const result = useMemo(() => {
     const day = hourly.filter((h) => {
       if (h.time.slice(0, 10) !== date) return false;
-      const hr = new Date(h.time).getHours();
+      const hr = locDate(h.time).getHours();
       return hr >= 7 && hr <= 21;
     });
     if (day.length < 3) return null;
     const win = findWindow(day);
     if (!win) return { ok: false as const };
     const slice = day.slice(win.start, win.end + 1);
-    const startH = new Date(slice[0].time).getHours();
-    const endH = new Date(slice[slice.length - 1].time).getHours();
+    const startH = locDate(slice[0].time).getHours();
+    const endH = locDate(slice[slice.length - 1].time).getHours();
     // Reprezentativní počasí = prostřední hodina okna.
     const mid = slice[Math.floor(slice.length / 2)];
     return {

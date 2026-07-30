@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
-import { dateKey, dayHeader, hourLabel, isoDate } from "../lib/format";
+import {
+  dateKey,
+  dayHeader,
+  hourLabel,
+  isoDate,
+  locDate,
+  zonedNow,
+} from "../lib/format";
 import { tempColor } from "../lib/tempColor";
 import { tr } from "../lib/i18n";
 import { useStoredState } from "../lib/useStoredState";
@@ -10,6 +17,7 @@ import WeatherIcon from "./WeatherIcon";
 interface Props {
   hourly: HourlyPoint[];
   activeDate?: string;
+  utcOffset?: number;
   onSelectDay?: (date: string) => void;
 }
 
@@ -60,14 +68,19 @@ function pickRep(pts: HourlyPoint[]): HourlyPoint {
 // Kolik dní výhledu ukázat, než uživatel klikne na „Načíst další dny".
 const DAY_LIMIT = 7;
 
-export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Props) {
+export default function HourlyForecast({
+  hourly,
+  activeDate,
+  utcOffset,
+  onSelectDay,
+}: Props) {
   const [step, setStep] = useStoredState<1 | 6 | 24>("zmoknu.outlookStep", 6);
   const [expanded, setExpanded] = useState(false);
 
   const rows = useMemo<Row[]>(() => {
     // Výchozí start = dnešek. Včerejšek (a starší) ukážeme jen tehdy, když je
     // vybrán den v minulosti – při vybraném dnešku už včerejšek nezobrazujeme.
-    const todayStr = isoDate(new Date());
+    const todayStr = isoDate(zonedNow(utcOffset));
     const base = activeDate && activeDate < todayStr ? activeDate : todayStr;
     let startIdx = hourly.findIndex((h) => h.time.slice(0, 10) >= base);
     if (startIdx === -1) startIdx = 0;
@@ -96,7 +109,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
     const order: string[] = [];
     for (const p of slice) {
       const dateStr = p.time.slice(0, 10);
-      const hour = new Date(p.time).getHours();
+      const hour = locDate(p.time).getHours();
       const key = step === 24 ? dateStr : `${dateStr}-${Math.floor(hour / 6)}`;
       let arr = buckets.get(key);
       if (!arr) {
@@ -109,8 +122,8 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
 
     return order.map((key) => {
       const pts = buckets.get(key)!;
-      const firstH = new Date(pts[0].time).getHours();
-      const lastH = new Date(pts[pts.length - 1].time).getHours();
+      const firstH = locDate(pts[0].time).getHours();
+      const lastH = locDate(pts[pts.length - 1].time).getHours();
       const precipitation = pts.reduce((s, p) => s + p.precipitation, 0);
       const precipitationProbability = Math.max(
         ...pts.map((p) => p.precipitationProbability),
@@ -136,7 +149,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
         icons = [];
         for (let s = 0; s < 4; s++) {
           const seg = pts.filter((p) => {
-            const h = new Date(p.time).getHours();
+            const h = locDate(p.time).getHours();
             return h >= s * 6 && h < s * 6 + 6;
           });
           if (seg.length) {
@@ -148,7 +161,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
 
       const end = Math.min(24, lastH + 1);
       const timeLabel =
-        step === 24 ? dayHeader(pts[0].time) : `${firstH}–${end}`;
+        step === 24 ? dayHeader(pts[0].time, utcOffset) : `${firstH}–${end}`;
 
       return {
         key,
@@ -166,7 +179,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
         windDirection: windPt.windDirection,
       };
     });
-  }, [hourly, step, activeDate]);
+  }, [hourly, step, activeDate, utcOffset]);
 
   // Výhled omezíme na prvních DAY_LIMIT kalendářních dní; zbytek se dozobrazí
   // až po kliknutí na „Načíst další dny".
@@ -195,18 +208,17 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
 
   const shownRows = expanded ? rows : limitedRows;
 
-  // Aktuální čas – přepočítá se jednou za minutu, aby se „teď" posunulo
-  // i při dlouho otevřené aplikaci.
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // „Tik" jednou za minutu, aby se „teď" posunulo i při dlouho otevřené appce.
+  const [, setNowTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    const id = setInterval(() => setNowTick((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
 
   let lastDay = "";
   const showHeaders = step !== 24;
-  const todayKey = isoDate(new Date());
-  const now = new Date(nowMs);
+  const todayKey = isoDate(zonedNow(utcOffset));
+  const now = zonedNow(utcOffset);
   const pad = (n: number) => String(n).padStart(2, "0");
   const nowHourPrefix = `${isoDate(now)}T${pad(now.getHours())}`;
   const nowKey6 = `${isoDate(now)}-${Math.floor(now.getHours() / 6)}`;
@@ -276,7 +288,7 @@ export default function HourlyForecast({ hourly, activeDate, onSelectDay }: Prop
                   }`}
                   onClick={onSelectDay ? () => onSelectDay(key) : undefined}
                 >
-                  {dayHeader(p.iso)}
+                  {dayHeader(p.iso, utcOffset)}
                 </div>
               )}
               <div

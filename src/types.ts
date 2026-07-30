@@ -66,6 +66,9 @@ export interface Minutely15 {
 
 export interface Forecast {
   timezone: string;
+  // Posun zóny lokality vůči UTC v sekundách (z Open-Meteo). Časy v hourly/daily
+  // jsou „naivní" lokální řetězce lokality – offset umožní správně určit „teď".
+  utcOffsetSeconds: number;
   current: CurrentWeather;
   hourly: HourlyPoint[];
   daily: DailyPoint[];

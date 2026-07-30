@@ -29,7 +29,7 @@ import Webcams from "./components/Webcams";
 import WeatherAlerts from "./components/WeatherAlerts";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
-import { dayHeader, isoDate, todayISO } from "./lib/format";
+import { dayHeader, isoDate, locDate, todayISO } from "./lib/format";
 import { tr, useLang } from "./lib/i18n";
 import { DEFAULT_MODEL, WEATHER_MODELS, modelLabel } from "./lib/models";
 import {
@@ -128,6 +128,7 @@ function loadFavorites(): GeoLocation[] {
 
 // Přizpůsobitelné sekce hlavního obsahu (pořadí = výchozí rozvržení).
 const WIDGET_DEFS: WidgetDef[] = [
+  { id: "alerts", label: "Výstrahy" },
   { id: "summary", label: "Souhrn" },
   { id: "meteogram", label: "Meteogram" },
   { id: "wear", label: "Co na sebe" },
@@ -204,7 +205,21 @@ export default function App() {
       (id) => known.includes(id) && !en.includes(id),
     );
     const missing = known.filter((id) => !en.includes(id) && !hi.includes(id));
-    return { enabledOrder: [...en, ...missing], hiddenOrder: hi };
+    // Chybějící (nově přidané) sekce vložíme na jejich výchozí pozici podle
+    // WIDGET_DEFS, ne natvrdo na konec – aby např. „Výstrahy" zůstaly nahoře.
+    const merged = [...en];
+    for (const id of missing) {
+      const defIdx = known.indexOf(id);
+      let at = merged.length;
+      for (let k = 0; k < merged.length; k++) {
+        if (known.indexOf(merged[k]) > defIdx) {
+          at = k;
+          break;
+        }
+      }
+      merged.splice(at, 0, id);
+    }
+    return { enabledOrder: merged, hiddenOrder: hi };
   }, [widgetEnabled, widgetHidden]);
   // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
   const [offline, setOffline] = useState(false);
@@ -510,7 +525,7 @@ export default function App() {
     }
     // Dokud čekáme na donačtení, nepřepisujeme výběr na dnešek.
     if (!pendingDate && !dates.includes(selectedDate)) {
-      const today = todayISO();
+      const today = todayISO(forecast.utcOffsetSeconds);
       setSelectedDate(dates.includes(today) ? today : dates[0] ?? "");
     }
   }, [forecast, selectedDate, pendingDate]);
@@ -917,7 +932,7 @@ export default function App() {
   const selectedDay =
     forecast?.daily.find((d) => d.time === selectedDate) ?? forecast?.daily[0];
 
-  const today = todayISO();
+  const today = todayISO(forecast?.utcOffsetSeconds);
 
   // Rozbalovací výběr dnů přímo v hlavičce (toggle přes tb-day).
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
@@ -1083,7 +1098,7 @@ export default function App() {
   // Srážky přes den (6–22 h) – brzká rána (0–6 h) a pozdní noc (22–24 h)
   // deštník neřeší (kromě extrémů, ty řeší WhatToWear přes celodenní úhrn).
   const wakeHours = dayHours.filter((h) => {
-    const hr = new Date(h.time).getHours();
+    const hr = locDate(h.time).getHours();
     return hr >= 6 && hr < 22;
   });
   const wakeRainSum = wakeHours.length
@@ -1236,6 +1251,7 @@ export default function App() {
               onSelect={(d) => setSelectedDate(d)}
               onLoadPast={loadMoreHistory}
               canLoadPast={pastDays < 92}
+              utcOffset={forecast.utcOffsetSeconds}
             />
           </div>
         )}
@@ -1310,7 +1326,6 @@ export default function App() {
       ) : forecast ? (
         <main className="content">
           <div className="col-main">
-            <WeatherAlerts lat={location.latitude} lon={location.longitude} />
             {!dayHasData && (
               <div className="banner notice nodata-notice">
                 <span>
@@ -1332,6 +1347,12 @@ export default function App() {
             )}
             {(() => {
               const els: Record<string, ReactNode> = {
+                alerts: (
+                  <WeatherAlerts
+                    lat={location.latitude}
+                    lon={location.longitude}
+                  />
+                ),
                 summary: selectedDay && dayHasData ? (
                   <SmartSummary
                     day={selectedDay}
@@ -1341,6 +1362,7 @@ export default function App() {
                     minutely={forecast.minutely15}
                     lat={location.latitude}
                     lon={location.longitude}
+                    utcOffset={forecast.utcOffsetSeconds}
                     feelsMax={feelsMax}
                     feelsMin={feelsMin}
                   />
@@ -1353,6 +1375,7 @@ export default function App() {
                     lon={location.longitude}
                     model={model}
                     theme={resolvedTheme}
+                    utcOffset={forecast.utcOffsetSeconds}
                   />
                 ) : null,
                 wear: selectedDay && dayHasData ? (
@@ -1370,6 +1393,7 @@ export default function App() {
                   <HourlyForecast
                     hourly={forecast.hourly}
                     activeDate={selectedDate}
+                    utcOffset={forecast.utcOffsetSeconds}
                     onSelectDay={setSelectedDate}
                   />
                 ),

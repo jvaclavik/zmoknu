@@ -12,7 +12,7 @@ import { aqiLabel, pmLevel, pollenLevel } from "../lib/airQuality";
 import { stormRiskForDate } from "../lib/storm";
 import { skyQuality } from "../lib/skyEvents";
 import { fetchFlood, floodRisk, type FloodData } from "../lib/flood";
-import { clockTime } from "../lib/format";
+import { clockTime, locDate } from "../lib/format";
 import { tr } from "../lib/i18n";
 
 interface Props {
@@ -198,8 +198,8 @@ export default function DayDetails({
   }, [flood, date]);
 
   // Zlatá hodinka: ráno od východu, večer do západu.
-  const sunriseD = new Date(day.sunrise);
-  const sunsetD = new Date(day.sunset);
+  const sunriseD = locDate(day.sunrise);
+  const sunsetD = locDate(day.sunset);
   const goldenMin = goldenHourMinutes(lat ?? 50, dayOfYear(date));
   const goldenAmEnd = new Date(sunriseD.getTime() + goldenMin * 60_000);
   const goldenPmStart = new Date(sunsetD.getTime() - goldenMin * 60_000);
@@ -266,9 +266,9 @@ export default function DayDetails({
           <div className="dd-grid dd-grid-sun">
             <Tile icon="sunrise" label={tr("Východ / západ")}>
               <span className="dd-tile-value">
-                {clockTime(new Date(day.sunrise))}
+                {clockTime(sunriseD)}
                 <em className="dd-tile-sep"> / </em>
-                {clockTime(new Date(day.sunset))}
+                {clockTime(sunsetD)}
               </span>
             </Tile>
             <Tile emoji={moon.emoji} label={tr("Měsíc")}>
@@ -346,9 +346,9 @@ export default function DayDetails({
                   {storm.from ? (
                     <span className="dd-tile-note">
                       {tr("mezi {a} a {b}", {
-                        a: clockTime(new Date(storm.from)),
+                        a: clockTime(locDate(storm.from)),
                         b: clockTime(
-                          new Date(new Date(storm.to!).getTime() + 3_600_000),
+                          new Date(locDate(storm.to!).getTime() + 3_600_000),
                         ),
                       })}
                       {storm.hail ? ` · ${tr("možné kroupy")}` : ""}
