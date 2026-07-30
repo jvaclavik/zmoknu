@@ -50,3 +50,16 @@ Případně přes CLI:
 npm i -g vercel
 vercel
 ```
+
+## Licence
+
+Copyright (C) 2026 Jan Václavík
+
+Tento projekt je licencován pod **GNU Affero General Public License v3.0 nebo
+novější (AGPL-3.0-or-later)** – viz soubor [`LICENSE`](./LICENSE).
+
+Znamená to, že kód smíš volně používat, upravovat i šířit, ale **veškeré
+odvozené dílo musí zůstat open source pod stejnou licencí**. Navíc – na rozdíl
+od běžné GPL – tato povinnost platí i tehdy, když upravenou verzi pouze
+**provozuješ jako síťovou/webovou službu**: uživatelům takové služby musíš
+zpřístupnit odpovídající zdrojový kód.

@@ -5252,24 +5252,149 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .footer {
-  text-align: center;
   font-size: 0.74rem;
-  padding: 28px 0 8px;
+  margin-top: 20px;
+  padding: 26px 0 8px;
+  border-top: 1px solid var(--card-border);
+}
+/* Horní část: vlevo „o projektu" (brand + text), vpravo skupina akcí.
+   Přirozeně se zalamuje – na úzku spadnou akce pod text. */
+.footer-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px 40px;
+  margin-bottom: 22px;
+}
+.footer-about {
+  flex: 1 1 340px;
+  min-width: 0;
+  text-align: left;
+}
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.footer-logo {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+.footer-brandname {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.footer-brand-q {
+  color: var(--accent);
 }
 .footer-note {
-  max-width: 46ch;
-  margin: 0 auto 12px;
-  font-size: 0.82rem;
-  line-height: 1.55;
+  max-width: 50ch;
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  line-height: 1.6;
   color: var(--muted);
   font-style: italic;
 }
+.footer-contact {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+/* Skupina akcí – vlevo drobné ikonky (méně důležité), vpravo textové CTA. */
+.footer-actions {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+/* Ikonkové tlačítko (méně důležité akce): kruhové, ghost, akcentová ikona. */
+.footer-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(var(--ov-rgb), 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--accent);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease,
+    border-color 0.18s ease;
+}
+@media (hover: hover) {
+  .footer-icon-btn:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+    transform: translateY(-1px);
+  }
+}
+.footer-actions .install-hint {
+  margin: 0;
+  width: auto;
+  align-items: flex-start;
+}
+@media (max-width: 719px) {
+  .footer-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}
+.footer-actions .install-btn {
+  background: rgba(var(--ov-rgb), 0.05);
+  border-color: var(--card-border);
+  color: var(--text);
+  font-weight: 600;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease,
+    border-color 0.18s ease;
+}
+.footer-actions .install-btn svg {
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .footer-actions .install-btn:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+    transform: translateY(-1px);
+  }
+}
 .footer-updated {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 0.72rem;
   color: var(--muted);
   opacity: 0.7;
-  text-align: center;
+  white-space: nowrap;
+}
+/* Spodní pruh: odkazy vlevo, meta (aktualizováno / update) vpravo – přes celou šířku. */
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+.footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.footer-meta .footer-update-btn {
+  margin-top: 0;
 }
 .install-hint {
   display: flex;
@@ -5401,7 +5526,7 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .footer a,
 .footer-link-btn {
@@ -5434,40 +5559,19 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Panel s výběrem zdroje dat (modelu) nad patičkou */
-.settings-bar {
+/* Řádek nastavení uvnitř footeru: vlevo model, vpravo jazyk + schéma. */
+.footer-settings {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 10px 16px;
-  margin: 28px 0 0;
-  padding: 14px 16px;
-  border-top: 1px solid var(--card-border);
+  justify-content: space-between;
+  gap: 12px 18px;
+  margin-bottom: 22px;
 }
-
-/* Přepínač světlý/tmavý režim v liště nastavení. */
-.theme-toggle {
-  display: inline-flex;
+.footer-settings-right {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--card-border);
-  background: var(--card);
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.theme-toggle svg {
-  color: var(--accent);
-}
-@media (hover: hover) {
-  .theme-toggle:hover {
-    background: rgba(var(--ov-rgb), 0.1);
-    border-color: var(--accent);
-  }
+  gap: 10px;
 }
 
 /* Tlačítko „Přizpůsobit obsah" pod nastavením. */

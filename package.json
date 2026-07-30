@@ -2,6 +2,8 @@
   "name": "zmoknu",
   "private": true,
   "version": "1.0.0",
+  "license": "AGPL-3.0-or-later",
+  "author": "Jan Václavík",
   "type": "module",
   "scripts": {
     "dev": "vite",

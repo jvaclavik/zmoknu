@@ -57,16 +57,21 @@ export default function InstallHint() {
     setDeferred(null);
   };
 
+  const label = deferred
+    ? tr("Nainstalovat aplikaci")
+    : tr("Nainstalovat do telefonu");
+
   return (
     <div className="install-hint">
       <button
         type="button"
-        className="install-btn"
+        className="footer-icon-btn"
         onClick={deferred ? install : () => setOpen((o) => !o)}
         aria-expanded={deferred ? undefined : open}
+        title={label}
+        aria-label={label}
       >
         <PhoneGlyph />
-        {deferred ? tr("Nainstalovat aplikaci") : tr("Nainstalovat do telefonu")}
       </button>
 
       {open && !deferred && (
@@ -108,8 +113,8 @@ export default function InstallHint() {
 function PhoneGlyph() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

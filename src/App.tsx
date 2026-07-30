@@ -1436,70 +1436,6 @@ export default function App() {
         </Suspense>
       )}
 
-      <div className="settings-bar">
-        <label className="settings-model">
-          <span className="settings-model-label">
-            {tr("Zdroj dat (model)")}
-          </span>
-          <select
-            className="settings-model-select"
-            value={model}
-            onChange={(e) => { posthog.capture("weather_model_changed", { model: e.target.value }); setModel(e.target.value); }}
-          >
-            {WEATHER_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.flag} {tr(m.label)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="lang-switch" role="group" aria-label={tr("jazyk")}>
-          <button
-            type="button"
-            className={`lang-btn ${lang === "cs" ? "active" : ""}`}
-            onClick={() => { posthog.capture("language_changed", { language: "cs" }); setLang("cs"); }}
-            aria-pressed={lang === "cs"}
-            title="Čeština"
-          >
-            <FlagCZ />
-          </button>
-          <button
-            type="button"
-            className={`lang-btn ${lang === "en" ? "active" : ""}`}
-            onClick={() => { posthog.capture("language_changed", { language: "en" }); setLang("en"); }}
-            aria-pressed={lang === "en"}
-            title="English"
-          >
-            <FlagEN />
-          </button>
-        </div>
-        <button
-          type="button"
-          className="theme-toggle"
-          onClick={() => {
-            posthog.capture("theme_toggled", { from: themeMode });
-            cycleTheme();
-          }}
-          aria-label={tr("Přepnout režim (systém/světlý/tmavý)")}
-          title={tr("Přepnout režim (systém/světlý/tmavý)")}
-        >
-          {themeMode === "system" ? (
-            <SystemGlyph />
-          ) : themeMode === "light" ? (
-            <SunGlyph />
-          ) : (
-            <MoonGlyph />
-          )}
-          <span>
-            {themeMode === "system"
-              ? tr("Podle systému")
-              : themeMode === "light"
-                ? tr("Světlý režim")
-                : tr("Tmavý režim")}
-          </span>
-        </button>
-      </div>
-
       <button
         type="button"
         className="customize-btn"
@@ -1513,62 +1449,167 @@ export default function App() {
       </button>
 
       <footer className="footer">
-        <p className="footer-note">
-          {tr(
-            "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam."
-          )}
-          <br />— <span className="footer-name">Jan Václavík</span>
-          <br />
-          <br />
-          <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
-          {tr(", jak se vám líbí.")}
-        </p>
+        <div className="footer-top">
+          <div className="footer-about">
+            <div className="footer-brand">
+              <img
+                src={resolvedTheme === "light" ? "/logo-light.svg" : "/logo.svg"}
+                alt=""
+                className="footer-logo"
+                aria-hidden="true"
+              />
+              <span className="footer-brandname">
+                zmoknu<span className="footer-brand-q">?</span>
+              </span>
+            </div>
+            <p className="footer-note">
+              {tr(
+                "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam."
+              )}
+            </p>
+            <p className="footer-contact">
+              — <span className="footer-name">Jan Václavík</span>
+              {" · "}
+              <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
+              {tr(", jak se vám líbí.")}
+            </p>
+          </div>
 
-        {fetchedAt != null && (
-          <p
-            className="footer-updated"
-            title={new Date(fetchedAt).toLocaleString(
-              lang === "en" ? "en-GB" : "cs-CZ"
+          <div className="footer-actions">
+            <InstallHint />
+
+            <button
+              type="button"
+              className="footer-icon-btn"
+              onClick={() => { posthog.capture("notification_settings_opened"); setNotifyOpen(true); }}
+              title={tr("Upozornění na počasí")}
+              aria-label={tr("Upozornění na počasí")}
+            >
+              <BellGlyph />
+            </button>
+
+            <button
+              type="button"
+              className="footer-icon-btn"
+              onClick={shareLink}
+              title={shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
+              aria-label={shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
+            >
+              {shared ? <CheckGlyph /> : <ShareGlyph />}
+            </button>
+
+            <Donate />
+          </div>
+        </div>
+
+        <div className="footer-settings">
+          <label className="settings-model">
+            <span className="settings-model-label">
+              {tr("Zdroj dat (model)")}
+            </span>
+            <select
+              className="settings-model-select"
+              value={model}
+              onChange={(e) => { posthog.capture("weather_model_changed", { model: e.target.value }); setModel(e.target.value); }}
+            >
+              {WEATHER_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.flag} {tr(m.label)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="footer-settings-right">
+            <div className="lang-switch" role="group" aria-label={tr("jazyk")}>
+              <button
+                type="button"
+                className={`lang-btn ${lang === "cs" ? "active" : ""}`}
+                onClick={() => { posthog.capture("language_changed", { language: "cs" }); setLang("cs"); }}
+                aria-pressed={lang === "cs"}
+                title="Čeština"
+              >
+                <FlagCZ />
+              </button>
+              <button
+                type="button"
+                className={`lang-btn ${lang === "en" ? "active" : ""}`}
+                onClick={() => { posthog.capture("language_changed", { language: "en" }); setLang("en"); }}
+                aria-pressed={lang === "en"}
+                title="English"
+              >
+                <FlagEN />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="footer-icon-btn"
+              onClick={() => {
+                posthog.capture("theme_toggled", { from: themeMode });
+                cycleTheme();
+              }}
+              aria-label={
+                themeMode === "system"
+                  ? tr("Podle systému")
+                  : themeMode === "light"
+                    ? tr("Světlý režim")
+                    : tr("Tmavý režim")
+              }
+              title={
+                themeMode === "system"
+                  ? tr("Podle systému")
+                  : themeMode === "light"
+                    ? tr("Světlý režim")
+                    : tr("Tmavý režim")
+              }
+            >
+              {themeMode === "system" ? (
+                <SystemGlyph />
+              ) : themeMode === "light" ? (
+                <SunGlyph />
+              ) : (
+                <MoonGlyph />
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="footer-bottom">
+          <div className="footer-links">
+            <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
+              Data: Open-Meteo (CC BY 4.0)
+            </a>
+            <span className="footer-sep">·</span>
+            <a
+              href="https://github.com/jvaclavik/zmoknu"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+            </a>
+            <span className="footer-sep">·</span>
+            <a
+              href="https://github.com/jvaclavik/zmoknu/blob/main/LICENSE"
+              target="_blank"
+              rel="noreferrer"
+            >
+              AGPL-3.0
+            </a>
+          </div>
+
+          <div className="footer-meta">
+            {fetchedAt != null && (
+              <p
+                className="footer-updated"
+                title={new Date(fetchedAt).toLocaleString(
+                  lang === "en" ? "en-GB" : "cs-CZ"
+                )}
+              >
+                {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
+              </p>
             )}
-          >
-            {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
-          </p>
-        )}
-
-        <InstallHint />
-
-        <div className="install-hint">
-          <button
-            type="button"
-            className="install-btn"
-            onClick={() => { posthog.capture("notification_settings_opened"); setNotifyOpen(true); }}
-          >
-            <BellGlyph />
-            {tr("Upozornění na počasí")}
-          </button>
+            <ReloadPrompt />
+          </div>
         </div>
-
-        <Donate />
-
-        <div className="footer-links">
-          <button type="button" className="footer-link-btn" onClick={shareLink}>
-            {shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
-          </button>
-          <span className="footer-sep">·</span>
-          <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
-            Data: Open-Meteo (CC BY 4.0)
-          </a>
-          <span className="footer-sep">·</span>
-          <a
-            href="https://github.com/jvaclavik/zmoknu"
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub
-          </a>
-        </div>
-
-        <ReloadPrompt />
       </footer>
     </div>
   );
@@ -1599,6 +1640,45 @@ function BellGlyph() {
     >
       <path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
       <path d="M10 20a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+function ShareGlyph() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="18" cy="5" r="2.6" />
+      <circle cx="6" cy="12" r="2.6" />
+      <circle cx="18" cy="19" r="2.6" />
+      <path d="M8.3 10.8 15.7 6.4M8.3 13.2l7.4 4.4" />
+    </svg>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }
