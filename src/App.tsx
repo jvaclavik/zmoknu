@@ -224,6 +224,8 @@ export default function App() {
   // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
   const [offline, setOffline] = useState(false);
   const lastReloadTick = useRef(0);
+  // Klíč lokality, pro kterou platí aktuálně zobrazená předpověď (detekce změny).
+  const prevLocKey = useRef("");
   // Aktuální seznam oblíbených bez nutnosti re-fetche předpovědi při jeho změně.
   const favoritesRef = useRef<GeoLocation[]>([]);
   favoritesRef.current = favorites;
@@ -242,6 +244,14 @@ export default function App() {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    // Při přepnutí lokality zahodíme starou předpověď, ať se místo dat z jiného
+    // místa ukáže Skeleton (s deštěm) po celou dobu načítání nové lokality.
+    // U změny modelu/rozsahu historie (stejná lokalita) data ponecháme.
+    const locKey = `${location.latitude},${location.longitude}`;
+    if (prevLocKey.current !== "" && prevLocKey.current !== locKey) {
+      setForecast(null);
+    }
+    prevLocKey.current = locKey;
     // Pull-to-refresh (reloadTick) vynutí čerstvá data mimo cache.
     const force = reloadTick !== lastReloadTick.current;
     lastReloadTick.current = reloadTick;
@@ -972,15 +982,20 @@ export default function App() {
         resolvedTheme === "light" ? "#eef2f8" : "#05080f",
       );
   }, [resolvedTheme]);
-  // Cyklus motivu: Systém → Světlý → Tmavý → Systém.
+  // Cyklus motivu (tlačítko): Systém → Světlý → Tmavý → Systém.
   const cycleTheme = () => {
     const order: ThemeMode[] = ["system", "light", "dark"];
     const next = order[(order.indexOf(themeMode) + 1) % order.length];
     setThemeMode(next);
   };
+  // Rychlé přepnutí jen mezi světlým/tmavým (klávesa) – ignoruje „systém",
+  // přepne na opak právě zobrazeného motivu.
+  const toggleDarkLight = () => {
+    setThemeMode(resolvedTheme === "dark" ? "light" : "dark");
+  };
 
   // Klávesové zkratky: Opt/Alt+L přepíná modal lokace, Opt/Alt+D skočí na dnešek,
-  // Opt/Alt+T cyklí motiv (systém → světlý → tmavý).
+  // Opt/Alt+T přepíná světlý/tmavý (bez „systém").
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey) return;
@@ -992,13 +1007,13 @@ export default function App() {
         setSelectedDate(todayISO());
       } else if (e.key === "t" || e.key === "T" || e.code === "KeyT") {
         e.preventDefault();
-        cycleTheme();
+        toggleDarkLight();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themeMode, setThemeMode]);
+  }, [themeMode, setThemeMode, systemDark]);
   const dayBtnRef = useRef<HTMLButtonElement>(null);
   const dayPanelRef = useRef<HTMLDivElement>(null);
   const [dayArrowX, setDayArrowX] = useState<number | null>(null);
@@ -1721,20 +1736,18 @@ function MoonGlyph() {
 }
 
 function SystemGlyph() {
+  // „Auto" motiv – kruh s vyplněnou levou polovinou (kontrast světlo/tma).
   return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="4" width="18" height="12" rx="2" />
-      <path d="M8 20h8M12 16v4" />
+    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" />
     </svg>
   );
 }

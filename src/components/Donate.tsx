@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import posthog from "posthog-js";
 import { tr } from "../lib/i18n";
 
@@ -18,11 +19,9 @@ export default function Donate() {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const toggle = () => {
-    setOpen((o) => {
-      if (!o) posthog.capture("donate_opened");
-      return !o;
-    });
+  const openModal = () => {
+    posthog.capture("donate_opened");
+    setOpen(true);
   };
 
   const copyBtc = async () => {
@@ -35,60 +34,114 @@ export default function Donate() {
     }
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
     <div className="install-hint">
       <button
         type="button"
         className="install-btn"
-        onClick={toggle}
+        onClick={openModal}
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
         <HeartGlyph />
         {tr("Podpořit projekt")}
       </button>
 
-      {open && (
-        <div className="donate-panel">
-          {LINKS.map((l) => (
-            <a
-              key={l.id}
-              className="donate-link"
-              href={l.href}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => posthog.capture("donate_link_clicked", { via: l.id })}
-            >
-              {l.label}
-            </a>
-          ))}
+      {open &&
+        createPortal(
+          <div
+            className="dbg-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={tr("Podpořit projekt")}
+          >
+            <div className="dbg-backdrop" onClick={() => setOpen(false)} />
+            <div className="dbg-sheet donate-sheet">
+              <div className="dbg-head">
+                <h2>{tr("Podpořit projekt")}</h2>
+                <button
+                  type="button"
+                  className="dbg-close"
+                  onClick={() => setOpen(false)}
+                  aria-label={tr("Zavřít")}
+                >
+                  <CloseX />
+                </button>
+              </div>
 
-          <div className="donate-btc">
-            <img
-              className="donate-qr"
-              src="/btc-qr.png"
-              alt={tr("QR kód pro platbu Bitcoin / Lightning")}
-              width={116}
-              height={116}
-              loading="lazy"
-            />
-            <div className="donate-btc-info">
-              <span className="donate-btc-label">Bitcoin / Lightning</span>
-              <button
-                type="button"
-                className="donate-copy"
-                onClick={copyBtc}
-                title={tr("Kopírovat adresu")}
-              >
-                <code>{BTC_ADDRESS}</code>
-                <span className="donate-copy-hint">
-                  {copied ? tr("Zkopírováno") : tr("Kopírovat")}
-                </span>
-              </button>
+              <div className="donate-panel">
+                {LINKS.map((l) => (
+                  <a
+                    key={l.id}
+                    className="donate-link"
+                    href={l.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() =>
+                      posthog.capture("donate_link_clicked", { via: l.id })
+                    }
+                  >
+                    {l.label}
+                  </a>
+                ))}
+
+                <div className="donate-btc">
+                  <img
+                    className="donate-qr"
+                    src="/btc-qr.png"
+                    alt={tr("QR kód pro platbu Bitcoin / Lightning")}
+                    width={116}
+                    height={116}
+                    loading="lazy"
+                  />
+                  <div className="donate-btc-info">
+                    <span className="donate-btc-label">Bitcoin / Lightning</span>
+                    <button
+                      type="button"
+                      className="donate-copy"
+                      onClick={copyBtc}
+                      title={tr("Kopírovat adresu")}
+                    >
+                      <code>{BTC_ADDRESS}</code>
+                      <span className="donate-copy-hint">
+                        {copied ? tr("Zkopírováno") : tr("Kopírovat")}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
+  );
+}
+
+function CloseX() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
   );
 }
 

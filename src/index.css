@@ -2258,8 +2258,27 @@ body::before {
     color 0.15s,
     border-color 0.15s;
 }
+/* Hlavní „Zobrazit více" – odkryje detaily pod seznamem oblečení. Stejný vzhled
+   jako .wear-scales-more, jen centrovaný jako blok (není ve flex kontejneru). */
+.wear-more {
+  display: block;
+  margin: 12px auto 0;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px dashed var(--card-border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
 @media (hover: hover) {
-  .wear-scales-more:hover {
+  .wear-scales-more:hover,
+  .wear-more:hover {
     background: rgba(var(--ov-rgb), 0.09);
     color: var(--text);
     border-color: var(--accent);
@@ -3598,6 +3617,84 @@ input[type="range"]::-moz-range-thumb {
 }
 :root[data-theme="light"] .wx-alert.lvl-red .wx-alert-ico {
   color: #c62222;
+}
+
+/* Výstrahy jako karta: neutrální karta + badge s počtem obarvený podle
+   nejkritičtější výstrahy (červená > oranžová > žlutá). Klik na hlavičku
+   sbalí/rozbalí seznam; barva ikony a badge drží úroveň i po sbalení. */
+.wx-card {
+  padding: 0;
+  overflow: hidden;
+}
+.wx-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.wx-card-head .wx-alert-ico {
+  flex-shrink: 0;
+  color: var(--wx-accent, var(--accent-warm));
+}
+.wx-card-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-right: auto;
+}
+.wx-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--wx-accent, var(--accent-warm));
+  color: var(--accent-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wx-card-head .wx-alert-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.wx-card-head[aria-expanded="true"] .wx-alert-chev {
+  transform: rotate(180deg);
+}
+.wx-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+.wx-card.lvl-yellow {
+  --wx-accent: #ffd166;
+}
+.wx-card.lvl-orange {
+  --wx-accent: #ff9f43;
+}
+.wx-card.lvl-red {
+  --wx-accent: #ff6b6b;
+}
+:root[data-theme="light"] .wx-card.lvl-yellow {
+  --wx-accent: #a06b00;
+}
+:root[data-theme="light"] .wx-card.lvl-orange {
+  --wx-accent: #bd4d05;
+}
+:root[data-theme="light"] .wx-card.lvl-red {
+  --wx-accent: #c62222;
 }
 
 /* Přehledová věta o počasí (nahoře) + nowcast */
@@ -5440,29 +5537,37 @@ input[type="range"]::-moz-range-thumb {
 .install-steps svg {
   vertical-align: -2px;
 }
+/* Modal „Podpořit projekt" – sdílí chrome .dbg-modal/.dbg-sheet. */
+.donate-sheet {
+  max-width: 420px;
+}
 .donate-panel {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  max-width: 300px;
 }
 .donate-link {
   display: block;
-  padding: 9px 14px;
-  border-radius: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
   text-align: center;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
   font-weight: 600;
+  text-decoration: none !important;
   color: var(--text) !important;
   opacity: 1 !important;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 @media (hover: hover) {
   .donate-link:hover {
     background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
     text-decoration: none !important;
   }
 }
@@ -5688,6 +5793,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .cz-row-hidden {
   opacity: 0.75;
+}
+.cz-row-hidden + .cz-row-hidden {
+  margin-top: 8px;
 }
 .cz-add-btn {
   flex-shrink: 0;

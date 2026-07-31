@@ -472,7 +472,9 @@ export default function WhatToWear({
     activity,
   );
   const [howOpen, setHowOpen] = useState(false);
-  const [scalesOpen, setScalesOpen] = useState(false);
+  // Ve výchozím stavu ukazujeme jen „co na sebe"; detaily (shrnutí, škály,
+  // nejlepší okno) jsou schované pod „Zobrazit více".
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Efektivní pocitová teplota (posunutá podle aktivity) pro osy oblečení –
   // stejný základ jako doporučení výše, ať k sobě značka a ikony sedí.
@@ -593,43 +595,33 @@ export default function WhatToWear({
           </div>
         ))}
       </div>
-      <p className="wear-summary">{tr(outfit.summary)}</p>
-      <div className="wear-scales">
-        {shownScales.map((d) => (
-          <WearScale
-            key={d.key}
-            title={d.title}
-            stops={d.stops}
-            value={d.value}
-            band={d.band}
-            readout={d.readout}
-          />
-        ))}
-        {scalesOpen &&
-          hiddenScales.map((d) => (
-            <WearScale
-              key={d.key}
-              title={d.title}
-              stops={d.stops}
-              value={d.value}
-              band={d.band}
-              readout={d.readout}
-            />
-          ))}
-        {hiddenScales.length > 0 && (
-          <button
-            type="button"
-            className="wear-scales-more"
-            aria-expanded={scalesOpen}
-            onClick={() => setScalesOpen((v) => !v)}
-          >
-            {scalesOpen
-              ? tr("Zobrazit méně")
-              : `${tr("Zobrazit více")} (${hiddenScales.length})`}
-          </button>
-        )}
-      </div>
-      <BestWindow hourly={hourly} date={date} />
+      <button
+        type="button"
+        className="wear-more"
+        aria-expanded={detailsOpen}
+        onClick={() => setDetailsOpen((v) => !v)}
+      >
+        {detailsOpen ? tr("Zobrazit méně") : tr("Zobrazit více")}
+      </button>
+
+      {detailsOpen && (
+        <>
+          <p className="wear-summary">{tr(outfit.summary)}</p>
+          <div className="wear-scales">
+            {[...shownScales, ...hiddenScales].map((d) => (
+              <WearScale
+                key={d.key}
+                title={d.title}
+                stops={d.stops}
+                value={d.value}
+                band={d.band}
+                readout={d.readout}
+              />
+            ))}
+          </div>
+          <BestWindow hourly={hourly} date={date} />
+        </>
+      )}
 
       {howOpen && (
         <OutfitTester

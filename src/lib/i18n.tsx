@@ -177,6 +177,7 @@ const EN: Record<string, string> = {
   "Shoda modelů": "Model agreement",
   "Výstrahy ČHMÚ": "ČHMÚ weather alerts",
   Výstrahy: "Warnings",
+  "Počet výstrah": "Number of warnings",
   Teď: "Now",
   Now: "Now",
   "Automaticky = Open-Meteo vybírá nejvhodnější model podle lokality (v ČR obvykle ICON-D2/ICON-EU pro první dny, ECMWF pro vzdálenější).":
