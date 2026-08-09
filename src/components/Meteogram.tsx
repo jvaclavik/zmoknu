@@ -1165,6 +1165,9 @@ export default function Meteogram({
   // Aktivní dotyky (pointerId → poloha) pro rozpoznání pinch gesta nad grafem.
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinch = useRef<{ startDist: number; startDays: number } | null>(null);
+  // Na telefonu: nejdřív zjistíme směr gesta (x = scrub grafu, y = scroll stránky).
+  const touchAxis = useRef<"pending" | "x" | "y" | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   // Aktuální počet dní pro nativní wheel listener (mimo React uzávěr).
   const daysRef = useRef(days);
   daysRef.current = days;
@@ -1637,8 +1640,20 @@ export default function Meteogram({
           // Druhý prst = pinch: zrušíme scrubování a zapamatujeme výchozí stav.
           if (pointers.current.size >= 2) {
             pressing.current = false;
+            touchAxis.current = null;
+            touchStart.current = null;
             const [a, b] = [...pointers.current.values()];
             pinch.current = { startDist: ptDist(a, b), startDays: days };
+            // Pinch nesmí spustit svislý scroll stránky.
+            e.currentTarget.style.touchAction = "none";
+            return;
+          }
+          // Dotyk: nejdřív necháme prohlížeči šanci na svislý scroll (pan-y).
+          // Capture a scrub až když je gesto jasně vodorovné.
+          if (e.pointerType === "touch") {
+            touchStart.current = { x: e.clientX, y: e.clientY };
+            touchAxis.current = "pending";
+            pressing.current = false;
             return;
           }
           pressing.current = true;
@@ -1667,18 +1682,65 @@ export default function Meteogram({
             }
             return;
           }
+          // Rozhodnutí osy u jednoho prstu (jen touch).
+          if (
+            e.pointerType === "touch" &&
+            touchAxis.current === "pending" &&
+            touchStart.current
+          ) {
+            const dx = e.clientX - touchStart.current.x;
+            const dy = e.clientY - touchStart.current.y;
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+            if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+              touchAxis.current = "x";
+              pressing.current = true;
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                /* ignore */
+              }
+              handlePointer(e.clientX);
+            } else {
+              touchAxis.current = "y";
+              pressing.current = false;
+            }
+            return;
+          }
+          if (e.pointerType === "touch" && touchAxis.current === "y") return;
           // Myš scrubuje při přejezdu; dotyk/pero jen během tažení.
           if (e.pointerType === "mouse" || pressing.current) handlePointer(e.clientX);
         }}
         onPointerUp={(e) => {
+          // Krátký tap na graf = výběr hodiny (bez tažení).
+          if (
+            e.pointerType === "touch" &&
+            touchAxis.current === "pending" &&
+            touchStart.current
+          ) {
+            const dx = e.clientX - touchStart.current.x;
+            const dy = e.clientY - touchStart.current.y;
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+              handlePointer(e.clientX);
+            }
+          }
           pointers.current.delete(e.pointerId);
-          if (pointers.current.size < 2) pinch.current = null;
+          if (pointers.current.size < 2) {
+            pinch.current = null;
+            e.currentTarget.style.touchAction = "";
+          }
           pressing.current = false;
+          touchAxis.current = null;
+          touchStart.current = null;
         }}
         onPointerCancel={(e) => {
           pointers.current.delete(e.pointerId);
-          if (pointers.current.size < 2) pinch.current = null;
+          if (pointers.current.size < 2) {
+            pinch.current = null;
+            e.currentTarget.style.touchAction = "";
+          }
           pressing.current = false;
+          touchAxis.current = null;
+          touchStart.current = null;
         }}
       >
         {daysHint != null && (

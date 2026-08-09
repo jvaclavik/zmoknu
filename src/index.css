@@ -3486,8 +3486,7 @@ input[type="range"]::-moz-range-thumb {
   /* Roztáhni graf až ke krajům karty (zruš vnitřní padding karty). */
   margin-left: calc(-1 * var(--card-px));
   margin-right: calc(-1 * var(--card-px));
-  /* Nad proužkem ikon necháme svislý scroll stránky (pan-y); zámek dotyku je
-     jen na samotném grafu (.mg-svg níže). */
+  /* Svislé tažení = scroll stránky; vodorovné řeší JS (scrub). */
   touch-action: pan-y;
   cursor: crosshair;
   /* Na iOS zabraň lupě a označování textu při dotyku v grafu. */
@@ -3546,12 +3545,12 @@ input[type="range"]::-moz-range-thumb {
   height: 28px;
   font-size: 1.1rem;
 }
-/* Graf: dotyk cílí sem a plně ho řídí JS (scrubování + pinch), proto zámek
-   svislého scrollu jen tady. Události bublají na plot, kde jsou handlery. */
+/* Graf: svislé tažení propadne na scroll stránky (pan-y); vodorovné scrubování
+   a pinch řídí JS (po rozpoznání směru / druhého prstu). */
 .mg-svg {
   display: block;
   pointer-events: auto;
-  touch-action: none;
+  touch-action: pan-y;
 }
 /* Zoom nápověda (např. „3 dny") uprostřed grafu. */
 .mg-zoomhint {
