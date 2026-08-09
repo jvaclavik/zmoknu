@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import type { DailyPoint, HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
 import { tr, getLang } from "../lib/i18n";
-import { dayHeader, locDate, zonedNow } from "../lib/format";
+import { dayHeader, locDate, windDirLabel, zonedNow } from "../lib/format";
 import { useStoredState } from "../lib/useStoredState";
 import { tempColor } from "../lib/tempColor";
 import { isLightPalette } from "../lib/themeState";
@@ -332,6 +332,15 @@ export default function Meteogram({
     }
     return 24;
   }, [pph]);
+  // Šipky větru v jedné řadě – potřebují víc místa než ikony ve dvou řadách.
+  const windIconStep = useMemo(() => {
+    if (!pph) return 3;
+    for (const s of [2, 3, 4, 6, 12]) {
+      if (s * pph >= 20) return s;
+    }
+    return 24;
+  }, [pph]);
+  const weatherIconStep = tab === "wind" ? windIconStep : iconStep;
 
   // Multimód: stáhni hodinovou řadu pro aktuální veličinu z vybraných modelů.
   const omVar = TAB_OM_VAR[tab];
@@ -1038,6 +1047,26 @@ export default function Meteogram({
     return stops;
   }, [tab, series.min, series.max]);
 
+  // Vítr: barva čáry podle síly (stejné prahy jako WIND_BANDS).
+  const windLineStops = useMemo(() => {
+    if (tab !== "wind") return [];
+    const { min, max } = series;
+    const span = Math.max(0.001, max - min);
+    const offOf = (v: number) => (max - v) / span;
+    const stops: { offset: number; color: string }[] = [
+      { offset: 0, color: windBandColor(max) },
+    ];
+    for (const b of [15, 10, 5]) {
+      if (b > min && b < max) {
+        const o = offOf(b);
+        stops.push({ offset: o, color: windBandColor(b + 0.001) });
+        stops.push({ offset: o, color: windBandColor(b - 0.001) });
+      }
+    }
+    stops.push({ offset: 1, color: windBandColor(min) });
+    return stops;
+  }, [tab, series.min, series.max]);
+
   // UV: vodorovné prahové čáry (odkud je záření nebezpečnější).
   const uvThresholds = useMemo(() => {
     if (tab !== "uv" || !pph) return [];
@@ -1090,10 +1119,23 @@ export default function Meteogram({
   // Minimální rozestup popisků v hodinách odvozený od skutečné šířky (px),
   // aby se na úzké obrazovce (malé pph) hodnoty nepřekrývaly.
   const minGapHours = pph > 0 ? Math.max(2, Math.ceil(40 / pph)) : 2;
-  const valueLabelList = useMemo(
-    () => valueLabels(points, labelValues, minGapHours),
-    [points, labelValues, minGapHours],
-  );
+  // Pravý okraj je rezervovaný pro popisky prahů („střední", „silný"…).
+  const rightLegendPad =
+    tab === "wind" || tab === "uv" || tab === "dewpoint" ? 118 : 0;
+  const valueLabelList = useMemo(() => {
+    const all = valueLabels(points, labelValues, minGapHours);
+    if (!rightLegendPad || width <= 0 || points.length === 0) return all;
+    const px = width / points.length;
+    return all.filter((e) => (e.i + 0.5) * px < width - rightLegendPad);
+  }, [points, labelValues, minGapHours, rightLegendPad, width]);
+  // Popisky nárazů větru – stejný výběr extremů jako u rychlosti.
+  const gustLabelList = useMemo(() => {
+    if (tab !== "wind" || !series.secondary) return [];
+    const all = valueLabels(points, series.secondary, minGapHours);
+    if (!rightLegendPad || width <= 0 || points.length === 0) return all;
+    const px = width / points.length;
+    return all.filter((e) => (e.i + 0.5) * px < width - rightLegendPad);
+  }, [tab, series.secondary, points, minGapHours, rightLegendPad, width]);
 
   // Rozsah z alternativních předpovědí (min–max napříč modely) v daném bodě –
   // pro popisek u teploty, např. „17° (15–20°)". Vrací null, když je pás vypnutý
@@ -1644,13 +1686,36 @@ export default function Meteogram({
             {daysLabel(daysHint)}
           </div>
         )}
-        {/* proužek ikon – po 2 hodinách, střídavě ve dvou řadách */}
-        <div className="mg-icons">
+        {/* proužek ikon – po N hodinách. U větru šipky směru v jedné řadě,
+            barva podle síly (max z rychlosti a nárazů). */}
+        <div className={`mg-icons ${tab === "wind" ? "wind" : ""}`}>
           {pph > 0 &&
             points.map((p, i) => {
               const hr = locDate(p.time).getHours();
-              if (hr % iconStep !== 0) return null;
-              const slot = hr / iconStep;
+              if (hr % weatherIconStep !== 0) return null;
+              const slot = hr / weatherIconStep;
+              if (tab === "wind") {
+                if (!Number.isFinite(p.windDirection)) return null;
+                const strength = Math.max(
+                  p.windSpeed || 0,
+                  p.windGusts || 0,
+                );
+                return (
+                  <span
+                    key={p.time}
+                    className="mg-icon mg-winddir"
+                    style={{
+                      left: x(i),
+                      color: windBandColor(strength),
+                    }}
+                    title={tr("vítr od {dir}", {
+                      dir: windDirLabel(p.windDirection),
+                    })}
+                  >
+                    <WindDirArrow deg={p.windDirection} />
+                  </span>
+                );
+              }
               return (
                 <span
                   key={p.time}
@@ -1705,6 +1770,24 @@ export default function Meteogram({
                 y2={CURVE_BOTTOM}
               >
                 {uvLineStops.map((s, i) => (
+                  <stop
+                    key={i}
+                    offset={`${(s.offset * 100).toFixed(1)}%`}
+                    stopColor={s.color}
+                  />
+                ))}
+              </linearGradient>
+            )}
+            {tab === "wind" && (
+              <linearGradient
+                id="grad-windline"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={curveTop}
+                x2="0"
+                y2={CURVE_BOTTOM}
+              >
+                {windLineStops.map((s, i) => (
                   <stop
                     key={i}
                     offset={`${(s.offset * 100).toFixed(1)}%`}
@@ -2225,9 +2308,16 @@ export default function Meteogram({
                   <path
                     d={secondaryPath}
                     fill="none"
-                    stroke={series.secondaryColor}
-                    strokeWidth="2.6"
+                    stroke={
+                      tab === "wind"
+                        ? "url(#grad-windline)"
+                        : series.secondaryColor
+                    }
+                    strokeWidth="2.4"
                     strokeLinejoin="round"
+                    strokeLinecap="round"
+                    strokeDasharray="1.5 4"
+                    opacity="0.95"
                   />
                 )}
                 {showUvClearSky && series.refLine && refLinePath && (
@@ -2278,7 +2368,9 @@ export default function Meteogram({
                       ? "url(#grad-templine)"
                       : tab === "uv"
                         ? "url(#grad-uvline)"
-                        : series.stroke
+                        : tab === "wind"
+                          ? "url(#grad-windline)"
+                          : series.stroke
                   }
                   strokeWidth="4"
                   strokeLinejoin="round"
@@ -2303,10 +2395,31 @@ export default function Meteogram({
                     y={yCurve(labelValues[e.i]) + (e.kind === "max" ? -8 : 15)}
                     className={`mg-extrema ${labelColor}`}
                     textAnchor="middle"
+                    fill={
+                      tab === "wind"
+                        ? windBandColor(labelValues[e.i])
+                        : undefined
+                    }
                   >
                     {series.fmt(labelValues[e.i])}
                   </text>
                 ))}
+                {gustLabelList.map((e) => {
+                  const gv = series.secondary![e.i];
+                  if (!Number.isFinite(gv)) return null;
+                  return (
+                    <text
+                      key={`gust-${e.i}`}
+                      x={x(e.i)}
+                      y={yCurve(gv) + (e.kind === "max" ? -8 : 15)}
+                      className="mg-extrema gust"
+                      textAnchor="middle"
+                      fill={windBandColor(gv)}
+                    >
+                      {series.fmt(gv)}
+                    </text>
+                  );
+                })}
               </>
             )
           )}
@@ -2397,7 +2510,9 @@ export default function Meteogram({
                       ? tempColor(series.primary[ci])
                       : tab === "uv"
                         ? uvColor(series.primary[ci])
-                        : series.stroke
+                        : tab === "wind"
+                          ? windBandColor(series.primary[ci])
+                          : series.stroke
                   }
                   strokeWidth="2"
                 />
@@ -2795,6 +2910,14 @@ function uvBandColor(uv: number): string {
   if (uv >= 3) return "#f0a33c";
   return "#5bd99a";
 }
+// Barva větru podle síly (m/s) – stejné prahy jako WIND_BANDS.
+function windBandColor(ms: number): string {
+  if (!Number.isFinite(ms)) return "#5bd99a";
+  if (ms >= 15) return "#d94ea6";
+  if (ms >= 10) return "#ff6b6b";
+  if (ms >= 5) return "#f0a33c";
+  return "#5bd99a";
+}
 // Prahy jednotlivých pásem (spodní hranice) + krátký popis.
 const UV_BANDS = [
   { v: 3, label: "střední", color: "#f0a33c" },
@@ -3022,6 +3145,29 @@ function WindGlyph() {
         d="M3 8h11a3 3 0 1 0-3-3M3 16h14a3 3 0 1 1-3 3"
         stroke="currentColor"
         strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Šipka směru větru – ukazuje, kam vítr vane (stejná konvence jako ve výhledu).
+function WindDirArrow({ deg }: { deg: number }) {
+  return (
+    <svg
+      className="mg-winddir-svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      style={{ transform: `rotate(${deg}deg)` }}
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3v15m0 0l-5-5m5 5l5-5"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        fill="none"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

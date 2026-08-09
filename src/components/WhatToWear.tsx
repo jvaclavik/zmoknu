@@ -574,7 +574,7 @@ export default function WhatToWear({
   });
 
   return (
-    <section className={`card wear-card wear-${outfit.accent}`}>
+    <section className={`card wear-card wear-${outfit.accent} yr-has-more`}>
       <h2 className="card-title">
         {tr("Co si vzít na sebe")}
         <button
@@ -595,14 +595,6 @@ export default function WhatToWear({
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        className="wear-more"
-        aria-expanded={detailsOpen}
-        onClick={() => setDetailsOpen((v) => !v)}
-      >
-        {detailsOpen ? tr("Zobrazit méně") : tr("Zobrazit více")}
-      </button>
 
       {detailsOpen && (
         <>
@@ -623,6 +615,17 @@ export default function WhatToWear({
         </>
       )}
 
+      <button
+        type="button"
+        className="yr-more"
+        aria-expanded={detailsOpen}
+        aria-label={tr(detailsOpen ? "Zobrazit méně" : "Zobrazit více")}
+        title={tr(detailsOpen ? "Zobrazit méně" : "Zobrazit více")}
+        onClick={() => setDetailsOpen((v) => !v)}
+      >
+        <WearMoreChevron flipped={detailsOpen} />
+      </button>
+
       {howOpen && (
         <OutfitTester
           onClose={() => setHowOpen(false)}
@@ -639,6 +642,27 @@ export default function WhatToWear({
         />
       )}
     </section>
+  );
+}
+
+function WearMoreChevron({ flipped }: { flipped?: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      className={flipped ? "yr-more-ico flip" : "yr-more-ico"}
+      aria-hidden="true"
+    >
+      <path
+        d="M6 9l6 6 6-6"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

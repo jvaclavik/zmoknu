@@ -99,13 +99,9 @@ export default function Skeleton() {
           <div className="skel skel-block skel-bestwin" />
         </section>
 
-        {/* Výhled (HourlyForecast, výchozí krok 6 h): hlavička + přepínač →
-            hlavička sloupců → ~12 dní po 4 řádcích (odpovídá reálné výšce). */}
+        {/* Výhled (HourlyForecast): denní řádky; přepínač 1h/4h/6h až u rozbaleného dne. */}
         <section className="card">
-          <div className="skel-split">
-            <div className="skel skel-line" style={{ width: 64, height: 18 }} />
-            <div className="skel skel-seg" />
-          </div>
+          <div className="skel skel-line" style={{ width: 64, height: 18 }} />
           <div className="skel-yrhead">
             <div className="skel skel-line sm" style={{ width: 34 }} />
             <span />
@@ -114,20 +110,13 @@ export default function Skeleton() {
             <div className="skel skel-line sm" style={{ width: 60, marginLeft: "auto" }} />
           </div>
           <div className="skel-yrlist">
-            {Array.from({ length: 12 }).map((_, g) => (
-              <div key={g}>
-                <div className="skel-dayhead">
-                  <div className="skel skel-line sm" style={{ width: 118 }} />
-                </div>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div className="skel-yrrow" key={i}>
-                    <div className="skel skel-line sm" style={{ width: 46 }} />
-                    <div className="skel skel-circle" style={{ width: 26, height: 26 }} />
-                    <div className="skel skel-line sm" style={{ width: 40, marginLeft: "auto" }} />
-                    <div className="skel skel-line sm" style={{ width: 28, marginLeft: "auto" }} />
-                    <div className="skel skel-line sm" style={{ width: 44, marginLeft: "auto" }} />
-                  </div>
-                ))}
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div className="skel-yrrow" key={i}>
+                <div className="skel skel-line sm" style={{ width: 88 }} />
+                <div className="skel skel-circle" style={{ width: 26, height: 26 }} />
+                <div className="skel skel-line sm" style={{ width: 40, marginLeft: "auto" }} />
+                <div className="skel skel-line sm" style={{ width: 28, marginLeft: "auto" }} />
+                <div className="skel skel-line sm" style={{ width: 44, marginLeft: "auto" }} />
               </div>
             ))}
           </div>

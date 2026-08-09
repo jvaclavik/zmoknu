@@ -10,6 +10,8 @@
   --surface-0: #05080f;
   --bg-1: #05080f;
   --bg-2: #0a1120;
+  /* Fallback, dokud není nastavené data-sky (nebo mimo sky motiv). */
+  --sky-mid: #0a1120;
   --card: rgba(var(--ov-rgb), 0.06);
   --card-border: rgba(var(--ov-rgb), 0.1);
   --text: #eef2fb;
@@ -42,6 +44,7 @@
   --surface-0: #eef2f8;
   --bg-1: #eaf1fb;
   --bg-2: #d6e2f3;
+  --sky-mid: #e0eaf6;
   --text: #131826;
   --muted: #56617c;
   --accent: #1f7fd6;
@@ -117,38 +120,49 @@ body {
 }
 
 /* Varianty oblohy podle počasí (ztmavené). Atribut je na <html> (:root), aby
-   ho preload v index.html mohl nastavit z localStorage ještě před Reactem. */
+   ho preload v index.html mohl nastavit z localStorage ještě před Reactem.
+   --sky-mid = tón uprostřed gradientu (pilulky na hraně karty, ať překryjí border). */
 :root[data-sky="clear"] {
   background: linear-gradient(160deg, #0d2a4d, #102f54 60%, #143f66) fixed;
+  --sky-mid: #102f54;
 }
 :root[data-sky="cloud"] {
   background: linear-gradient(160deg, #141b29, #1f2838) fixed;
+  --sky-mid: #1a2130;
 }
 :root[data-sky="rain"] {
   background: linear-gradient(160deg, #0d141d, #18222e) fixed;
+  --sky-mid: #121b26;
 }
 :root[data-sky="snow"] {
   background: linear-gradient(160deg, #182032, #28324d) fixed;
+  --sky-mid: #20293f;
 }
 :root[data-sky="night"] {
   background: linear-gradient(160deg, #03060d, #080e1a) fixed;
+  --sky-mid: #050a14;
 }
 
 /* Světlé varianty obloh – vyšší specificita přebije tmavé data-sky výše. */
 :root[data-theme="light"][data-sky="clear"] {
   background: linear-gradient(160deg, #dcecff, #eaf4ff 60%, #f3f8ff) fixed;
+  --sky-mid: #e3f0ff;
 }
 :root[data-theme="light"][data-sky="cloud"] {
   background: linear-gradient(160deg, #dde5f1, #eef1f7) fixed;
+  --sky-mid: #e6ecf4;
 }
 :root[data-theme="light"][data-sky="rain"] {
   background: linear-gradient(160deg, #d5dfea, #e5ebf3) fixed;
+  --sky-mid: #dde4ee;
 }
 :root[data-theme="light"][data-sky="snow"] {
   background: linear-gradient(160deg, #e8eef7, #f5f8fc) fixed;
+  --sky-mid: #eef3f9;
 }
 :root[data-theme="light"][data-sky="night"] {
   background: linear-gradient(160deg, #cdd7ea, #dce4f2) fixed;
+  --sky-mid: #d5deec;
 }
 
 /* Krytí systémové lišty (čas/baterie) na iOS PWA – aby pod ni při scrollu
@@ -1369,29 +1383,56 @@ body::before {
 }
 
 /* yr.no hourly */
-/* Tlačítko „Načíst další dny" pod výhledem. */
-.yr-showmore {
-  display: block;
-  margin: 12px auto 4px;
-  padding: 8px 18px;
-  border-radius: 999px;
-  border: 1px dashed var(--card-border);
-  background: var(--card);
+/* Kulaté tlačítko „více" (jen šipka) na spodní hraně karty. */
+.card.yr-has-more {
+  position: relative;
+  padding-bottom: calc(var(--card-py) + 8px);
+  margin-bottom: 32px;
+}
+.yr-more {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--ov-rgb), 0.14);
+  background: var(--sky-mid);
   color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  box-shadow: none;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
 }
 @media (hover: hover) {
-  .yr-showmore:hover {
-    background: rgba(var(--ov-rgb), 0.09);
+  .yr-more:hover {
     color: var(--text);
-    border-color: var(--accent);
+    border-color: rgba(var(--ov-rgb), 0.28);
   }
 }
+.yr-more:active {
+  transform: translate(-50%, 50%) scale(0.94);
+}
+.yr-more-ico {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+.yr-more-ico.flip {
+  transform: rotate(180deg);
+}
 
-/* Segmentový přepínač kroku výhledu (1h / 6h / 24h). */
+/* Segmentový přepínač kroku výhledu (1h / 4h / 6h). */
 .yr-seg {
   display: inline-flex;
   gap: 2px;
@@ -1439,10 +1480,15 @@ body::before {
 }
 .yr-24 .yr-head,
 .yr-24 .yr-row {
-  grid-template-columns: minmax(110px, 1.4fr) 132px 64px 1fr 92px;
+  /* Široký sloupec ikon (4×24 + gap), větší mezera před teplotou přes column-gap. */
+  grid-template-columns: minmax(100px, 1.25fr) 132px 76px 1fr 84px;
+  column-gap: 22px;
 }
 .yr-24 .yr-icon {
   gap: 9px;
+  justify-content: flex-start;
+  padding-right: 0;
+  overflow: visible;
 }
 .yr-24 .yr-icon svg {
   flex: 0 0 auto;
@@ -1450,6 +1496,77 @@ body::before {
 .yr-24 .yr-row {
   padding-top: 13px;
   padding-bottom: 13px;
+  /* Stejná výška sbaleno i rozbaleno (ikony 24px + padding + border). */
+  min-height: calc(24px + 26px + 1px);
+  box-sizing: border-box;
+}
+/* Rozbalený den + jeho hodiny tvoří jeden blok – bez viditelné čáry mezi nimi.
+   Border necháme (transparentní), ať se výška řádku nehne. */
+.yr-24 .yr-row.expanded,
+.yr-24 .yr-row.expanded.selected {
+  background: rgba(91, 182, 255, 0.06);
+  border-bottom-color: transparent;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.yr-24 .yr-row.expanded .yr-time {
+  min-width: 0;
+  /* Stejná barva jako časy v rozpisu; tučnost dne necháváme. */
+  color: var(--muted);
+}
+/* Přepínač 1h/4h/6h – stejná výška jako denní ikony (24px). */
+.yr-seg-inline {
+  justify-self: end;
+  align-self: center;
+  height: 24px;
+  padding: 1px;
+  box-sizing: border-box;
+}
+.yr-seg-inline button {
+  min-width: 32px;
+  height: 100%;
+  padding: 0 8px;
+  font-size: 0.72rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Podrobný rozpis dne (1h / 4h / 6h) – stejný grid jako denní řádky / hlavička. */
+.yr-detail {
+  margin: 0 calc(-1 * var(--card-px));
+  padding: 0 0 18px;
+  background: rgba(91, 182, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--ov-rgb), 0.08);
+}
+.yr-detail .yr-detail-row {
+  /* Stejné vodorovné odsazení jako denní řádek (grid dědí z .yr-24 .yr-row). */
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: var(--card-px);
+  padding-right: var(--card-px);
+  padding-top: 7px;
+  padding-bottom: 7px;
+  border-bottom-color: rgba(var(--ov-rgb), 0.04);
+  background: transparent;
+}
+.yr-detail .yr-detail-row:last-child {
+  border-bottom: none;
+}
+@media (hover: hover) {
+  .yr-detail .yr-detail-row:hover {
+    background: transparent;
+  }
+}
+.yr-detail .yr-time {
+  font-weight: 500;
+  color: var(--muted);
+}
+.yr-detail .yr-icon {
+  /* Jedna ikona – ať sedí pod první denní ikonou, ne uprostřed širokého sloupce. */
+  justify-content: flex-start;
+  padding-right: 0;
+  overflow: visible;
 }
 .yr-row.clickable {
   cursor: pointer;
@@ -1482,6 +1599,11 @@ body::before {
   padding-top: 6px;
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(var(--ov-rgb), 0.03);
+}
+/* Poslední den (nebo jeho rozbalený detail) – bez spodní čáry nad hranou karty. */
+.yr-list > div:last-child > .yr-row,
+.yr-list > div:last-child .yr-detail {
+  border-bottom: none;
 }
 @media (hover: hover) {
   .yr-row:hover {
@@ -2242,6 +2364,7 @@ body::before {
 .wear-scale-stop.active svg {
   color: var(--wear-accent);
 }
+/* Hlavní „Zobrazit více" u oblečení – vzhled sdílí s .yr-more (hrana karty). */
 .wear-scales-more {
   align-self: center;
   margin: 12px auto 4px;
@@ -2258,27 +2381,8 @@ body::before {
     color 0.15s,
     border-color 0.15s;
 }
-/* Hlavní „Zobrazit více" – odkryje detaily pod seznamem oblečení. Stejný vzhled
-   jako .wear-scales-more, jen centrovaný jako blok (není ve flex kontejneru). */
-.wear-more {
-  display: block;
-  margin: 12px auto 0;
-  padding: 8px 18px;
-  border-radius: 999px;
-  border: 1px dashed var(--card-border);
-  background: var(--card);
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    border-color 0.15s;
-}
 @media (hover: hover) {
-  .wear-scales-more:hover,
-  .wear-more:hover {
+  .wear-scales-more:hover {
     background: rgba(var(--ov-rgb), 0.09);
     color: var(--text);
     border-color: var(--accent);
@@ -3497,6 +3601,9 @@ input[type="range"]::-moz-range-thumb {
   fill: #9fd0ff;
   font-size: 10px;
 }
+.mg-extrema.gust {
+  font-size: 10px;
+}
 .mg-extrema {
   fill: var(--text);
   font-size: 11px;
@@ -3504,6 +3611,20 @@ input[type="range"]::-moz-range-thumb {
   paint-order: stroke;
   stroke: rgba(var(--panel-rgb), 0.85);
   stroke-width: 3px;
+}
+.mg-winddir {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  top: 4px;
+  opacity: 0.95;
+}
+.mg-icons.wind {
+  height: 26px;
+}
+.mg-winddir-svg {
+  display: block;
 }
 /* rozsah modelů ve stats u teploty, např. „teplota 15–20°" */
 .mg-stat-range {
@@ -4982,7 +5103,9 @@ input[type="range"]::-moz-range-thumb {
   flex-direction: column;
   gap: 12px;
 }
-/* Déšť přes skeleton – jemný, ať evokuje „počasí se načítá". */
+/* Déšť přes skeleton – jemný, ať evokuje „počasí se načítá".
+   Pozor: v @keyframes nesmí být var() – Safari/iOS je v keyframes ignoruje,
+   a když jsou střední snímky s opacity neplatné, interpoluje se 0→0 = neviditelný déšť. */
 .skeleton-main {
   position: relative;
 }
@@ -4991,37 +5114,31 @@ input[type="range"]::-moz-range-thumb {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  z-index: 2;
+  z-index: 5;
 }
 .skel-raindrop {
   position: absolute;
   top: -32px;
   width: 2px;
   border-radius: 2px;
+  /* Síla kapky přes alfa v gradientu (ne přes animovanou opacity). */
   background: linear-gradient(
     to bottom,
     rgba(130, 175, 255, 0),
-    rgba(130, 175, 255, 0.45)
+    rgba(130, 175, 255, var(--op, 0.55))
   );
+  opacity: 0.85;
   animation-name: skel-rainfall;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 @keyframes skel-rainfall {
   0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  8% {
-    opacity: var(--op, 0.6);
-  }
-  92% {
-    opacity: var(--op, 0.6);
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateY(102vh);
-    opacity: 0;
+    transform: translate3d(0, 105vh, 0);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6383,18 +6500,20 @@ input[type="range"]::-moz-range-thumb {
     gap: 10px;
   }
   .yr-icon {
-    justify-self: center;
+    justify-self: start;
   }
   .yr-24 .yr-head,
   .yr-24 .yr-row {
-    grid-template-columns: minmax(88px, 1.4fr) 26px 42px minmax(46px, 1fr) 44px;
-    gap: 5px;
+    grid-template-columns: minmax(80px, 1.25fr) 26px 52px minmax(44px, 1fr) 44px;
+    column-gap: 14px;
+    gap: 14px;
   }
   .yr-24 .yr-time {
     font-size: 0.8rem;
   }
   .yr-24 .yr-icon {
     gap: 4px;
+    padding-right: 2px;
   }
   .yr-24 .yr-icon svg {
     width: 22px;
@@ -6402,6 +6521,10 @@ input[type="range"]::-moz-range-thumb {
   }
   .yr-24 .yr-temp {
     font-size: 0.95rem;
+  }
+  .yr-detail .yr-detail-row {
+    padding-left: var(--card-px);
+    padding-right: var(--card-px);
   }
   .yr-head {
     font-size: 0.6rem;

@@ -223,6 +223,7 @@ const EN: Record<string, string> = {
   teplota: "temperature",
   "srážky ({prob} %)": "precipitation ({prob} %)",
   "vítr (nárazy {g} m/s)": "wind (gusts {g} m/s)",
+  "vítr od {dir}": "wind from {dir}",
   oblačnost: "cloud cover",
   vlhkost: "humidity",
   "rosný bod": "dew point",
@@ -429,6 +430,9 @@ const EN: Record<string, string> = {
   // HourlyForecast
   Výhled: "Forecast",
   "Krok výhledu": "Forecast step",
+  "Podrobnost výhledu": "Forecast detail",
+  "Rozsah výhledu": "Forecast range",
+  Den: "Day",
   Čas: "Time",
   "Vítr (m/s)": "Wind (m/s)",
   "{prob}% šance na déšť": "{prob}% chance of rain",
