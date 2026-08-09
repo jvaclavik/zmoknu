@@ -360,6 +360,17 @@ body::before {
   color: var(--accent);
   background: rgba(91, 182, 255, 0.16);
 }
+/* Název místa u „Moje poloha“ jen na širších obrazovkách (vejde se do řádku). */
+.hb-place-detail {
+  display: none;
+  font-weight: 500;
+  opacity: 0.8;
+}
+@media (min-width: 720px) {
+  .hb-place-detail {
+    display: inline;
+  }
+}
 .hb-day {
   color: var(--tier, var(--accent-warm));
   background: color-mix(in srgb, var(--tier, var(--accent-warm)) 18%, transparent);
@@ -4558,13 +4569,15 @@ input[type="range"]::-moz-range-thumb {
   margin: 0;
   padding: 0;
   line-height: 0;
-  color: #f5b301;
+  color: #ffc107;
   cursor: pointer;
 }
 .map-star {
   display: block;
   transform-origin: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  filter:
+    drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.85))
+    drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
   transition: transform 0.12s ease;
 }
 @media (hover: hover) {

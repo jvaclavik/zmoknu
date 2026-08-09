@@ -41,6 +41,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   current: GeoLocation | null;
+  followLocation?: boolean;
   onSelect: (loc: GeoLocation) => void;
   onLocate: () => void;
   locating: boolean;
@@ -59,6 +60,7 @@ export default function SearchBar({
   open,
   onClose,
   current,
+  followLocation = false,
   onSelect,
   onLocate,
   locating,
@@ -207,8 +209,11 @@ export default function SearchBar({
 
   const isSearching = query.trim().length >= 2;
   // Historie bez aktuálního místa (to je zobrazené výš samostatně).
+  // Při „Moje poloha" necháme pojmenované místo v historii (Praha, Berlín…),
+  // ať jde offline vybrat i když je to právě aktuální GPS.
   const recent = history.filter(
-    (h) => !(current && sameLocation(h, current)),
+    (h) =>
+      followLocation || !(current && sameLocation(h, current)),
   );
 
   // Plochý seznam vybíratelných položek ve stejném pořadí, jak jsou vykreslené.
@@ -413,11 +418,17 @@ export default function SearchBar({
                     >
                       <PinGlyph active />
                       <span className="locpick-rowtext">
-                        <span className="locpick-name">{current.name}</span>
+                        <span className="locpick-name">
+                          {followLocation
+                            ? tr("Moje poloha")
+                            : current.name}
+                        </span>
                         <span className="locpick-meta">
-                          {[current.admin1, current.country]
-                            .filter(Boolean)
-                            .join(", ")}
+                          {followLocation
+                            ? current.name
+                            : [current.admin1, current.country]
+                                .filter(Boolean)
+                                .join(", ")}
                         </span>
                       </span>
                     </button>

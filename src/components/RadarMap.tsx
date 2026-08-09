@@ -41,6 +41,8 @@ interface Props {
   radarStatus: "loading" | "ok" | "error";
   favorites?: GeoLocation[];
   onSelect?: (loc: GeoLocation) => void;
+  onLocate?: () => void;
+  followLocation?: boolean;
   modal?: boolean;
   onClose?: () => void;
 }
@@ -222,6 +224,8 @@ export default function RadarMap({
   radarStatus,
   favorites = [],
   onSelect,
+  onLocate,
+  followLocation = false,
   modal = false,
   onClose,
 }: Props) {
@@ -879,7 +883,7 @@ export default function RadarMap({
         markersRef.current.push(m);
       });
 
-    // Moje poloha – klikací marker; po kliknutí ji nastavíme jako aktuální.
+    // Moje poloha – klikací marker; po kliknutí zapneme sledování GPS.
     // Skryjeme, když prakticky splývá s aktuálním místem (ať se markery nepřekrývají).
     const nearActive =
       myLoc &&
@@ -891,11 +895,15 @@ export default function RadarMap({
       meEl.type = "button";
       meEl.title = tr("Moje poloha");
       meEl.innerHTML = '<span class="me-dot"></span><span class="me-ring"></span>';
-      meEl.addEventListener("click", async () => {
-        const name = await reverseGeocode(myLoc.lat, myLoc.lon).catch(
-          () => tr("Moje poloha"),
-        );
-        onSelect?.({ name, latitude: myLoc.lat, longitude: myLoc.lon });
+      meEl.addEventListener("click", () => {
+        if (onLocate) onLocate();
+        else {
+          reverseGeocode(myLoc.lat, myLoc.lon)
+            .catch(() => tr("Moje poloha"))
+            .then((name) =>
+              onSelect?.({ name, latitude: myLoc.lat, longitude: myLoc.lon }),
+            );
+        }
       });
       const meMarker = new maplibregl.Marker({ element: meEl, anchor: "center" })
         .setLngLat([myLoc.lon, myLoc.lat])
@@ -906,13 +914,13 @@ export default function RadarMap({
     // Aktuální místo – modrý pin.
     const locEl = document.createElement("div");
     locEl.className = "loc-pin";
-    locEl.title = location.name;
+    locEl.title = followLocation ? tr("Moje poloha") : location.name;
     locEl.innerHTML = pinSvg;
     const locMarker = new maplibregl.Marker({ element: locEl, anchor: "bottom" })
       .setLngLat([location.longitude, location.latitude])
       .addTo(map);
     markersRef.current.push(locMarker);
-  }, [location, favorites, onSelect, myLoc, showFavs]);
+  }, [location, favorites, onSelect, onLocate, followLocation, myLoc, showFavs]);
 
   // Webkamery v okolí – stáhneme až po zapnutí přepínače (kolem aktuálního místa).
   useEffect(() => {
@@ -1590,7 +1598,7 @@ const pinSvg =
 
 // Hvězdička pro oblíbená místa. Barvu určuje `color` rodiče (CSS).
 const starSvg =
-  '<svg class="map-star" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8l2.94 6.32 6.86.86-5.06 4.7 1.32 6.82L12 18.02l-6.06 3.28 1.32-6.82L2.2 8.98l6.86-.86z" fill="currentColor" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+  '<svg class="map-star" width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8l2.94 6.32 6.86.86-5.06 4.7 1.32 6.82L12 18.02l-6.06 3.28 1.32-6.82L2.2 8.98l6.86-.86z" fill="currentColor" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
 // Ikona markeru webkamery (vkládá se do DOM elementu markeru MapLibre).
 const webcamMarkerSvg =

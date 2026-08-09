@@ -87,16 +87,45 @@ function locationFromUrl(): GeoLocation | null {
   return null;
 }
 
-function loadSavedLocation(): GeoLocation {
-  const fromUrl = locationFromUrl();
-  if (fromUrl) return fromUrl;
+function readStoredLocation(): GeoLocation | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw) as GeoLocation;
   } catch {
     /* ignore */
   }
+  return null;
+}
+
+// Appka si lat/lon sama zapisuje do URL (sdílení). To není deep-link –
+// ten je jen když se URL liší od naposledy uložené lokace (otevřený odkaz).
+function isExternalDeepLink(): boolean {
+  const fromUrl = locationFromUrl();
+  if (!fromUrl) return false;
+  const saved = readStoredLocation();
+  if (!saved) return true;
+  return (
+    Math.abs(fromUrl.latitude - saved.latitude) >= 0.00015 ||
+    Math.abs(fromUrl.longitude - saved.longitude) >= 0.00015
+  );
+}
+
+function loadSavedLocation(): GeoLocation {
+  const fromUrl = locationFromUrl();
+  const saved = readStoredLocation();
+  if (fromUrl && (!saved || isExternalDeepLink())) return fromUrl;
+  if (saved) return saved;
   return DEFAULT_LOCATION;
+}
+
+function loadFollowLocation(): boolean {
+  try {
+    const raw = localStorage.getItem("zmoknu.followLocation");
+    if (raw !== null) return JSON.parse(raw) as boolean;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 // „Naposledy aktualizováno" jako relativní čas (právě teď / před X min / před X h).
@@ -153,6 +182,11 @@ export default function App() {
   const [followLocation, setFollowLocation] = useStoredState<boolean>(
     "zmoknu.followLocation",
     false,
+  );
+  // Při sledování GPS nejdřív počkáme na čerstvou polohu, ať se nenačte stará.
+  // Skutečný deep-link (sdílený odkaz) má přednost a GPS nečeká.
+  const [gpsReady, setGpsReady] = useState(
+    () => !loadFollowLocation() || isExternalDeepLink(),
   );
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [radar, setRadar] = useState<RadarData | null>(null);
@@ -241,6 +275,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!gpsReady) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -303,7 +338,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [location, pastDays, model, reloadTick]);
+  }, [location, pastDays, model, reloadTick, gpsReady]);
 
   // Po dokončení načítání ukonči stav obnovování (pull-to-refresh).
   useEffect(() => {
@@ -886,6 +921,7 @@ export default function App() {
   const selectLocation = useCallback(
     (loc: GeoLocation) => {
       setFollowLocation(false);
+      setGpsReady(true);
       setLocation(loc);
     },
     [setFollowLocation],
@@ -893,11 +929,17 @@ export default function App() {
 
   // Zjistí aktuální polohu z prohlížeče. Při ručním spuštění (tlačítko) hlásíme
   // chyby a logujeme událost; při automatickém (po startu appky) běží tiše.
+  // UI ukazuje „Moje poloha"; do historie jde reverse-geocode (Praha, Berlín…).
   const runGeolocate = useCallback(
     (opts?: { auto?: boolean }) => {
+      const finish = () => {
+        setLocating(false);
+        setGpsReady(true);
+      };
       if (!navigator.geolocation) {
         if (!opts?.auto)
           setError(tr("Geolokace není v tomto prohlížeči dostupná."));
+        finish();
         return;
       }
       if (!opts?.auto) posthog.capture("geolocation_used");
@@ -908,20 +950,37 @@ export default function App() {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const { latitude, longitude } = pos.coords;
-          const name = await reverseGeocode(latitude, longitude);
-          const loc: GeoLocation = { name, latitude, longitude };
-          // Zapamatujeme si volbu i pro příště a místo uložíme do historie
-          // (kvůli offline použití a rychlému opětovnému výběru).
+          // Nejdřív souřadnice + odemknutí UI – reverse-geocode nesmí blokovat
+          // předpověď (fetch může viset a appka by zůstala na skeletonu).
           setFollowLocation(true);
-          pushHistory(loc);
-          setLocation(loc);
-          setLocating(false);
+          setLocation({
+            name: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            latitude,
+            longitude,
+          });
+          finish();
+          try {
+            let name = await reverseGeocode(latitude, longitude);
+            if (!name || name === "Moje poloha") {
+              name = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+            }
+            const loc: GeoLocation = { name, latitude, longitude };
+            pushHistory(loc);
+            setLocation(loc);
+          } catch {
+            pushHistory({
+              name: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              latitude,
+              longitude,
+            });
+          }
         },
         () => {
           if (!opts?.auto) setError(tr("Polohu se nepodařilo zjistit."));
-          setLocating(false);
+          // Bez GPS zůstanou naposledy uložené souřadnice (offline fallback).
+          finish();
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
       );
     },
     [pushHistory, setFollowLocation],
@@ -930,14 +989,62 @@ export default function App() {
   const handleLocate = useCallback(() => runGeolocate(), [runGeolocate]);
 
   // Po startu appky obnovíme sledování polohy, pokud si ho uživatel zvolil.
-  // Neděláme to, když je lokace určená odkazem (deep-link) – ten má přednost.
+  // Vlastní zápis lat/lon do URL nebereme jako deep-link (viz isExternalDeepLink).
   const autoLocatedRef = useRef(false);
   useEffect(() => {
     if (autoLocatedRef.current) return;
     autoLocatedRef.current = true;
-    if (followLocation && !locationFromUrl()) runGeolocate({ auto: true });
+    if (isExternalDeepLink()) {
+      setFollowLocation(false);
+      return;
+    }
+    if (followLocation) runGeolocate({ auto: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pojistka: kdyby GPS callback nikdy nepřišel, nenecháme appku viset bez dat.
+  useEffect(() => {
+    if (gpsReady) return;
+    const t = window.setTimeout(() => setGpsReady(true), 12000);
+    return () => window.clearTimeout(t);
+  }, [gpsReady]);
+
+  // Po změně jazyka přejmenujeme aktuální místo přes stejné reverse-geocode API
+  // (Tokio / Tokyo…), bez další služby. Historie/oblíbené necháme – ty se
+  // přeloží až při novém výběru nebo GPS.
+  const langBootRef = useRef(true);
+  useEffect(() => {
+    if (langBootRef.current) {
+      langBootRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    const { latitude, longitude } = location;
+    reverseGeocode(latitude, longitude).then((name) => {
+      if (cancelled || !name || name === "Moje poloha") return;
+      if (/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(name)) return;
+      setLocation((prev) =>
+        prev.latitude === latitude && prev.longitude === longitude
+          ? { ...prev, name }
+          : prev,
+      );
+      if (followLocation) {
+        pushHistory({ name, latitude, longitude });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Jen při změně jazyka – ne při každém posunu GPS.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
+  const placeDetail =
+    followLocation &&
+    location.name &&
+    !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(location.name)
+      ? location.name
+      : null;
 
   const selectedDay =
     forecast?.daily.find((d) => d.time === selectedDate) ?? forecast?.daily[0];
@@ -1216,7 +1323,16 @@ export default function App() {
               onClick={() => setSearchOpen(true)}
               title={tr("Vybrat místo")}
             >
-              {location ? location.name : tr("místo")}
+              {followLocation ? (
+                <>
+                  {tr("Moje poloha")}
+                  {placeDetail && (
+                    <span className="hb-place-detail"> · {placeDetail}</span>
+                  )}
+                </>
+              ) : (
+                location.name
+              )}
             </button>{" "}
             {tr("na")}{" "}
             {forecast ? (
@@ -1291,6 +1407,7 @@ export default function App() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         current={location}
+        followLocation={followLocation}
         onSelect={selectLocation}
         onLocate={handleLocate}
         locating={locating}
@@ -1445,6 +1562,8 @@ export default function App() {
             radarStatus={radarStatus}
             favorites={favorites}
             onSelect={selectLocation}
+            onLocate={handleLocate}
+            followLocation={followLocation}
             modal
             onClose={() => setRadarOpen(false)}
           />

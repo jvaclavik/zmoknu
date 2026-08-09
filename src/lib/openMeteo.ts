@@ -1,4 +1,5 @@
 import type { Forecast, GeoLocation } from "../types";
+import { getLang } from "./i18n";
 
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
@@ -546,9 +547,10 @@ async function geocodeMapTiler(
   query: string,
   key: string,
 ): Promise<GeoLocation[]> {
+  const lang = getLang();
   const url =
     `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json` +
-    `?key=${key}&language=cs&limit=8`;
+    `?key=${key}&language=${lang}&limit=8`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Hledání lokace selhalo.");
   const data = (await res.json()) as { features?: MapTilerFeature[] };
@@ -579,7 +581,7 @@ async function geocodeOpenMeteo(query: string): Promise<GeoLocation[]> {
   const params = new URLSearchParams({
     name: query,
     count: "8",
-    language: "cs",
+    language: getLang(),
     format: "json",
   });
   const res = await fetch(`${GEOCODE_URL}?${params.toString()}`);
@@ -714,9 +716,10 @@ async function reverseMapTiler(
   lon: number,
   key: string,
 ): Promise<string | null> {
+  const lang = getLang();
   const url =
     `https://api.maptiler.com/geocoding/${lon},${lat}.json` +
-    `?key=${key}&language=cs`;
+    `?key=${key}&language=${lang}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = (await res.json()) as {
@@ -737,6 +740,7 @@ export async function reverseGeocode(
   lat: number,
   lon: number,
 ): Promise<string> {
+  const lang = getLang();
   // Nejdřív MapTiler – umí čtvrti/části města (např. „Břevnov“ místo „Praha“).
   const key = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
   if (key) {
@@ -751,7 +755,7 @@ export async function reverseGeocode(
     const params = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lon.toString(),
-      localityLanguage: "cs",
+      localityLanguage: lang,
     });
     const res = await fetch(`${REVERSE_URL}?${params.toString()}`);
     if (!res.ok) throw new Error();
