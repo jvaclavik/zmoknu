@@ -9,10 +9,12 @@ export interface OmForecastGrid {
 }
 
 // Rozměr mřížky (N×N bodů) a její záběr v zeměpisné šířce (stupně).
-const N = 17;
-const LAT_SPAN = 3.0;
-// Kolik budoucích hodin nejvýše zobrazit (ICON-D2 dává rozumnou předpověď).
-const MAX_HOURS = 24;
+// Hustší a menší mřížka (~10 km rozteč) = ostřejší, míň „skákavé" pole srážek.
+// Pod tím je ICON‑D2 (~2 km, nativní 15min srážky) v centrální Evropě.
+const N = 21;
+const LAT_SPAN = 2.0;
+// Kolik budoucích 15min kroků nejvýše zobrazit (96 × 15 min = 24 h).
+const MAX_STEPS = 96;
 
 export async function fetchOmForecastGrid(
   lat: number,
@@ -32,32 +34,36 @@ export async function fetchOmForecastGrid(
     }
   }
 
+  // 15min kroky (minutely_15) místo hodinových → jemnější časová osa.
   const url =
     "https://api.open-meteo.com/v1/forecast" +
     `?latitude=${lats.join(",")}` +
     `&longitude=${lons.join(",")}` +
-    "&hourly=precipitation&forecast_days=2&timeformat=unixtime";
+    "&minutely_15=precipitation&forecast_days=2&timeformat=unixtime";
 
   const res = await fetch(url);
   if (!res.ok) throw new Error("Nepodařilo se načíst předpověď srážek.");
   const data = (await res.json()) as {
-    hourly: { time: number[]; precipitation: (number | null)[] };
+    minutely_15: { time: number[]; precipitation: (number | null)[] };
   }[];
   if (!Array.isArray(data) || !data.length) {
     throw new Error("Předpověď srážek není k dispozici.");
   }
 
-  const allTimes = data[0].hourly.time;
+  const allTimes = data[0].minutely_15.time;
   const now = Date.now() / 1000;
-  let start = allTimes.findIndex((t) => t >= now - 1800);
+  // Začni na aktuálním 15min kroku (s malou rezervou dozadu).
+  let start = allTimes.findIndex((t) => t >= now - 900);
   if (start < 0) start = 0;
-  const end = Math.min(allTimes.length, start + MAX_HOURS);
+  const end = Math.min(allTimes.length, start + MAX_STEPS);
   const times = allTimes.slice(start, end);
 
+  // minutely_15 udává srážky za 15 min (mm); pro shodnou škálu s heatmapou
+  // (kalibrovanou na mm/h) přepočítáme na intenzitu ×4.
   const values: number[][] = times.map((_, k) =>
     data.map((pt) => {
-      const v = pt.hourly.precipitation[start + k];
-      return v == null || !Number.isFinite(v) ? 0 : v;
+      const v = pt.minutely_15.precipitation[start + k];
+      return v == null || !Number.isFinite(v) ? 0 : v * 4;
     }),
   );
 

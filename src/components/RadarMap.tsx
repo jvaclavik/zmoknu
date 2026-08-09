@@ -19,6 +19,7 @@ import {
 } from "../lib/precipScale";
 import {
   buildChmiSatFrames,
+  cloudMaskUrl,
   CHMI_SAT_CZ_COORDS,
   type SatFrame,
 } from "../lib/chmiSat";
@@ -46,44 +47,11 @@ interface Props {
 
 type Source = "rain" | "chmi" | "omforecast" | "accum";
 
-// ID vrstev/zdrojů: předpovědní radar (Open-Meteo heatmapa), úhrn srážek
-// (akumulovaná heatmapa) a oblačnost (družice ČHMÚ jako image overlay).
+// ID vrstev/zdrojů: předpovědní radar (Open-Meteo, spojitý rastr srážek),
+// úhrn srážek (interpolovaný rastr) a oblačnost (družice ČHMÚ image overlay).
 const OMF_ID = "omf-precip";
 const ACC_ID = "om-accum";
 const CLOUD_ID = "chmi-sat-cloud";
-
-// Váha heatmapy podle srážek daného časového kroku (mm/h → 0–1).
-function omfWeight(i: number): maplibregl.ExpressionSpecification {
-  return [
-    "interpolate",
-    ["linear"],
-    ["coalesce", ["get", `p${i}`], 0],
-    0,
-    0,
-    0.3,
-    0.18,
-    2,
-    0.5,
-    6,
-    1,
-  ] as maplibregl.ExpressionSpecification;
-}
-
-// Poloměr heatmapy podle zoomu – dost velký, ať se řídká mřížka bodů slije do
-// souvislého pole a je dobře vidět (platí pro předpověď).
-const ACC_RADIUS: maplibregl.ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["zoom"],
-  4,
-  22,
-  6,
-  55,
-  8,
-  150,
-  10,
-  380,
-] as maplibregl.ExpressionSpecification;
 
 // Vyrenderuje pravidelnou mřížku úhrnů do canvasu s bilineární interpolací
 // mezi body → plynulé (kontinuální) pole. Vrátí data URL a rohy pro image
@@ -129,6 +97,70 @@ function buildAccumImage(
       const top = val(i0, j0) * (1 - tj) + val(i0, j1) * tj;
       const bot = val(i1, j0) * (1 - tj) + val(i1, j1) * tj;
       const v = top * (1 - ti) + bot * ti;
+      const [r, g, b, a] = precipColor(v);
+      const idx = (py * W + px) * 4;
+      img.data[idx] = r;
+      img.data[idx + 1] = g;
+      img.data[idx + 2] = b;
+      img.data[idx + 3] = a;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return {
+    url: canvas.toDataURL(),
+    coords: [
+      [lonMin, latMax],
+      [lonMax, latMax],
+      [lonMax, latMin],
+      [lonMin, latMin],
+    ],
+  };
+}
+
+// Předpovědní srážky pro jeden časový krok → spojitý rastr (bilineární
+// interpolace mřížky + barevná škála mm/h). Oproti heatmapě je pole
+// fyzikálně čitelné (barva = intenzita) a mezi snímky stabilní (neskáče).
+function buildForecastFrameImage(
+  grid: OmForecastGrid,
+  ti: number,
+): { url: string; coords: Corners } | null {
+  const frame = grid.values[ti];
+  if (!frame) return null;
+  const n = Math.round(Math.sqrt(grid.lats.length));
+  if (n < 2 || n * n !== grid.lats.length) return null;
+
+  const latMin = grid.lats[0];
+  const latMax = grid.lats[(n - 1) * n];
+  const lonMin = grid.lons[0];
+  const lonMax = grid.lons[n - 1];
+
+  const cell = 22;
+  const W = (n - 1) * cell;
+  const H = (n - 1) * cell;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const img = ctx.createImageData(W, H);
+
+  const val = (i: number, j: number) => frame[i * n + j];
+
+  for (let py = 0; py < H; py++) {
+    const fy = py / (H - 1);
+    const gi = (1 - fy) * (n - 1); // nahoře (py=0) je sever = největší i
+    const i0 = Math.floor(gi);
+    const i1 = Math.min(n - 1, i0 + 1);
+    const ei = gi - i0;
+    for (let px = 0; px < W; px++) {
+      const fx = px / (W - 1);
+      const gj = fx * (n - 1);
+      const j0 = Math.floor(gj);
+      const j1 = Math.min(n - 1, j0 + 1);
+      const ej = gj - j0;
+      const top = val(i0, j0) * (1 - ej) + val(i0, j1) * ej;
+      const bot = val(i1, j0) * (1 - ej) + val(i1, j1) * ej;
+      const v = top * (1 - ei) + bot * ei;
       const [r, g, b, a] = precipColor(v);
       const idx = (py * W + px) * 4;
       img.data[idx] = r;
@@ -262,6 +294,9 @@ export default function RadarMap({
   const radarSrcIds = useRef<string[]>([]);
   const failedSrcIds = useRef<Set<string>>(new Set());
   const cloudSrcIds = useRef<string[]>([]);
+  // Cache vyrenderovaných rastrů předpovědi (podle indexu kroku) – ať se při
+  // scrubování / přehrávání nemusí stejný snímek počítat znovu.
+  const omfImgCache = useRef<Map<number, string>>(new Map());
   const didAutoIndex = useRef(false);
   const initialCenter = useRef<[number, number]>([
     location.longitude,
@@ -592,14 +627,26 @@ export default function RadarMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, source, framesKey]);
 
-  // Přepínání viditelného snímku (dlaždicové zdroje) nebo času heatmapy.
+  // Vyrenderuje (a nakešuje) rastr předpovědi pro daný krok.
+  const omfFrameUrl = (ti: number): string | null => {
+    if (!omGrid) return null;
+    const hit = omfImgCache.current.get(ti);
+    if (hit) return hit;
+    const built = buildForecastFrameImage(omGrid, ti);
+    if (!built) return null;
+    omfImgCache.current.set(ti, built.url);
+    return built.url;
+  };
+
+  // Přepínání viditelného snímku – u předpovědi překreslíme rastr, u radaru
+  // jen přepneme průhlednost přednačtených dlaždicových vrstev.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     if (source === "omforecast") {
-      if (map.getLayer(`lyr-${OMF_ID}`)) {
-        map.setPaintProperty(`lyr-${OMF_ID}`, "heatmap-weight", omfWeight(index));
-      }
+      const src = map.getSource(OMF_ID) as maplibregl.ImageSource | undefined;
+      const url = omfFrameUrl(index);
+      if (src && url) src.updateImage({ url });
       return;
     }
     frames.forEach((_, i) => {
@@ -608,10 +655,11 @@ export default function RadarMap({
         map.setPaintProperty(lyr, "raster-opacity", i === index ? 0.8 : 0);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mapReady, frames, source]);
 
-  // Předpovědní radar: heatmapa srážek z mřížky Open-Meteo. Každý bod nese
-  // hodnoty p0..pK (srážky v jednotlivých hodinách); slider mění, kterou čteme.
+  // Předpovědní radar: spojitý rastr srážek z mřížky Open-Meteo jako image
+  // overlay (barva = intenzita mm/h). Slider mění, který krok se vykreslí.
   const omKey = omGrid ? `${omGrid.lats.length}:${omGrid.times[0] ?? 0}` : "";
   useEffect(() => {
     const map = mapRef.current;
@@ -622,61 +670,26 @@ export default function RadarMap({
 
     if (source !== "omforecast" || !omGrid) return;
 
-    const features = omGrid.lats.map((la, pi) => {
-      const props: Record<string, number> = {};
-      omGrid.values.forEach((row, ti) => {
-        props[`p${ti}`] = row[pi];
-      });
-      return {
-        type: "Feature" as const,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [omGrid.lons[pi], la],
-        },
-        properties: props,
-      };
-    });
+    // Nová mřížka → zahoď staré rastry z cache.
+    omfImgCache.current.clear();
+    const first = buildForecastFrameImage(omGrid, 0);
+    if (!first) return;
+    omfImgCache.current.set(0, first.url);
 
     map.addSource(OMF_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features },
+      type: "image",
+      url: first.url,
+      coordinates: first.coords,
     });
     map.addLayer(
       {
         id: `lyr-${OMF_ID}`,
-        type: "heatmap",
+        type: "raster",
         source: OMF_ID,
         paint: {
-          "heatmap-weight": omfWeight(0),
-          "heatmap-intensity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            4,
-            2,
-            10,
-            1.3,
-          ],
-          // Poloměr musí překrýt rozestup bodů mřížky, ať pole nemá díry.
-          "heatmap-radius": ACC_RADIUS,
-          "heatmap-opacity": 0.92,
-          "heatmap-color": [
-            "interpolate",
-            ["linear"],
-            ["heatmap-density"],
-            0,
-            "rgba(0,0,0,0)",
-            0.08,
-            "rgba(120,200,255,0.7)",
-            0.3,
-            "rgba(60,140,240,0.85)",
-            0.55,
-            "rgba(120,90,230,0.9)",
-            0.8,
-            "rgba(214,70,120,0.94)",
-            1,
-            "rgba(240,60,90,0.98)",
-          ],
+          "raster-opacity": 0.85,
+          "raster-resampling": "linear",
+          "raster-fade-duration": 0,
         },
       },
       labelsBeforeId(map),
@@ -763,6 +776,9 @@ export default function RadarMap({
 
     if (!cloudsOn || !satFrames.length) return teardown;
 
+    let cancelled = false;
+    const ac = new AbortController();
+
     // Vlož pod srážkovou vrstvu (dlaždice radaru / heatmapu), případně aspoň
     // pod hranice a popisky, ať zůstanou nahoře.
     const beforeId = radarSrcIds.current.length
@@ -771,34 +787,54 @@ export default function RadarMap({
         ? `lyr-${OMF_ID}`
         : labelsBeforeId(map);
 
-    const cur = frames[index];
-    const activeSat = nearestSatIdx(cur ? cur.time : Date.now() / 1000);
-
-    satFrames.forEach((f, i) => {
-      const id = `${CLOUD_ID}-${i}`;
-      // Idempotentně – kdyby zdroj po rychlém přepnutí/StrictMode zůstal.
-      dropSource(id);
-      map.addSource(id, {
-        type: "image",
-        url: f.url,
-        coordinates: CHMI_SAT_CZ_COORDS,
-      });
-      map.addLayer(
-        {
-          id: `lyr-${id}`,
-          type: "raster",
-          source: id,
-          paint: {
-            "raster-opacity": i === activeSat ? 0.85 : 0,
-            "raster-opacity-transition": { duration: 0 },
-            "raster-fade-duration": 0,
-          },
-        },
-        beforeId,
+    // Snímky nejdřív předzpracujeme na průhledné (jen mraky), teprve pak je
+    // vložíme jako image vrstvy. Fallback na surové URL, kdyby maska selhala.
+    (async () => {
+      const urls = await Promise.all(
+        satFrames.map((f) =>
+          cloudMaskUrl(f.url, ac.signal).catch(() => f.url),
+        ),
       );
-      cloudSrcIds.current.push(id);
-    });
-    return teardown;
+      if (cancelled) return;
+      const m = mapRef.current;
+      if (!m) return;
+
+      const cur = frames[index];
+      const activeSat = nearestSatIdx(cur ? cur.time : Date.now() / 1000);
+
+      satFrames.forEach((_f, i) => {
+        const id = `${CLOUD_ID}-${i}`;
+        // Idempotentně – kdyby zdroj po rychlém přepnutí/StrictMode zůstal.
+        dropSource(id);
+        m.addSource(id, {
+          type: "image",
+          url: urls[i],
+          coordinates: CHMI_SAT_CZ_COORDS,
+        });
+        m.addLayer(
+          {
+            id: `lyr-${id}`,
+            type: "raster",
+            source: id,
+            paint: {
+              // Průhlednost už nese samotný snímek (alfa dle jasu); vrstvu
+              // proto necháme plně viditelnou a jen ne/aktivní přepínáme.
+              "raster-opacity": i === activeSat ? 1 : 0,
+              "raster-opacity-transition": { duration: 0 },
+              "raster-fade-duration": 0,
+            },
+          },
+          beforeId,
+        );
+        cloudSrcIds.current.push(id);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+      teardown();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, cloudsOn, satKey, basemap, framesKey, source]);
 
@@ -812,7 +848,7 @@ export default function RadarMap({
     cloudSrcIds.current.forEach((id, i) => {
       const lyr = `lyr-${id}`;
       if (map.getLayer(lyr)) {
-        map.setPaintProperty(lyr, "raster-opacity", i === activeSat ? 0.85 : 0);
+        map.setPaintProperty(lyr, "raster-opacity", i === activeSat ? 1 : 0);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -835,9 +871,9 @@ export default function RadarMap({
         el.className = "fav-marker";
         el.type = "button";
         el.title = f.name;
-        el.innerHTML = pinSvg;
+        el.innerHTML = starSvg;
         el.addEventListener("click", () => onSelect?.(f));
-        const m = new maplibregl.Marker({ element: el, anchor: "bottom" })
+        const m = new maplibregl.Marker({ element: el, anchor: "center" })
           .setLngLat([f.longitude, f.latitude])
           .addTo(map);
         markersRef.current.push(m);
@@ -977,18 +1013,23 @@ export default function RadarMap({
 
   useEffect(() => {
     if (!playing || frames.length === 0 || !allLoaded) return;
+    // Jemnější kroky = víc snímků; zkrať interval, ať smyčka netrvá dlouho.
+    const step = source === "omforecast" ? 160 : 500;
     timer.current = window.setInterval(() => {
       setIndex((i) => (i + 1) % frames.length);
-    }, 500);
+    }, step);
     return () => {
       if (timer.current) window.clearInterval(timer.current);
     };
-  }, [playing, frames.length, allLoaded]);
+  }, [playing, frames.length, allLoaded, source]);
 
   const active = frames[index];
   const isForecast =
     source === "omforecast" || (source === "rain" && index >= nowcastStart);
-  const spanHours = frames.length > 0 ? frames.length - 1 : 0;
+  const spanHours =
+    frames.length > 1
+      ? Math.round((frames[frames.length - 1].time - frames[0].time) / 3600)
+      : 0;
   const lang = getLang();
   const timeLabel = useMemo(() => {
     if (!active) return "";
@@ -1546,6 +1587,10 @@ function CompressGlyph() {
 // Mapový pin (teardrop). Barvu určuje `color` rodičovského elementu (CSS).
 const pinSvg =
   '<svg class="map-pin" width="26" height="34" viewBox="0 0 24 32" aria-hidden="true"><path d="M12 .8C6.4.8 1.9 5.3 1.9 10.9c0 7.2 10.1 20.3 10.1 20.3S22.1 18.1 22.1 10.9C22.1 5.3 17.6.8 12 .8z" fill="currentColor" stroke="#fff" stroke-width="1.6"/><circle cx="12" cy="11" r="3.7" fill="#fff"/></svg>';
+
+// Hvězdička pro oblíbená místa. Barvu určuje `color` rodiče (CSS).
+const starSvg =
+  '<svg class="map-star" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8l2.94 6.32 6.86.86-5.06 4.7 1.32 6.82L12 18.02l-6.06 3.28 1.32-6.82L2.2 8.98l6.86-.86z" fill="currentColor" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 
 // Ikona markeru webkamery (vkládá se do DOM elementu markeru MapLibre).
 const webcamMarkerSvg =

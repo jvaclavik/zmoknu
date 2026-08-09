@@ -4428,7 +4428,7 @@ input[type="range"]::-moz-range-thumb {
   cursor: default;
 }
 
-/* Oblíbená místa na mapě – žlutý pin (klikací) */
+/* Oblíbená místa na mapě – žlutá hvězdička (klikací) */
 .fav-marker {
   -webkit-appearance: none;
   appearance: none;
@@ -4440,9 +4440,15 @@ input[type="range"]::-moz-range-thumb {
   color: #f5b301;
   cursor: pointer;
 }
+.map-star {
+  display: block;
+  transform-origin: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transition: transform 0.12s ease;
+}
 @media (hover: hover) {
-  .fav-marker:hover .map-pin {
-    transform: scale(1.12);
+  .fav-marker:hover .map-star {
+    transform: scale(1.15);
   }
 }
 /* Moje poloha (GPS) – modré kolečko s prstencem, klikací */
