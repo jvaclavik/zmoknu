@@ -51,6 +51,7 @@ async function fetchOmJson<T>(
 interface RawForecast {
   timezone: string;
   utc_offset_seconds: number;
+  elevation?: number;
   current: Record<string, number | string>;
   hourly: Record<string, (number | string)[]>;
   daily: Record<string, (number | string)[]>;
@@ -206,6 +207,7 @@ export async function fetchForecast(
       "relative_humidity_2m",
       "dew_point_2m",
       "surface_pressure",
+      "temperature_850hPa",
       "cloud_cover",
       "cloud_cover_low",
       "cloud_cover_mid",
@@ -287,9 +289,11 @@ export async function fetchForecast(
 
   const minutely15 = mapMinutely15(data.minutely_15);
 
+  const elev = Number(data.elevation);
   const result: Forecast = {
     timezone: data.timezone,
     utcOffsetSeconds: Number(data.utc_offset_seconds) || 0,
+    elevation: Number.isFinite(elev) ? elev : undefined,
     minutely15,
     current: {
       time: String(c.time),
@@ -460,6 +464,9 @@ function mapHourly(h: RawForecast["hourly"]) {
       humidity: Number(h.relative_humidity_2m[i]),
       dewPoint: Number(h.dew_point_2m[i]),
       pressure: Number(h.surface_pressure[i]),
+      temperature850: num(
+        (h as Record<string, (number | null)[]>).temperature_850hPa?.[i],
+      ),
       cloudCover: Number(h.cloud_cover[i]),
       cloudLow: Number(h.cloud_cover_low[i]),
       cloudMid: Number(h.cloud_cover_mid[i]),

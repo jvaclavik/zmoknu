@@ -35,6 +35,7 @@ export interface HourlyPoint {
   humidity: number;
   dewPoint: number;
   pressure: number;
+  temperature850?: number;
   cloudCover: number;
   cloudLow: number;
   cloudMid: number;
@@ -69,6 +70,8 @@ export interface Forecast {
   // Posun zóny lokality vůči UTC v sekundách (z Open-Meteo). Časy v hourly/daily
   // jsou „naivní" lokální řetězce lokality – offset umožní správně určit „teď".
   utcOffsetSeconds: number;
+  // Nadmořská výška (m) grid-buňky / DEM, pro kterou model počítá předpověď.
+  elevation?: number;
   current: CurrentWeather;
   hourly: HourlyPoint[];
   daily: DailyPoint[];

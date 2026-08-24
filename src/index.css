@@ -288,6 +288,13 @@ body::before {
   align-items: center;
   gap: 8px;
 }
+.hb-row1-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 /* Druhý řádek – věta „předpověď pro [místo] na [den]".
    Scroll jde až do kraje obrazovky, obsah ale začíná zarovnaný s 1. řádkem. */
 .hb-row2 {
@@ -360,16 +367,15 @@ body::before {
   color: var(--accent);
   background: rgba(91, 182, 255, 0.16);
 }
-/* Název místa u „Moje poloha“ jen na širších obrazovkách (vejde se do řádku). */
-.hb-place-detail {
-  display: none;
-  font-weight: 500;
-  opacity: 0.8;
+.hb-place-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-@media (min-width: 720px) {
-  .hb-place-detail {
-    display: inline;
-  }
+.hb-place-locicon {
+  flex-shrink: 0;
+  margin-top: -1px;
+  opacity: 0.92;
 }
 .hb-day {
   color: var(--tier, var(--accent-warm));
@@ -387,7 +393,6 @@ body::before {
   cursor: default;
 }
 .hb-today {
-  margin-left: auto;
   /* Záporné svislé okraje zajistí, že 34px tlačítko nezvětší výšku řádku
      (řádek si drží výšku loga ~30px), ať se ikonka zobrazuje nebo ne. */
   margin-top: -2px;
@@ -410,7 +415,42 @@ body::before {
   font-size: 0.85rem;
   font-weight: 600;
 }
-/* Na desktopu ukážeme u ikonky hodin i popisek „Dnes". */
+.hb-locate {
+  margin-top: -2px;
+  margin-bottom: -2px;
+  flex-shrink: 0;
+  display: grid;
+  grid-auto-flow: column;
+  place-items: center;
+  gap: 6px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.hb-locate.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--card-border));
+  background: rgba(91, 182, 255, 0.16);
+}
+.hb-locate:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+.hb-locate-label {
+  display: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hb-locate-spin {
+  width: 16px;
+  height: 16px;
+}
+/* Na desktopu ukážeme u ikonky kalendáře i popisek „Dnes". */
 @media (min-width: 641px) {
   .hb-today {
     width: auto;
@@ -418,6 +458,14 @@ body::before {
     height: 32px;
   }
   .hb-today-label {
+    display: inline;
+  }
+  .hb-locate {
+    width: auto;
+    padding: 0 12px;
+    height: 32px;
+  }
+  .hb-locate-label {
     display: inline;
   }
 }
@@ -430,6 +478,12 @@ body::before {
   }
   .hb-today:hover {
     background: rgba(var(--ov-rgb), 0.08);
+  }
+  .hb-locate:hover:not(:disabled) {
+    background: rgba(var(--ov-rgb), 0.08);
+  }
+  .hb-locate.on:hover:not(:disabled) {
+    background: rgba(91, 182, 255, 0.26);
   }
 }
 
@@ -483,6 +537,35 @@ body::before {
   }
 }
 /* Ovládací klastr vpravo dole v mapě (nastavení + zavřít), blízko FAB pro otevření */
+.radar-locatectl {
+  position: absolute;
+  top: calc(10px + var(--sat, env(safe-area-inset-top, 0px)));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 800;
+}
+.radar-locatectl .radar-ctl-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(var(--panel-rgb), 0.72);
+  border-color: rgba(var(--ov-rgb), 0.14);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.radar-locatectl .radar-locatebtn.on {
+  background: rgba(91, 182, 255, 0.28);
+  color: var(--accent);
+  border-color: rgba(91, 182, 255, 0.35);
+}
+.radar-locatectl .radar-locatebtn:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+.radar-locatectl .radar-locatebtn .spinner {
+  width: 18px;
+  height: 18px;
+}
 .radar-mapctl {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right));
@@ -962,7 +1045,14 @@ body::before {
   color: var(--muted);
   cursor: pointer;
 }
-.locpick-mapbtn {
+.locpick-search-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.locpick-mapbtn,
+.locpick-locatebtn {
   display: grid;
   place-items: center;
   width: 36px;
@@ -973,6 +1063,17 @@ body::before {
   background: transparent;
   color: var(--accent);
   cursor: pointer;
+}
+.locpick-locatebtn.on {
+  background: rgba(91, 182, 255, 0.14);
+}
+.locpick-locatebtn:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+.locpick-locatebtn .spinner {
+  width: 16px;
+  height: 16px;
 }
 .locpick-body {
   flex: 1 1 auto;
@@ -1060,6 +1161,14 @@ body::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.locpick-locicon {
+  flex-shrink: 0;
+  opacity: 0.92;
 }
 .locpick-meta {
   font-size: 0.8rem;
@@ -1131,25 +1240,6 @@ body::before {
   padding: 12px 10px 8px;
   color: var(--muted);
   font-size: 0.88rem;
-}
-.locpick-locate {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin: 6px 0 2px;
-  padding: 11px 12px;
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  background: rgba(91, 182, 255, 0.1);
-  color: var(--accent);
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.locpick-locate:disabled {
-  opacity: 0.7;
-  cursor: default;
 }
 
 /* Výběr místa na mapě (překryv nad location pickerem) */
@@ -1249,8 +1339,11 @@ body::before {
   .locpick-clear:hover {
     background: rgba(var(--ov-rgb), 0.08);
   }
-  .locpick-locate:hover {
-    background: rgba(91, 182, 255, 0.18);
+  .locpick-locatebtn:hover:not(:disabled) {
+    background: rgba(91, 182, 255, 0.16);
+  }
+  .locpick-locatebtn.on:hover:not(:disabled) {
+    background: rgba(91, 182, 255, 0.22);
   }
   .locpick-mapbtn:hover {
     background: rgba(91, 182, 255, 0.16);
@@ -3288,6 +3381,22 @@ input[type="range"]::-moz-range-thumb {
   transition: opacity 0.12s;
   pointer-events: none;
 }
+.mg-info-pop-wide {
+  max-width: 300px;
+}
+.mg-info-pop p {
+  margin: 0 0 0.55em;
+}
+.mg-info-pop p:last-child {
+  margin-bottom: 0;
+}
+.mg-info-pop a {
+  color: var(--accent);
+  pointer-events: auto;
+}
+.bio-info-link {
+  margin-top: 0.35em !important;
+}
 .mg-legend-line.dashed {
   background-image: none;
   -webkit-mask: repeating-linear-gradient(
@@ -3855,6 +3964,344 @@ input[type="range"]::-moz-range-thumb {
 .smart-summary-foot .smart-summary-text {
   flex: 1;
   min-width: 0;
+}
+/* Biopředpověď */
+.bio-card {
+  --bio-accent: #6ee7a8;
+  --bio-accent-rgb: 110, 231, 168;
+  --bio-accent-soft: rgba(110, 231, 168, 0.14);
+  --bio-accent-border: rgba(110, 231, 168, 0.28);
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--bio-accent-border);
+  background:
+    radial-gradient(
+      120% 80% at 0% 0%,
+      var(--bio-accent-soft),
+      transparent 55%
+    ),
+    var(--card);
+}
+.bio-card.bio-mild {
+  --bio-accent: #6ee7a8;
+  --bio-accent-rgb: 110, 231, 168;
+  --bio-accent-soft: rgba(110, 231, 168, 0.14);
+  --bio-accent-border: rgba(110, 231, 168, 0.28);
+}
+.bio-card.bio-moderate {
+  --bio-accent: #ffd166;
+  --bio-accent-rgb: 255, 209, 102;
+  --bio-accent-soft: rgba(255, 209, 102, 0.16);
+  --bio-accent-border: rgba(255, 209, 102, 0.34);
+}
+.bio-card.bio-high {
+  --bio-accent: #ff7a4d;
+  --bio-accent-rgb: 255, 122, 77;
+  --bio-accent-soft: rgba(255, 122, 77, 0.16);
+  --bio-accent-border: rgba(255, 122, 77, 0.34);
+}
+:root[data-theme="light"] .bio-card.bio-mild {
+  --bio-accent: #16a06a;
+  --bio-accent-soft: rgba(22, 160, 106, 0.1);
+}
+:root[data-theme="light"] .bio-card.bio-moderate {
+  --bio-accent: #c07d00;
+  --bio-accent-soft: rgba(192, 125, 0, 0.1);
+}
+:root[data-theme="light"] .bio-card.bio-high {
+  --bio-accent: #d64524;
+  --bio-accent-soft: rgba(214, 69, 36, 0.1);
+}
+.bio-head-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+@media (hover: hover) {
+  .bio-head-btn:hover {
+    background: rgba(var(--bio-accent-rgb), 0.06);
+  }
+}
+.bio-head-ico {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  color: var(--bio-accent);
+  background: var(--bio-accent-soft);
+  border: 1px solid var(--bio-accent-border);
+}
+.bio-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+.bio-head-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+.bio-head-sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--bio-accent);
+}
+.bio-title-hint {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.bio-peek-ring {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  min-width: 2.35em;
+  height: 2.35em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #06121f;
+  background: var(--bio-accent);
+  box-shadow: 0 0 0 3px var(--bio-accent-soft);
+}
+.bio-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+.bio-chev.open {
+  transform: rotate(180deg);
+}
+.bio-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid rgba(var(--bio-accent-rgb), 0.14);
+}
+.bio-hero {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  padding: 14px 0 12px;
+}
+.bio-hero-score {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 88px;
+}
+.bio-score-ring {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 3px solid var(--bio-accent);
+  box-shadow:
+    0 0 0 4px var(--bio-accent-soft),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.bio-score-ring strong {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--bio-accent);
+  font-variant-numeric: tabular-nums;
+}
+.bio-score-unit {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.bio-load-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #06121f;
+  white-space: nowrap;
+}
+.bio-load-pill.lvl-good {
+  background: #6ee7a8;
+}
+.bio-load-pill.lvl-moderate {
+  background: #ffd166;
+}
+.bio-load-pill.lvl-verypoor {
+  background: #ff7a4d;
+}
+.bio-hero-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+.bio-summary {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.bio-thermal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 1px solid rgba(var(--ov-rgb), 0.08);
+}
+.bio-thermal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: auto;
+}
+.bio-scale {
+  margin-bottom: 12px;
+}
+.bio-scale-track {
+  position: relative;
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--ov-rgb), 0.1);
+}
+.bio-scale-seg {
+  flex: 1;
+}
+.bio-scale-mild {
+  background: rgba(110, 231, 168, 0.55);
+}
+.bio-scale-mod {
+  background: rgba(255, 209, 102, 0.55);
+}
+.bio-scale-high {
+  background: rgba(255, 122, 77, 0.55);
+}
+.bio-scale-marker {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: var(--bio-accent);
+  border: 2px solid var(--card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.bio-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.bio-scale-labels span {
+  flex: 1;
+  text-align: center;
+}
+.bio-scale-labels span:first-child {
+  text-align: left;
+}
+.bio-scale-labels span:last-child {
+  text-align: right;
+}
+.bio-factors {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bio-factors li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 1px solid rgba(var(--ov-rgb), 0.08);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+.bio-factor-pts {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.85em;
+  height: 1.85em;
+  padding: 0 0.25em;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #06121f;
+  background: var(--bio-accent);
+}
+.bio-factor-grp {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6em;
+  height: 1.5em;
+  padding: 0 0.35em;
+  border-radius: 6px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--bio-accent);
+  background: var(--bio-accent-soft);
+  border: 1px solid var(--bio-accent-border);
+}
+.bio-factor-text {
+  min-width: 0;
+}
+.bio-empty {
+  margin: 0 0 10px;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  text-align: center;
+  color: var(--muted);
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 1px dashed rgba(var(--ov-rgb), 0.12);
+}
+.bio-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 /* Shoda modelů jako prostý text vpravo (bez badge) + klikací tooltip */
 .model-agree-plain {

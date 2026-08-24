@@ -5,6 +5,7 @@ import { searchLocations, reverseGeocode } from "../lib/openMeteo";
 import { tr } from "../lib/i18n";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import { sameLocation } from "./FavoritesBar";
+import LocationArrowGlyph from "./LocationArrowGlyph";
 // MapPicker tahá maplibre-gl – načteme ho až při otevření mapy.
 const MapPicker = lazy(() => import("./MapPicker"));
 
@@ -42,6 +43,7 @@ interface Props {
   onClose: () => void;
   current: GeoLocation | null;
   followLocation?: boolean;
+  elevation?: number | null;
   onSelect: (loc: GeoLocation) => void;
   onLocate: () => void;
   locating: boolean;
@@ -61,6 +63,7 @@ export default function SearchBar({
   onClose,
   current,
   followLocation = false,
+  elevation = null,
   onSelect,
   onLocate,
   locating,
@@ -304,15 +307,29 @@ export default function SearchBar({
               <CloseX />
             </button>
           )}
-          <button
-            type="button"
-            className="locpick-mapbtn"
-            onClick={() => setMapOpen(true)}
-            aria-label={tr("Vybrat na mapě")}
-            title={tr("Vybrat na mapě")}
-          >
-            <MapGlyph />
-          </button>
+          <div className="locpick-search-actions">
+            <button
+              type="button"
+              className="locpick-mapbtn"
+              onClick={() => setMapOpen(true)}
+              aria-label={tr("Vybrat na mapě")}
+              title={tr("Vybrat na mapě")}
+            >
+              <MapGlyph />
+            </button>
+            <button
+              type="button"
+              className={`locpick-locatebtn${followLocation ? " on" : ""}`}
+              onClick={onLocate}
+              disabled={locating}
+              aria-label={tr("Použít moji polohu")}
+              title={
+                locating ? tr("Zjišťuji polohu…") : tr("Použít moji polohu")
+              }
+            >
+              {locating ? <span className="spinner" /> : <LocationArrowGlyph />}
+            </button>
+          </div>
         </div>
 
         <div className="locpick-body" ref={bodyRef}>
@@ -395,18 +412,6 @@ export default function SearchBar({
             </section>
           ) : (
             <>
-              <button
-                type="button"
-                className="locpick-locate"
-                onClick={onLocate}
-                disabled={locating}
-              >
-                {locating ? <span className="spinner" /> : <LocateGlyph />}
-                <span>
-                  {locating ? tr("Zjišťuji polohu…") : tr("Použít moji polohu")}
-                </span>
-              </button>
-
               {current && (
                 <section className="locpick-section">
                   <div className="locpick-label">{tr("Aktuální místo")}</div>
@@ -419,16 +424,31 @@ export default function SearchBar({
                       <PinGlyph active />
                       <span className="locpick-rowtext">
                         <span className="locpick-name">
-                          {followLocation
-                            ? tr("Moje poloha")
-                            : current.name}
+                          {followLocation ? (
+                            <>
+                              <span>{current.name}</span>
+                              <LocationArrowGlyph
+                                size={14}
+                                className="locpick-locicon"
+                              />
+                            </>
+                          ) : (
+                            current.name
+                          )}
                         </span>
                         <span className="locpick-meta">
-                          {followLocation
-                            ? current.name
-                            : [current.admin1, current.country]
-                                .filter(Boolean)
-                                .join(", ")}
+                          {[
+                            [current.admin1, current.country]
+                              .filter(Boolean)
+                              .join(", "),
+                            elevation != null && Number.isFinite(elevation)
+                              ? tr("{n} m n. m.", {
+                                  n: Math.round(elevation),
+                                })
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
                       </span>
                     </button>
@@ -680,19 +700,6 @@ function SearchGlyph() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
       <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function LocateGlyph() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
-      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
-      <line x1="12" y1="1.5" x2="12" y2="4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="12" y1="19.5" x2="12" y2="22.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="1.5" y1="12" x2="4.5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="19.5" y1="12" x2="22.5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

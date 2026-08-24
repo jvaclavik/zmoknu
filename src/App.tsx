@@ -14,6 +14,8 @@ import CustomizeContent, {
   type WidgetDef,
 } from "./components/CustomizeContent";
 import DayDetails from "./components/DayDetails";
+import BioForecast from "./components/BioForecast";
+import LocationArrowGlyph from "./components/LocationArrowGlyph";
 import DaySelector from "./components/DaySelector";
 import Donate from "./components/Donate";
 import { sameLocation } from "./components/FavoritesBar";
@@ -163,6 +165,7 @@ const WIDGET_DEFS: WidgetDef[] = [
   { id: "wear", label: "Co na sebe" },
   { id: "outlook", label: "Výhled" },
   { id: "webcams", label: "Webkamery" },
+  { id: "bio", label: "Biopředpověď" },
   { id: "details", label: "Další detaily" },
 ];
 const DEFAULT_WIDGETS = WIDGET_DEFS.map((w) => w.id);
@@ -252,6 +255,12 @@ export default function App() {
         }
       }
       merged.splice(at, 0, id);
+    }
+    const bioIdx = merged.indexOf("bio");
+    const detailsIdx = merged.indexOf("details");
+    if (bioIdx >= 0 && detailsIdx >= 0 && bioIdx !== detailsIdx - 1) {
+      merged.splice(bioIdx, 1);
+      merged.splice(merged.indexOf("details"), 0, "bio");
     }
     return { enabledOrder: merged, hiddenOrder: hi };
   }, [widgetEnabled, widgetHidden]);
@@ -1046,10 +1055,18 @@ export default function App() {
       ? location.name
       : null;
 
+  const elevationM =
+    forecast?.elevation != null && Number.isFinite(forecast.elevation)
+      ? Math.round(forecast.elevation)
+      : null;
+
   const selectedDay =
     forecast?.daily.find((d) => d.time === selectedDate) ?? forecast?.daily[0];
 
   const today = todayISO(forecast?.utcOffsetSeconds);
+  const todayDayNum = today
+    ? Number(today.slice(8, 10))
+    : new Date().getDate();
 
   // Rozbalovací výběr dnů přímo v hlavičce (toggle přes tb-day).
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
@@ -1301,34 +1318,53 @@ export default function App() {
           <span className="hb-brandname">
             zmoknu<span className="hb-q">?</span>
           </span>
-          {forecast && selectedDate && selectedDate !== today && (
+          <div className="hb-row1-actions">
+            {forecast && selectedDate && selectedDate !== today && (
+              <button
+                type="button"
+                className="hb-today"
+                onClick={() => setSelectedDate(today)}
+                title={tr("Přejít na dnešek")}
+                aria-label={tr("Přejít na dnešek")}
+              >
+                <CalendarDayGlyph day={todayDayNum} />
+                <span className="hb-today-label">{tr("Dnes")}</span>
+              </button>
+            )}
             <button
               type="button"
-              className="hb-today"
-              onClick={() => setSelectedDate(today)}
-              title={tr("Přejít na dnešek")}
-              aria-label={tr("Přejít na dnešek")}
+              className={`hb-locate${followLocation ? " on" : ""}`}
+              onClick={handleLocate}
+              disabled={locating}
+              title={tr("Použít moji polohu")}
+              aria-label={tr("Použít moji polohu")}
             >
-              <ClockGlyph />
-              <span className="hb-today-label">{tr("Dnes")}</span>
+              {locating ? (
+                <span className="spinner hb-locate-spin" />
+              ) : (
+                <LocationArrowGlyph size={16} />
+              )}
+              <span className="hb-locate-label">{tr("Použít moji polohu")}</span>
             </button>
-          )}
+          </div>
         </div>
         <div className="hb-row2">
           <span className="hb-text">
             {tr("předpověď pro")}{" "}
             <button
               type="button"
-              className="hb-pick hb-place"
+              className={`hb-pick hb-place${followLocation ? " hb-place-follow" : ""}`}
               onClick={() => setSearchOpen(true)}
-              title={tr("Vybrat místo")}
+              title={
+                followLocation
+                  ? `${placeDetail ?? location.name} (${tr("Moje poloha")})`
+                  : tr("Vybrat místo")
+              }
             >
               {followLocation ? (
                 <>
-                  {tr("Moje poloha")}
-                  {placeDetail && (
-                    <span className="hb-place-detail"> · {placeDetail}</span>
-                  )}
+                  <span>{placeDetail ?? location.name}</span>
+                  <LocationArrowGlyph size={14} className="hb-place-locicon" />
                 </>
               ) : (
                 location.name
@@ -1408,6 +1444,7 @@ export default function App() {
         onClose={() => setSearchOpen(false)}
         current={location}
         followLocation={followLocation}
+        elevation={elevationM}
         onSelect={selectLocation}
         onLocate={handleLocate}
         locating={locating}
@@ -1499,6 +1536,15 @@ export default function App() {
                     feelsMin={feelsMin}
                   />
                 ) : null,
+                bio: dayHasData ? (
+                  <BioForecast
+                    hourly={forecast.hourly}
+                    date={selectedDate}
+                    air={air[selectedDate] ?? null}
+                    lat={location.latitude}
+                    lon={location.longitude}
+                  />
+                ) : null,
                 meteogram: dayHasData ? (
                   <Meteogram
                     hourly={forecast.hourly}
@@ -1564,6 +1610,7 @@ export default function App() {
             onSelect={selectLocation}
             onLocate={handleLocate}
             followLocation={followLocation}
+            locating={locating}
             modal
             onClose={() => setRadarOpen(false)}
           />
@@ -1987,7 +2034,7 @@ function FlagEN() {
   );
 }
 
-function ClockGlyph() {
+function CalendarDayGlyph({ day }: { day: number }) {
   return (
     <svg
       width="18"
@@ -1996,14 +2043,33 @@ function ClockGlyph() {
       fill="none"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+      <rect
+        x="3"
+        y="5"
+        width="18"
+        height="16"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path d="M3 9h18" stroke="currentColor" strokeWidth="2" />
       <path
-        d="M12 7.5V12l3 2"
+        d="M8 3v4M16 3v4"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
+      <text
+        x="12"
+        y="17.5"
+        textAnchor="middle"
+        fill="currentColor"
+        fontSize="9"
+        fontWeight="700"
+        fontFamily="system-ui, -apple-system, sans-serif"
+      >
+        {day}
+      </text>
     </svg>
   );
 }

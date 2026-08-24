@@ -10,6 +10,7 @@ export interface AirQuality {
   aqi: number; // European AQI (denní maximum)
   pm25: number; // denní průměr
   pm10: number; // denní průměr
+  so2Max: number; // denní maximum SO₂ (µg/m³) – skupina E BMP
   pollen: PollenInfo[]; // jen druhy s daty > 0 (denní maximum)
 }
 
@@ -128,6 +129,7 @@ export async function fetchAirQuality(
       "european_aqi",
       "pm2_5",
       "pm10",
+      "sulphur_dioxide",
       "alder_pollen",
       "birch_pollen",
       "grass_pollen",
@@ -149,6 +151,7 @@ export async function fetchAirQuality(
   const aqiH = num("european_aqi");
   const pm25H = num("pm2_5");
   const pm10H = num("pm10");
+  const so2H = num("sulphur_dioxide");
   const pollenH: Record<string, (number | null)[]> = {};
   for (const k of POLLEN_KINDS) pollenH[k] = num(`${k}_pollen`);
 
@@ -159,6 +162,7 @@ export async function fetchAirQuality(
     pm25N: number;
     pm10Sum: number;
     pm10N: number;
+    so2Max: number;
     pollen: Record<string, number>;
   };
   const byDate = new Map<string, Acc>();
@@ -166,7 +170,7 @@ export async function fetchAirQuality(
     const date = times[i].slice(0, 10);
     let a = byDate.get(date);
     if (!a) {
-      a = { aqi: 0, pm25Sum: 0, pm25N: 0, pm10Sum: 0, pm10N: 0, pollen: {} };
+      a = { aqi: 0, pm25Sum: 0, pm25N: 0, pm10Sum: 0, pm10N: 0, so2Max: 0, pollen: {} };
       byDate.set(date, a);
     }
     const aqi = aqiH[i];
@@ -181,6 +185,8 @@ export async function fetchAirQuality(
       a.pm10Sum += Number(pm10);
       a.pm10N++;
     }
+    const so2 = so2H[i];
+    if (so2 != null) a.so2Max = Math.max(a.so2Max, Number(so2));
     for (const k of POLLEN_KINDS) {
       const v = pollenH[k][i];
       if (v != null) a.pollen[k] = Math.max(a.pollen[k] ?? 0, Number(v));
@@ -200,6 +206,7 @@ export async function fetchAirQuality(
       aqi: Math.round(a.aqi),
       pm25: a.pm25N ? Math.round((a.pm25Sum / a.pm25N) * 10) / 10 : 0,
       pm10: a.pm10N ? Math.round((a.pm10Sum / a.pm10N) * 10) / 10 : 0,
+      so2Max: Math.round(a.so2Max * 10) / 10,
       pollen,
     };
   }

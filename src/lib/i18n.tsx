@@ -36,6 +36,8 @@ const EN: Record<string, string> = {
   "předpověď pro": "forecast for",
   místo: "place",
   na: "for",
+  "{n} m n. m.": "{n} m a.s.l.",
+  "Nadmořská výška předpovědi": "Forecast elevation",
   dnes: "today",
   "Vybrat místo": "Choose place",
   "Přejít na dnešek": "Go to today",
@@ -552,6 +554,61 @@ const EN: Record<string, string> = {
   Přetáhnout: "Drag",
   Souhrn: "Summary",
   "Co na sebe": "What to wear",
+  Biopředpověď: "Bio forecast",
+  "Co je biopředpověď": "What is the bio forecast",
+  "Shrnuje, jak náročné bude počasí pro tělo – teplo, chlad, výkyvy tlaku a další faktory. Hodí se pro plánování venku, sportu nebo pokud jste na počasí citlivější.":
+    "Summarises how demanding the weather will be on your body – heat, cold, pressure swings and other factors. Useful for planning outdoor activities, sport, or if you’re weather-sensitive.",
+  "Počítáme index biotropie podle modelu ČHMÚ BMP IIIc – součet bodů za meteorologické jevy (teplota, tlak, vítr, vlhkost…).":
+    "We compute the biotropy index using the ČHMÚ BMP IIIc model – points summed for meteorological factors (temperature, pressure, wind, humidity…).",
+  "Pro vaši polohu zhruba oblast {n} z 7 regionů ČHMÚ.":
+    "For your location, roughly region {n} of 7 ČHMÚ areas.",
+  "Nejde o oficiální produkt ČHMÚ – oficiální předpověď zohledňuje i synoptickou situaci a regionální posouzení meteorologů.":
+    "Not an official ČHMÚ product – the official forecast also includes synoptic conditions and regional meteorologist assessment.",
+  "mírná zátěž": "mild load",
+  "střední zátěž": "moderate load",
+  "vysoká zátěž": "high load",
+  bodů: "pts",
+  "Tepelná zátěž": "Heat load",
+  "bez výrazné tepelné zátěže": "no significant thermal load",
+  "silné vedro": "extreme heat",
+  vedro: "heat",
+  "chladno až mráz": "cold to frost",
+  "Skupina B5 modelu BMP – vysoká tepelná zátěž.":
+    "BMP group B5 – high thermal load.",
+  "Skupina B4 modelu BMP – zvýšená tepelná zátěž.":
+    "BMP group B4 – increased thermal load.",
+  "Skupina B1-d modelu BMP.": "BMP group B1-d.",
+  "Chladné podmínky – skupiny B2/B3 modelu BMP.":
+    "Cold conditions – BMP groups B2/B3.",
+  "Teplotní kritéria BMP nejsou splněna.":
+    "BMP temperature criteria not met.",
+  "Index biotropie podle modelu ČHMÚ BMP IIIc pro oblast {n} – orientačně pro zvolené místo.":
+    "Biotropy index per ČHMÚ BMP IIIc model for region {n} – approximate for the selected place.",
+  "Index biotropie podle modelu ČHMÚ BMP IIIc – orientačně pro zvolené místo.":
+    "Biotropy index per ČHMÚ BMP IIIc model – approximate for the selected place.",
+  "Bez splněných kritérií modelu BMP IIIc.":
+    "No BMP IIIc model criteria met.",
+  "Nejde o oficiální BMP ČHMÚ – počítáme index lokálně z předpovědi; oficiální předpověď zohledňuje i synoptickou situaci a 7 regionálních oblastí.":
+    "Not the official ČHMÚ BMP – index computed locally from forecast; the official forecast also includes synoptic assessment and 7 regional areas.",
+  "Model BMP IIIc na chmi.cz": "BMP IIIc model on chmi.cz",
+  "Výměna vzduchové hmoty (fronta)": "Air-mass change (front)",
+  "Pokles tlaku ≥ 10 hPa / 12 h": "Pressure drop ≥ 10 hPa / 12 h",
+  "Teplotní amplituda ≥ 24 °C": "Temperature range ≥ 24 °C",
+  "Min. relativní vlhkost ≤ 20 %": "Min. relative humidity ≤ 20%",
+  "Max. relativní vlhkost ≤ 50 %": "Max. relative humidity ≤ 50%",
+  "Min. teplota ≤ −11 °C": "Min. temperature ≤ −11 °C",
+  "Vzestup teploty v 850 hPa ≥ 5 °C / 12 h":
+    "850 hPa temperature rise ≥ 5 °C / 12 h",
+  "Chladný den s mrazem (ØT ≤ 13 °C, Tmin < 0 °C)":
+    "Cold day with frost (mean ≤ 13 °C, min < 0 °C)",
+  "Chladný den bez mrazu (ØT ≤ 13 °C, Tmin ≥ 0 °C)":
+    "Cold day without frost (mean ≤ 13 °C, min ≥ 0 °C)",
+  "Vedro (Tmax ≥ 29 °C)": "Heat (max ≥ 29 °C)",
+  "Silné vedro (Tmax ≥ 33 °C)": "Extreme heat (max ≥ 33 °C)",
+  "Nárazy větru ≥ 25 m/s": "Wind gusts ≥ 25 m/s",
+  "Překročení limitu SO₂ (350 µg/m³)":
+    "SO₂ limit exceeded (350 µg/m³)",
+  "Teplotní inverze ≥ 18 h": "Temperature inversion ≥ 18 h",
 
   // RadarMap
   "Nastavení radaru": "Radar settings",

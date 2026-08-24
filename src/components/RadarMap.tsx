@@ -32,6 +32,7 @@ import { fetchWebcams, type Webcam } from "../lib/webcams";
 import { reverseGeocode } from "../lib/openMeteo";
 import WebcamModal, { WindyCourtesy } from "./WebcamModal";
 import { sameLocation } from "./FavoritesBar";
+import LocationArrowGlyph from "./LocationArrowGlyph";
 
 type Basemap = "tourist" | "dark";
 
@@ -43,6 +44,7 @@ interface Props {
   onSelect?: (loc: GeoLocation) => void;
   onLocate?: () => void;
   followLocation?: boolean;
+  locating?: boolean;
   modal?: boolean;
   onClose?: () => void;
 }
@@ -226,6 +228,7 @@ export default function RadarMap({
   onSelect,
   onLocate,
   followLocation = false,
+  locating = false,
   modal = false,
   onClose,
 }: Props) {
@@ -1296,6 +1299,27 @@ export default function RadarMap({
         {source !== "accum" && !errored && frames.length > 0 && (
           <div className={`radar-timebadge ${isForecast ? "forecast" : ""}`}>
             {isForecast ? tr("predikce · {t}", { t: timeLabel }) : timeLabel}
+          </div>
+        )}
+
+        {onLocate && (
+          <div className="radar-locatectl">
+            <button
+              type="button"
+              className={`radar-ctl-btn radar-locatebtn${followLocation ? " on" : ""}`}
+              onClick={onLocate}
+              disabled={locating}
+              aria-label={tr("Použít moji polohu")}
+              title={
+                locating ? tr("Zjišťuji polohu…") : tr("Použít moji polohu")
+              }
+            >
+              {locating ? (
+                <span className="spinner" />
+              ) : (
+                <LocationArrowGlyph size={18} />
+              )}
+            </button>
           </div>
         )}
 
