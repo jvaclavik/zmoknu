@@ -669,6 +669,7 @@ const EN: Record<string, string> = {
   Aktualizovat: "Update",
   Později: "Later",
   "Aktualizovat aplikaci": "Update app",
+  "Aktualizuji…": "Updating…",
 
   // Donate
   "Podpořit projekt": "Support the project",

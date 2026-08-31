@@ -1,54 +1,106 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { tr, useLang } from "../lib/i18n";
 
-// Jak často zkontrolovat, jestli není na serveru novější verze (i když je
-// PWA dlouho otevřená na pozadí – typicky na telefonu).
 const UPDATE_CHECK_MS = 60 * 60 * 1000;
+// Po kliknutí na aktualizaci nevolat update() hned po reloadu – jinak zůstane
+// needRefresh zapnuté, i když už běží nová verze.
+const UPDATE_SUPPRESS_MS = 15_000;
+const PWA_UPDATED_KEY = "zmoknu.pwaUpdatedAt";
+
+function recentPwaUpdate(): boolean {
+  const t = Number(sessionStorage.getItem(PWA_UPDATED_KEY) || 0);
+  return t > 0 && Date.now() - t < UPDATE_SUPPRESS_MS;
+}
 
 export default function ReloadPrompt() {
   useLang();
-  // „Později" schová jen vyskakovací výzvu (tlačítko v patičce zůstává), aby
-  // uživatel mohl aktualizovat později, až se mu to bude hodit.
   const [dismissed, setDismissed] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const reloadFallbackRef = useRef<number | null>(null);
+
   const {
-    needRefresh: [needRefresh],
+    needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
+    onNeedReload() {
+      sessionStorage.setItem(PWA_UPDATED_KEY, String(Date.now()));
+      window.location.reload();
+    },
+    onNeedRefresh() {
+      if (recentPwaUpdate()) setNeedRefresh(false);
+    },
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return;
-      // Periodická kontrola aktualizací a hned jedna po registraci.
+
+      if (!registration.waiting) {
+        sessionStorage.removeItem(PWA_UPDATED_KEY);
+      } else if (recentPwaUpdate()) {
+        setNeedRefresh(false);
+      }
+
       const check = () => {
+        if (recentPwaUpdate()) return;
         registration.update().catch(() => {
           /* offline – zkusíme příště */
         });
       };
+
       check();
-      setInterval(check, UPDATE_CHECK_MS);
-      // PWA je na mobilu většinu času na pozadí a interval tam neběží spolehlivě.
-      // Zkontrolujeme aktualizaci i při každém návratu do appky, ať se nabídka
-      // objeví hned a nezůstane „viset" na staré verzi.
+      window.setInterval(check, UPDATE_CHECK_MS);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") check();
       });
     },
   });
 
+  const clearReloadFallback = useCallback(() => {
+    if (reloadFallbackRef.current != null) {
+      window.clearTimeout(reloadFallbackRef.current);
+      reloadFallbackRef.current = null;
+    }
+  }, []);
+
+  const applyUpdate = useCallback(async () => {
+    if (updating) return;
+    setUpdating(true);
+    setDismissed(true);
+    setNeedRefresh(false);
+    sessionStorage.setItem(PWA_UPDATED_KEY, String(Date.now()));
+    clearReloadFallback();
+
+    const reloadOnce = () => {
+      sessionStorage.setItem(PWA_UPDATED_KEY, String(Date.now()));
+      window.location.reload();
+    };
+
+    reloadFallbackRef.current = window.setTimeout(() => {
+      reloadOnce();
+    }, 4000);
+
+    try {
+      await updateServiceWorker();
+    } catch {
+      clearReloadFallback();
+      setNeedRefresh(true);
+      setUpdating(false);
+    }
+  }, [clearReloadFallback, setNeedRefresh, updateServiceWorker, updating]);
+
   if (!needRefresh) return null;
 
   return (
     <>
-      {/* Trvalé tlačítko v patičce – zůstane i po zavření vyskakovací výzvy. */}
       <button
         type="button"
         className="footer-update-btn"
-        onClick={() => updateServiceWorker(true)}
+        disabled={updating}
+        onClick={() => void applyUpdate()}
       >
         <span className="footer-update-dot" aria-hidden="true" />
-        {tr("Aktualizovat aplikaci")}
+        {updating ? tr("Aktualizuji…") : tr("Aktualizovat aplikaci")}
       </button>
 
-      {/* Vyskakovací výzva – aktivně upozorní na novou verzi. */}
       {!dismissed && (
         <div
           className="update-prompt"
@@ -66,6 +118,7 @@ export default function ReloadPrompt() {
             <button
               type="button"
               className="update-prompt-later"
+              disabled={updating}
               onClick={() => setDismissed(true)}
             >
               {tr("Později")}
@@ -73,9 +126,10 @@ export default function ReloadPrompt() {
             <button
               type="button"
               className="update-prompt-btn"
-              onClick={() => updateServiceWorker(true)}
+              disabled={updating}
+              onClick={() => void applyUpdate()}
             >
-              {tr("Aktualizovat")}
+              {updating ? tr("Aktualizuji…") : tr("Aktualizovat")}
             </button>
           </div>
         </div>
