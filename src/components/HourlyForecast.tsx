@@ -32,6 +32,8 @@ interface DayRow {
   weatherCode: number;
   isDay: boolean;
   icons: DayIcon[];
+  /** Souhrnná ikonka dne pro úzké okno, kde se vejde jen jedna. */
+  dayIcon: DayIcon;
   tempMax: number;
   tempMin: number;
   precipitation: number;
@@ -203,6 +205,16 @@ export default function HourlyForecast({
         pts[0],
       );
 
+      // Na úzkém okně se vejde jen jedna ikonka. Nesmí to být slepě první
+      // šestihodinovka (0–6 = noc, tedy měsíc) – vezmeme reprezentanta ze
+      // světlé části dne a jen když den světlo nemá, spadneme na celý den.
+      const dayLight = pts.filter((p) => p.isDay);
+      const repDay = pickRep(dayLight.length ? dayLight : pts);
+      const dayIcon: DayIcon = {
+        code: repDay.weatherCode,
+        isDay: dayLight.length > 0,
+      };
+
       const icons: DayIcon[] = [];
       for (let s = 0; s < 4; s++) {
         const seg = pts.filter((p) => {
@@ -222,6 +234,7 @@ export default function HourlyForecast({
         weatherCode: rep.weatherCode,
         isDay: rep.isDay,
         icons,
+        dayIcon,
         tempMax,
         tempMin,
         precipitation,
@@ -343,6 +356,16 @@ export default function HourlyForecast({
                 ) : (
                   <>
                     <span className="yr-icon">
+                      {Number.isFinite(p.dayIcon.code) ? (
+                        <WeatherIcon
+                          className="yr-icon-solo"
+                          kind={describeWeather(p.dayIcon.code).icon}
+                          isDay={p.dayIcon.isDay}
+                          size={24}
+                        />
+                      ) : (
+                        <span className="yr-missing yr-icon-solo">?</span>
+                      )}
                       {p.icons.map((ic, idx) =>
                         Number.isFinite(ic.code) ? (
                           <WeatherIcon

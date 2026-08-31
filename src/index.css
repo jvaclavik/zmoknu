@@ -1754,6 +1754,11 @@ body::before {
   overflow: hidden;
   padding-right: 8px;
 }
+/* Souhrnná ikonka dne se ukazuje jen na úzkém okně, kde se čtyři šestihodinové
+   nevejdou (viz media query níž) – tam je zároveň prvním potomkem. */
+.yr-icon > .yr-icon-solo {
+  display: none;
+}
 .yr-head span,
 .yr-dayhead {
   white-space: nowrap;
@@ -3090,28 +3095,94 @@ body::before {
   top: calc(100% + 6px);
   right: 0;
   z-index: 40;
-  width: 248px;
-  max-height: min(70vh, 520px);
+  width: min(600px, calc(100vw - 16px));
+  max-height: min(78vh, 640px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px;
+  padding: 8px;
   border-radius: 14px;
   background: rgba(var(--panel-rgb), 0.98);
   border: 1px solid rgba(var(--ov-rgb), 0.12);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  container-type: inline-size;
+  container-name: mgmenu;
+}
+.mg-view-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mg-view-toggles {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px 12px;
+  align-items: center;
+}
+@container mgmenu (min-width: 420px) {
+  .mg-view-toggles {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.mg-view-toggles .mg-view-toggle {
+  margin: 0;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+.mg-view-toggles .mg-view-toggle > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-view-toggles .mg-info {
+  margin-left: 2px;
+  flex: none;
+}
+@media (hover: hover) {
+  .mg-view-toggles .mg-view-toggle:hover {
+    background: rgba(var(--ov-rgb), 0.06);
+  }
+}
+/* Seznam veličin je zároveň jejich pořadí (dá se přetahovat) – proto vždy
+   jeden sloupec, ať je posloupnost jednoznačná a přetahování předvídatelné. */
+.mg-view-tab-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px 8px;
+}
+.mg-view-tab-grid .mg-view-row {
+  margin: 0;
+  min-width: 0;
 }
 .mg-view-days {
-  padding: 8px 8px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 8px 6px;
   border-bottom: 1px solid rgba(var(--ov-rgb), 0.08);
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 .mg-view-days-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 8px;
   font-size: 0.82rem;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+@container mgmenu (max-width: 379px) {
+  .mg-view-days {
+    grid-template-columns: 1fr;
+  }
+  .mg-view-days input[type="range"] {
+    grid-column: 1;
+  }
 }
 .mg-view-days-head strong {
   color: var(--text);
@@ -3207,6 +3278,43 @@ input[type="range"]::-moz-range-thumb {
 .mg-view-toggle input {
   accent-color: var(--accent);
 }
+.mg-view-group {
+  margin-bottom: 6px;
+  border-radius: 9px;
+  background: rgba(var(--ov-rgb), 0.05);
+  border: 1px solid rgba(var(--ov-rgb), 0.1);
+  overflow: hidden;
+}
+.mg-view-group .mg-view-toggle {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.mg-view-group .mg-view-hint {
+  padding: 4px 10px 8px 34px;
+  border-top: 1px dashed rgba(var(--ov-rgb), 0.12);
+  background: rgba(var(--ov-rgb), 0.03);
+}
+.mg-view-group .mg-view-hint + .mg-view-hint {
+  border-top: none;
+  padding-top: 0;
+}
+.mg-view-section {
+  margin: 0;
+  padding: 4px 4px 6px;
+  border-radius: 9px;
+  background: rgba(var(--ov-rgb), 0.05);
+  border: 1px solid rgba(var(--ov-rgb), 0.1);
+}
+.mg-view-section > .mg-view-hint {
+  padding: 5px 8px 4px;
+  font-size: 0.7rem;
+}
+.mg-view-section .mg-view-row {
+  margin: 0;
+}
+.mg-view-tab-grid .mg-view-row + .mg-view-row {
+  margin-top: 0;
+}
 .mg-view-hint {
   padding: 6px 8px 8px;
   font-size: 0.72rem;
@@ -3232,9 +3340,12 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 10px;
 }
 .mg-view-compare {
-  margin-top: 4px;
+  margin-top: 0;
   padding: 8px;
-  border-top: 1px solid rgba(var(--ov-rgb), 0.08);
+  border-top: none;
+  border-radius: 9px;
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 1px solid rgba(var(--ov-rgb), 0.08);
 }
 .mg-view-compare-head {
   display: flex;
@@ -3269,16 +3380,24 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-view-compare-list {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 4px 8px;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 2px 8px;
 }
 .mg-view-model {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 0.8rem;
   color: var(--text);
   cursor: pointer;
+}
+.mg-view-model > span:not(.mg-view-swatch) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mg-view-model input {
   accent-color: var(--accent);
@@ -3288,11 +3407,6 @@ input[type="range"]::-moz-range-thumb {
   height: 12px;
   border-radius: 3px;
   flex: none;
-}
-/* Barevný čtvereček modelu odsuneme na úplně pravý konec řádku. */
-.mg-view-model .mg-view-swatch {
-  order: 1;
-  margin-left: auto;
 }
 /* Na dotykových zařízeních zvětšíme dotykové plochy drobných ovládacích prvků
    (Vše/Zrušit, přepínače modelů), ať se do nich dá pohodlně trefit prstem. */
@@ -3332,14 +3446,28 @@ input[type="range"]::-moz-range-thumb {
   gap: 6px;
 }
 .mg-legend-line {
-  width: 18px;
-  height: 3px;
+  width: 10px;
+  height: 10px;
   border-radius: 2px;
+  flex: none;
 }
 .mg-legend-val {
   color: var(--text);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+  display: inline-block;
+  text-align: right;
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Značka v legendě u grafu oblečení = přímo piktogram doporučené vrstvy. */
+.mg-legend-cloth {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 .mg-legend-note {
   flex-basis: 100%;
@@ -3400,43 +3528,86 @@ input[type="range"]::-moz-range-thumb {
 .mg-legend-line.dashed {
   background-image: none;
   -webkit-mask: repeating-linear-gradient(
-    90deg,
-    #000 0 4px,
-    transparent 4px 7px
-  );
-  mask: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 7px);
-}
-.mg-legend-line.dotted {
-  background-image: none;
-  -webkit-mask: repeating-linear-gradient(
-    90deg,
+    -45deg,
     #000 0 2px,
     transparent 2px 4px
   );
-  mask: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px);
+  mask: repeating-linear-gradient(-45deg, #000 0 2px, transparent 2px 4px);
+}
+.mg-legend-line.dotted {
+  background-image: none;
+  -webkit-mask:
+    radial-gradient(circle at 30% 30%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 70% 30%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 30% 70%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 70% 70%, #000 1.2px, transparent 1.35px);
+  mask:
+    radial-gradient(circle at 30% 30%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 70% 30%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 30% 70%, #000 1.2px, transparent 1.35px),
+    radial-gradient(circle at 70% 70%, #000 1.2px, transparent 1.35px);
 }
 .mg-view-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+  min-width: 0;
   border-radius: 9px;
+}
+.mg-view-row + .mg-view-row {
+  margin-top: 1px;
+}
+.mg-view-row.dragging {
+  opacity: 0.72;
+  background: rgba(var(--ov-rgb), 0.08);
+}
+.mg-view-handle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: grab;
+  border-radius: 6px;
+  touch-action: none;
+}
+.mg-view-handle:active {
+  cursor: grabbing;
+  color: var(--text);
+}
+@media (hover: hover) {
+  .mg-view-handle:hover {
+    background: rgba(var(--ov-rgb), 0.08);
+    color: var(--text);
+  }
 }
 .mg-view-row.active {
   background: rgba(91, 182, 255, 0.12);
 }
 .mg-view-pick {
+  width: 100%;
+  min-width: 0;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 8px;
+  gap: 8px;
+  padding: 6px 6px;
   border: none;
   background: none;
   color: var(--text);
   cursor: pointer;
   border-radius: 9px;
   text-align: left;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+}
+.mg-view-pick span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mg-view-pick .mg-glyph {
   color: var(--muted);
@@ -3590,6 +3761,136 @@ input[type="range"]::-moz-range-thumb {
 .meteogram-card {
   overflow: hidden;
 }
+.meteogram-card-multi {
+  overflow: visible;
+  /* backdrop-filter na kartě by vytvořil scroll-kontejner a sticky osa
+     by se při scrollu stránky neodlepila od grafů. */
+  backdrop-filter: none;
+}
+.mg-plots-wrap {
+  position: relative;
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+}
+.mg-plots-sticky {
+  position: sticky;
+  top: var(--header-h, 0px);
+  z-index: 4;
+  padding-top: 5px;
+  padding-bottom: 2px;
+}
+/* Blur na ::before, ne na sticky box – filter na předkovi by rozbil lepení. */
+.mg-plots-sticky::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Stejný tón jako karta: --card je jen slabý overlay, barva vzniká až
+     přes --sky-mid (pozadí stránky pod kartou). */
+  background:
+    linear-gradient(var(--card), var(--card)),
+    var(--sky-mid);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.mg-sticky-legend {
+  padding: 0 var(--card-px) 8px;
+}
+.mg-plot-head {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+.mg-plot-axis {
+  margin: 0;
+  line-height: 0;
+}
+.mg-svg-axis {
+  display: block;
+  overflow: visible;
+}
+/* Osa dnů nad zásobníkem grafů: čistý text bez podkladu i bez obtahu –
+   nekreslí se přes žádnou křivku, takže „pozadí" pro čitelnost nepotřebuje. */
+.mg-svg-axis .mg-daylabel {
+  stroke: none;
+  paint-order: normal;
+}
+/* Vybraný den (typicky „Dnes") drží barvu accentu – stejnou, jakou má pill
+   vybraného dne v jediném grafu. Platí i pro dnešek, ať se barva nemění podle
+   toho, jestli je zapnuto víc grafů. */
+.mg-svg-axis .mg-daylabel.selected,
+.mg-svg-axis .mg-daylabel.selected.today {
+  fill: var(--accent);
+  font-size: 12px;
+}
+.mg-legend-multi {
+  margin-bottom: 0.2rem;
+}
+.mg-plots-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.mg-plot-stack-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.mg-plots-stack .mg-plot-stack-item + .mg-plot-stack-item {
+  margin-top: 0;
+}
+/* Vlasová linka mezi grafy – jen tolik, aby na sebe křivky opticky nenavazovaly.
+   Odsazená od krajů, ať to nepůsobí jako rám další karty. */
+.mg-plots-stack .mg-plot-stack-item + .mg-plot-stack-item::before {
+  content: "";
+  position: absolute;
+  left: var(--card-px);
+  right: var(--card-px);
+  top: 0;
+  height: 1px;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(var(--ov-rgb), 0.09);
+}
+.mg-plots-stack .meteogram-plot {
+  margin: 0;
+}
+.mg-plot-tag {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(var(--panel-rgb), 0.78);
+  padding: 2px 7px 2px 5px;
+  border-radius: 6px;
+}
+.mg-plot-tag i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--mg-accent, var(--accent));
+}
+.mg-plot-label {
+  margin: 0;
+  padding: 0 var(--card-px);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
 .meteogram-plot {
   position: relative;
   /* Roztáhni graf až ke krajům karty (zruš vnitřní padding karty). */
@@ -3605,15 +3906,42 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-icons {
   position: relative;
-  height: 26px;
-  margin-bottom: 2px;
+  height: 22px;
+  margin-bottom: 0;
   /* Ikony počasí: dotyk propadne na plot (pan-y) → svislý scroll tu funguje. */
   pointer-events: none;
+}
+.mg-icons.zigzag {
+  height: 36px;
+}
+.mg-icons-hair {
+  position: absolute;
+  top: -3px;
+  bottom: 0;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: rgba(255, 255, 255, 0.85);
+  z-index: 2;
+}
+.mg-icons-hair.now {
+  width: 2px;
+  margin-left: -1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--now, rgba(255, 209, 102, 0.9)) 0 4px,
+    transparent 4px 7px
+  );
 }
 .mg-icon {
   position: absolute;
   transform: translateX(-50%);
   top: 0;
+}
+.mg-icon.row-a {
+  top: 0;
+}
+.mg-icon.row-b {
+  top: 16px;
 }
 /* Zástupné „?" pro chybějící data (model mimo horizont). */
 .mg-icon-missing {
@@ -3741,6 +4069,124 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-icons.wind {
   height: 26px;
+}
+/* --- Meteogram oblečení ---------------------------------------------------
+   Pás nad grafem: jedna ikonka na úsek se stejnou vrstvou (ne po pevných
+   hodinách), pod ní barevný podtrh podle úrovně oblečení. */
+/* Pásy kreslené POD grafem (šipky větru, ikonky oblečení) – odsazení patří
+   nahoru, ke křivce, ke které se vztahují. */
+.mg-icons-below {
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+.mg-icons-outfit {
+  height: 30px;
+}
+.mg-outfit-icon {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  top: 0;
+}
+.mg-outfit-icon i {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.9;
+}
+/* V dlaždici multi režimu nižší pás a bez podtrhu (místo je vzácné). */
+.mg-plot-stack-item .mg-icons-outfit {
+  height: 22px;
+  margin-bottom: 0;
+}
+.mg-plot-stack-item .mg-outfit-icon i {
+  display: none;
+}
+/* Dlaždice „oblečení" v pásu hodnot – místo čísla je název vrstvy, takže musí
+   umět zkrátit text; doplňky (deštník, brýle…) jdou jako drobné ikonky pod něj. */
+.mg-stat-cloth {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+.mg-stat-outfit .mg-stat-v strong {
+  display: block;
+  max-width: 100%;
+  font-size: 0.86rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-stat-v .mg-stat-extras {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: visible;
+}
+.mg-stat-v .mg-stat-extras svg {
+  opacity: 0.85;
+}
+
+/* Volba aktivity (sedím / chodím / běhám) v nastavení meteogramu. */
+.mg-view-activity {
+  padding: 4px 4px 2px;
+  border-radius: 9px;
+  background: rgba(var(--ov-rgb), 0.05);
+  border: 1px solid rgba(var(--ov-rgb), 0.1);
+}
+.mg-view-activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.mg-view-activity-btns {
+  display: flex;
+  gap: 4px;
+}
+.mg-view-act {
+  border: 1px solid rgba(var(--ov-rgb), 0.14);
+  background: none;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mg-view-act.active {
+  background: rgba(91, 182, 255, 0.16);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+}
+@media (hover: hover) {
+  .mg-view-act:hover {
+    background: rgba(var(--ov-rgb), 0.08);
+    color: var(--text);
+  }
+}
+@media (pointer: coarse) {
+  .mg-view-act {
+    padding: 7px 12px;
+  }
+}
+
+/* Šipky větru uvnitř dlaždice multi režimu – nižší pás, ať zásobník nenaroste. */
+.mg-plot-stack-item .mg-icons.wind {
+  height: 18px;
+  margin-bottom: 0;
+}
+.mg-plot-stack-item .mg-winddir {
+  top: 1px;
+  width: 16px;
+  height: 16px;
 }
 .mg-winddir-svg {
   display: block;
@@ -6989,8 +7435,14 @@ input[type="range"]::-moz-range-thumb {
     font-size: 0.6rem;
     letter-spacing: 0;
   }
-  /* Na mobilu jen jedna ikona a jen jedna teplota (kompaktní řádek). */
-  .yr-icon svg:not(:first-child) {
+  /* Na mobilu jen jedna ikona a jen jedna teplota (kompaktní řádek).
+     U řádků dnů je první potomek souhrnná ikonka ze světlé části dne, takže
+     se nezobrazí měsíc z intervalu 0–6 h. */
+  .yr-icon > .yr-icon-solo {
+    display: block;
+  }
+  .yr-icon svg:not(:first-child),
+  .yr-icon .yr-missing:not(:first-child) {
     display: none;
   }
   .yr-temp-min {
@@ -7011,19 +7463,9 @@ input[type="range"]::-moz-range-thumb {
     padding-right: var(--page-px);
   }
   /* Menší hodinové ikonky ve dvou řadách. */
-  .mg-icons {
-    height: 36px;
-  }
   .mg-icon svg {
     width: 16px;
     height: 16px;
-  }
-  /* Na mobilu do dvou řad, ať se vejdou. */
-  .mg-icon.row-a {
-    top: 0;
-  }
-  .mg-icon.row-b {
-    top: 18px;
   }
   /* Víc místa dole kvůli plovoucímu tlačítku radaru. */
   .app {

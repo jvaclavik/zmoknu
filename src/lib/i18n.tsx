@@ -54,6 +54,11 @@ const EN: Record<string, string> = {
     "You’re offline – showing the last saved forecast.",
   "Jste offline – zobrazuji uloženou předpověď z {when} ({rel}).":
     "You’re offline – showing a saved forecast from {when} ({rel}).",
+  "Načítání trvá dlouho. Máme pro toto místo uloženou předpověď z {when} ({rel}).":
+    "Loading is taking a while. We have a saved forecast for this place from {when} ({rel}).",
+  "Zobrazit uloženou předpověď": "Show saved forecast",
+  "Zobrazuji uloženou předpověď ({rel}). Čerstvá data se stále načítají.":
+    "Showing a saved forecast ({rel}). Fresh data is still loading.",
   "Webkamery v okolí": "Nearby webcams",
   "Otevřít na Windy": "Open on Windy",
   "živě": "live",
@@ -137,6 +142,18 @@ const EN: Record<string, string> = {
   "Rosný bod": "Dew point",
   Tlak: "Pressure",
   "Zobrazení dat": "Data display",
+  Oblečení: "Clothing",
+  "Co si vzít na sebe hodinu po hodině. Osa je pocitová teplota upravená podle aktivity (v pohybu je člověku tepleji), vodorovné pásy ukazují, kdy se doporučení mění.":
+    "What to wear hour by hour. The axis is the apparent temperature adjusted for your activity (moving keeps you warmer); the horizontal bands show when the recommendation changes.",
+  "V pohybu je člověku tepleji. Aktivita posune pocitovou teplotu, ze které se oblečení skládá (sdílí se s kartou „Co si vzít na sebe“).":
+    "Moving keeps you warmer. Activity shifts the apparent temperature the outfit is built from (shared with the “What to wear” card).",
+  "oblečení": "outfit",
+  Krém: "Sunscreen",
+  "Nastavení meteogramu": "Meteogram settings",
+  "Přetáhni pořadí. Špendlík připne hodnotu nad graf.":
+    "Drag to reorder. The pin keeps a value above the chart.",
+  "Přetáhni pořadí. Klikni na dlaždici pro přidání nebo odebrání grafu.":
+    "Drag to reorder. Click a tile to add or remove a chart.",
   "Počet dní": "Number of days",
   "Počet zobrazených dní": "Number of displayed days",
   "Rozlišit den a noc": "Show day and night",
@@ -164,6 +181,9 @@ const EN: Record<string, string> = {
   "Odchylka od historického normálu.": "Anomaly from the historical normal.",
   "Připnuté hodnoty se zobrazují nad grafem. Klikni na řádek pro zobrazení v grafu.":
     "Pinned values show above the chart. Click a row to display it in the chart.",
+  "Více meteogramů současně": "Multiple charts at once",
+  "Klikni na řádek nebo dlaždici pro přidání/odebrání grafu. Poslední graf nejde vypnout.":
+    "Click a row or tile to add or remove a chart. You can't turn off the last one.",
   Odepnout: "Unpin",
   "Připnout nad graf": "Pin above chart",
   "Porovnat modely (multimód)": "Compare models (multi)",

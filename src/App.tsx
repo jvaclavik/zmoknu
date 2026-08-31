@@ -39,6 +39,7 @@ import {
   getOfflineForecast,
   reverseGeocode,
   saveOfflineForecast,
+  type SavedForecast,
 } from "./lib/openMeteo";
 import { runAlertChecks } from "./lib/notify";
 import { fetchRadar } from "./lib/rainviewer";
@@ -66,6 +67,8 @@ const DEFAULT_LOCATION: GeoLocation = {
   admin1: "Praha",
 };
 
+// Po jak dlouhém načítání nabídneme uloženou (starší) předpověď.
+const SLOW_LOAD_MS = 5000;
 const STORAGE_KEY = "zmoknu.location";
 const FAV_KEY = "zmoknu.favorites";
 const HISTORY_MAX = 8;
@@ -282,6 +285,38 @@ export default function App() {
   const [headerH, setHeaderH] = useState(0);
   // Neblokující hláška (např. „starší historii se teď nepodařilo načíst").
   const [notice, setNotice] = useState<string | null>(null);
+  // Uložená předpověď pro tuto lokalitu, kterou nabídneme, když se čerstvá data
+  // načítají podezřele dlouho (pomalá síť) – ať uživatel nečeká na prázdno.
+  const [slowSaved, setSlowSaved] = useState<SavedForecast | null>(null);
+
+  // Nabídku ukaž až po SLOW_LOAD_MS a jen když pro místo něco uloženého máme.
+  useEffect(() => {
+    if (!loading || forecast) {
+      setSlowSaved(null);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setSlowSaved(
+        getOfflineForecast(location.latitude, location.longitude),
+      );
+    }, SLOW_LOAD_MS);
+    return () => window.clearTimeout(t);
+  }, [loading, forecast, location.latitude, location.longitude]);
+
+  // Zobraz uloženou předpověď hned; běžící požadavek ji po dokončení přepíše.
+  const showSavedForecast = () => {
+    if (!slowSaved) return;
+    setForecast(slowSaved.forecast);
+    setFetchedAt(slowSaved.at);
+    setError(null);
+    setOffline(false);
+    setNotice(
+      tr("Zobrazuji uloženou předpověď ({rel}). Čerstvá data se stále načítají.", {
+        rel: relUpdated(slowSaved.at, Date.now()),
+      }),
+    );
+    setSlowSaved(null);
+  };
 
   useEffect(() => {
     if (!gpsReady) return;
@@ -1257,7 +1292,12 @@ export default function App() {
     <div
       className="app"
       style={
-        headerH ? ({ paddingTop: `${headerH + 16}px` } as CSSProperties) : undefined
+        headerH
+          ? ({
+              paddingTop: `${headerH + 16}px`,
+              ["--header-h" as string]: `${headerH}px`,
+            } as CSSProperties)
+          : undefined
       }
     >
       <div
@@ -1491,7 +1531,37 @@ export default function App() {
         </div>
       )}
       {loading && !forecast ? (
-        <Skeleton />
+        <>
+          {slowSaved && (
+            <div className="banner notice nodata-notice">
+              <span>
+                {tr(
+                  "Načítání trvá dlouho. Máme pro toto místo uloženou předpověď z {when} ({rel}).",
+                  {
+                    when: new Date(slowSaved.at).toLocaleString(
+                      lang === "cs" ? "cs-CZ" : "en-GB",
+                      {
+                        day: "numeric",
+                        month: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    ),
+                    rel: relUpdated(slowSaved.at, nowTick),
+                  },
+                )}
+              </span>
+              <button
+                type="button"
+                className="nodata-switch"
+                onClick={showSavedForecast}
+              >
+                {tr("Zobrazit uloženou předpověď")}
+              </button>
+            </div>
+          )}
+          <Skeleton />
+        </>
       ) : forecast ? (
         <main className="content">
           <div className="col-main">
