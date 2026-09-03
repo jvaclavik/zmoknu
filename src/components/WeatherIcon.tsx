@@ -77,9 +77,9 @@ function Drops({ color = RAIN }: { color?: string }) {
   );
 }
 
-function Flakes() {
+function Flakes({ color = SNOW }: { color?: string }) {
   return (
-    <g fill={SNOW}>
+    <g fill={color}>
       {[22, 32, 42].map((x, i) => (
         <circle key={x} cx={x} cy={52 + (i === 1 ? 3 : 0)} r="2.4" />
       ))}
@@ -88,6 +88,12 @@ function Flakes() {
 }
 
 export default function WeatherIcon({ kind, isDay = true, size = 64, className }: Props) {
+  const cloud = isDay ? CLOUD : "var(--wi-cloud-night)";
+  const cloudDark = isDay ? CLOUD_DARK : "var(--wi-cloud-night-dark)";
+  const rain = isDay ? RAIN : "var(--wi-rain-night)";
+  const snow = isDay ? SNOW : "var(--wi-snow-night)";
+  const bolt = isDay ? BOLT : "var(--wi-bolt-night)";
+
   return (
     <svg
       width={size}
@@ -104,27 +110,27 @@ export default function WeatherIcon({ kind, isDay = true, size = 64, className }
           <g transform="translate(-6 -8) scale(0.8)">
             {isDay ? <Sun /> : <Moon />}
           </g>
-          <Cloud x={6} y={8} />
+          <Cloud x={6} y={8} color={cloud} />
         </g>
       )}
 
       {kind === "cloudy" && (
         <g>
-          <Cloud x={-4} y={-2} color={CLOUD_DARK} />
-          <Cloud x={6} y={6} />
+          <Cloud x={-4} y={-2} color={cloudDark} />
+          <Cloud x={6} y={6} color={cloud} />
         </g>
       )}
 
       {kind === "overcast" && (
         <g>
-          <Cloud x={-6} y={-4} color={CLOUD_DARK} />
-          <Cloud x={6} y={4} color={CLOUD} />
+          <Cloud x={-6} y={-4} color={cloudDark} />
+          <Cloud x={6} y={4} color={cloud} />
         </g>
       )}
 
       {kind === "fog" && (
         <g>
-          <Cloud x={0} y={-6} />
+          <Cloud x={0} y={-6} color={cloud} />
           {[44, 50, 56].map((y) => (
             <line
               key={y}
@@ -132,7 +138,7 @@ export default function WeatherIcon({ kind, isDay = true, size = 64, className }
               y1={y}
               x2="50"
               y2={y}
-              stroke={CLOUD_DARK}
+              stroke={cloudDark}
               strokeWidth="3"
               strokeLinecap="round"
             />
@@ -142,37 +148,37 @@ export default function WeatherIcon({ kind, isDay = true, size = 64, className }
 
       {kind === "drizzle" && (
         <g>
-          <Cloud x={0} y={-6} />
-          <Drops />
+          <Cloud x={0} y={-6} color={cloud} />
+          <Drops color={rain} />
         </g>
       )}
 
       {kind === "rain" && (
         <g>
-          <Cloud x={0} y={-6} color={CLOUD_DARK} />
-          <Drops />
+          <Cloud x={0} y={-6} color={cloudDark} />
+          <Drops color={rain} />
         </g>
       )}
 
       {kind === "sleet" && (
         <g>
-          <Cloud x={0} y={-6} color={CLOUD_DARK} />
-          <Drops />
-          <Flakes />
+          <Cloud x={0} y={-6} color={cloudDark} />
+          <Drops color={rain} />
+          <Flakes color={snow} />
         </g>
       )}
 
       {kind === "snow" && (
         <g>
-          <Cloud x={0} y={-6} />
-          <Flakes />
+          <Cloud x={0} y={-6} color={cloudDark} />
+          <Flakes color={snow} />
         </g>
       )}
 
       {kind === "thunder" && (
         <g>
-          <Cloud x={0} y={-8} color={CLOUD_DARK} />
-          <path d="M34 44l-8 12h6l-3 9 11-15h-7l4-6z" fill={BOLT} />
+          <Cloud x={0} y={-8} color={cloudDark} />
+          <path d="M34 44l-8 12h6l-3 9 11-15h-7l4-6z" fill={bolt} />
         </g>
       )}
     </svg>

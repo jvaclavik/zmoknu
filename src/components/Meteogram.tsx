@@ -244,8 +244,33 @@ const CURVE_BOTTOM = H - 22;
 
 const DAY_SHORT_CS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const DAY_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_LONG_CS = [
+  "Neděle",
+  "Pondělí",
+  "Úterý",
+  "Středa",
+  "Čtvrtek",
+  "Pátek",
+  "Sobota",
+];
+const DAY_LONG_EN = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 function dayShort() {
   return getLang() === "en" ? DAY_SHORT_EN : DAY_SHORT_CS;
+}
+function dayLong() {
+  return getLang() === "en" ? DAY_LONG_EN : DAY_LONG_CS;
+}
+
+function estimateDayLabelWidth(text: string): number {
+  return text.length * 6.4 + 14;
 }
 
 // Popisek úrovně detailu při zoomu, se správným skloňováním (1 den / 2 dny / 5 dní).
@@ -350,6 +375,10 @@ function buildWeatherIconSlots(
     out.push({ i, slot: hr / step });
   });
   return out;
+}
+
+function iconNightClass(isDay: boolean) {
+  return isDay ? "" : " night";
 }
 
 export function MeteogramBody({
@@ -613,10 +642,10 @@ export function MeteogramBody({
   // grafů přes celou výšku dlaždice, ať na sebe grafy navazují bez mezer a
   // zvýrazněný den tvoří jeden nepřerušený sloupec. Místo dole potřebuje jen
   // poslední graf – tam jsou hodinové popisky.
-  const layoutGridTop = isCompactPlot ? 0 : layoutTopPad - 6;
   const layoutGridBottom = isCompactPlot
     ? layoutH - (plotStackLast ? 13 : 0)
     : layoutH - 15;
+  const layoutShadeTop = isCompactPlot ? 0 : layoutTopPad - 10;
 
   const pph = points.length > 0 && width > 0 ? width / points.length : 0;
   const x = (i: number) => (i + 0.5) * pph;
@@ -816,15 +845,26 @@ export function MeteogramBody({
     return d === activeKey || prev === activeKey;
   };
 
-  // Popisek dne: "Dnes"/"Zítra"/"Včera", jinak zkratka + datum.
-  const dayLabelFor = (b: { date: Date; dateStr: string }) => {
+  // Popisek dne: „Dnes"/„Zítra"/„Včera", jinak den + datum (plný název, pokud se vejde).
+  const dayLabelFor = (
+    b: { date: Date; dateStr: string },
+    bandWidthPx?: number,
+  ) => {
     if (b.dateStr === todayStr) return tr("Dnes");
     const diff = Math.round(
       (Date.parse(b.dateStr) - Date.parse(todayStr)) / 86400000,
     );
     if (diff === 1) return tr("Zítra");
     if (diff === -1) return tr("Včera");
-    return `${dayShort()[b.date.getDay()]} ${b.date.getDate()}.${b.date.getMonth() + 1}.`;
+    const datePart = `${b.date.getDate()}.${b.date.getMonth() + 1}.`;
+    const longLabel = `${dayLong()[b.date.getDay()]}, ${datePart}`;
+    if (
+      bandWidthPx != null &&
+      bandWidthPx >= estimateDayLabelWidth(longLabel)
+    ) {
+      return longLabel;
+    }
+    return `${dayShort()[b.date.getDay()]}, ${datePart}`;
   };
 
   const renderActiveDayOverlay = (
@@ -993,6 +1033,91 @@ export function MeteogramBody({
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nightBands, pph, width, nightShading]);
+
+  const daytimeBands = useMemo(() => {
+    const bands: { startI: number; endI: number }[] = [];
+    if (!points.length) return bands;
+    let run: { startI: number; endI: number } | null = null;
+    points.forEach((p, i) => {
+      if (p.isDay) {
+        if (!run) run = { startI: i, endI: i };
+        else run.endI = i;
+      } else if (run) {
+        bands.push(run);
+        run = null;
+      }
+    });
+    if (run) bands.push(run);
+    return bands;
+  }, [points]);
+
+  const dayShades = useMemo(() => {
+    if (!pph || !nightShading) return [];
+    return daytimeBands.map((b, bi) => ({
+      id: `iday-${bi}`,
+      left: Math.max(0, x(b.startI) - pph / 2),
+      right: Math.min(width, x(b.endI) + pph / 2),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daytimeBands, pph, width, nightShading]);
+
+  const renderIconStripShades = () => {
+    if (!pph) return null;
+    return (
+      <>
+        {dayBands.map((b, bi) => {
+          if (b.dateStr >= todayStr) return null;
+          const left = b.startI * pph;
+          const width = (b.endI + 1) * pph - left;
+          return (
+            <span
+              key={`ipast-${bi}`}
+              className="mg-icons-shade past"
+              style={{ left, width }}
+              aria-hidden="true"
+            />
+          );
+        })}
+        {dayBands.map((b, bi) => {
+          if (b.dateStr !== activeKey || b.dateStr < todayStr) return null;
+          const left = b.startI * pph;
+          const width = (b.endI + 1) * pph - left;
+          return (
+            <span
+              key={`iact-${bi}`}
+              className="mg-icons-shade active"
+              style={{ left, width }}
+              aria-hidden="true"
+            />
+          );
+        })}
+        {nightShading &&
+          dayShades.map((s) => (
+            <span
+              key={s.id}
+              className="mg-icons-shade day"
+              style={{
+                left: s.left,
+                width: Math.max(0, s.right - s.left),
+              }}
+              aria-hidden="true"
+            />
+          ))}
+        {nightShading &&
+          nightShades.map((s) => (
+            <span
+              key={s.id}
+              className="mg-icons-shade night"
+              style={{
+                left: s.left,
+                width: Math.max(0, s.right - s.left),
+              }}
+              aria-hidden="true"
+            />
+          ))}
+      </>
+    );
+  };
 
   const baseSeries = useMemo(
     () => buildSeries(chartTab, points, activity),
@@ -2186,6 +2311,7 @@ export function MeteogramBody({
 
   const windStrip = showWindStrip ? (
     <div className="mg-icons mg-icons-below wind">
+      {renderIconStripShades()}
       {pph > 0 &&
         points.map((p, i) => {
           const hr = locDate(p.time).getHours();
@@ -2195,7 +2321,7 @@ export function MeteogramBody({
           return (
             <span
               key={p.time}
-              className="mg-icon mg-winddir"
+              className={`mg-icon mg-winddir${iconNightClass(p.isDay)}`}
               style={{
                 left: x(i),
                 color: windBandColor(strength),
@@ -2213,8 +2339,16 @@ export function MeteogramBody({
 
   const showOutfitStrip =
     chartTab === "outfit" && (!multiMode || isCompactPlot);
+  const iconStripBelow = showWindStrip || showOutfitStrip;
+  const layoutShadeBottom = iconStripBelow
+    ? layoutH
+    : isCompactPlot
+      ? layoutGridBottom
+      : layoutH - 14;
+  const layoutShadeHeight = layoutShadeBottom - layoutShadeTop;
   const outfitStrip = showOutfitStrip ? (
     <div className="mg-icons mg-icons-below mg-icons-outfit">
+      {renderIconStripShades()}
       {pph > 0 &&
         outfitSegments.map((seg) => {
           const left = seg.startI * pph;
@@ -2224,10 +2358,12 @@ export function MeteogramBody({
           const { top, jacket } = seg.pick;
           const main = jacket.kind === "none" ? top.kind : jacket.kind;
           const color = outfitLevelColor(seg.pick.level);
+          const midI = Math.floor((seg.startI + seg.endI) / 2);
+          const segIsDay = points[midI]?.isDay ?? true;
           return (
             <span
               key={`ofs-${seg.startI}`}
-              className="mg-icon mg-outfit-icon"
+              className={`mg-icon mg-outfit-icon${iconNightClass(segIsDay)}`}
               style={{ left: (left + right) / 2, color }}
               title={outfitLabel(top, jacket, tr)}
             >
@@ -2241,6 +2377,7 @@ export function MeteogramBody({
 
   const iconStrip = !hideIcons && !showWindStrip && !showOutfitStrip ? (
     <div className={`mg-icons${iconsZigzag ? " zigzag" : ""}`}>
+      {renderIconStripShades()}
       {pph > 0 &&
         weatherIconSlots.map(({ i, slot, code, isDay }) => {
           const p = points[i];
@@ -2252,7 +2389,7 @@ export function MeteogramBody({
               key={p.time}
               className={`mg-icon${
                 iconsZigzag ? (slot % 2 === 0 ? " row-a" : " row-b") : ""
-              }`}
+              }${iconNightClass(iconIsDay)}`}
               style={{
                 left: Math.max(10, Math.min(width - 10, x(i))),
               }}
@@ -2583,20 +2720,33 @@ export function MeteogramBody({
             )}
           </defs>
 
-          {/* noční pruhy – plná tmavá barva (bez přechodu) */}
+          {/* denní/noční pruhy – u pásů ikon pod grafem táhneme až na spodek SVG,
+              aby pozadí navazovalo bez mezery nad šipkami větru / oblečením. */}
+          {pph > 0 &&
+            nightShading &&
+            dayShades.map((s) => (
+              <rect
+                key={s.id}
+                x={s.left}
+                y={layoutShadeTop}
+                width={Math.max(0, s.right - s.left)}
+                height={layoutShadeHeight}
+                fill={
+                  theme === "light"
+                    ? "rgba(255,255,255,0.42)"
+                    : "rgba(255,255,255,0.035)"
+                }
+              />
+            ))}
           {pph > 0 &&
             nightShading &&
             nightShades.map((s) => (
               <rect
                 key={s.id}
                 x={s.left}
-                y={isCompactPlot ? 0 : layoutTopPad - 10}
+                y={layoutShadeTop}
                 width={Math.max(0, s.right - s.left)}
-                height={
-                  isCompactPlot
-                    ? layoutGridBottom
-                    : layoutH - 14 - (layoutTopPad - 10)
-                }
+                height={layoutShadeHeight}
                 fill={theme === "light" ? "rgba(30,45,80,0.08)" : "rgba(0,0,8,0.26)"}
               />
             ))}
@@ -2617,7 +2767,7 @@ export function MeteogramBody({
                 : "transparent";
               const bandTop = layoutTopPad - 10;
               const bandBottom = layoutH - 14;
-              const label = dayLabelFor(b);
+              const label = dayLabelFor(b, right - left);
               const cx = (left + right) / 2;
               return (
                 <g key={`band-${bi}`}>
@@ -2789,19 +2939,17 @@ export function MeteogramBody({
                 {precipThresholds.map((t) => (
                   <g key={`pth-${t.v}`}>
                     <line
-                      x1={width - 52}
+                      x1={0}
                       y1={t.y}
                       x2={width}
                       y2={t.y}
                       stroke={t.color}
-                      strokeWidth="1.5"
-                      strokeDasharray="3 3"
-                      opacity="0.7"
+                      className="mg-threshold-line"
                     />
                     <text
                       x={width - 6}
                       y={t.y - 4}
-                      className="mg-uv-thlabel"
+                      className="mg-uv-thlabel mg-threshold-label"
                       textAnchor="end"
                       fill={t.color}
                     >
@@ -2937,9 +3085,7 @@ export function MeteogramBody({
                         x2={width}
                         y2={z.boundary}
                         stroke={z.color}
-                        strokeWidth="1"
-                        strokeDasharray="4 4"
-                        opacity="0.6"
+                        className="mg-threshold-line"
                       />
                     )}
                     {z.yBottom - z.yTop >= 15 && (
@@ -2963,14 +3109,12 @@ export function MeteogramBody({
                       x2={width}
                       y2={t.y}
                       stroke={t.color}
-                      strokeWidth="1"
-                      strokeDasharray="4 4"
-                      opacity="0.55"
+                      className="mg-threshold-line"
                     />
                     <text
                       x={width - 6}
                       y={t.y - 4}
-                      className="mg-uv-thlabel"
+                      className="mg-uv-thlabel mg-threshold-label"
                       textAnchor="end"
                       fill={t.color}
                     >
@@ -2986,14 +3130,12 @@ export function MeteogramBody({
                       x2={width}
                       y2={t.y}
                       stroke={t.color}
-                      strokeWidth="1"
-                      strokeDasharray="4 4"
-                      opacity="0.55"
+                      className="mg-threshold-line"
                     />
                     <text
                       x={width - 6}
                       y={t.y - 4}
-                      className="mg-uv-thlabel"
+                      className="mg-uv-thlabel mg-threshold-label"
                       textAnchor="end"
                       fill={t.color}
                     >
@@ -3009,14 +3151,12 @@ export function MeteogramBody({
                       x2={width}
                       y2={t.y}
                       stroke={t.color}
-                      strokeWidth="1"
-                      strokeDasharray="4 4"
-                      opacity="0.55"
+                      className="mg-threshold-line"
                     />
                     <text
                       x={width - 6}
                       y={t.y - 4}
-                      className="mg-uv-thlabel"
+                      className="mg-uv-thlabel mg-threshold-label"
                       textAnchor="end"
                       fill={t.color}
                     >
@@ -3226,7 +3366,7 @@ export function MeteogramBody({
                   {renderActiveDayLabel(
                     (left + right) / 2,
                     22,
-                    dayLabelFor(b),
+                    dayLabelFor(b, right - left),
                     b.dateStr === todayStr,
                   )}
                 </g>
@@ -3371,7 +3511,7 @@ export function MeteogramBody({
                   }`}
                   textAnchor="middle"
                 >
-                  {dayLabelFor(b)}
+                  {dayLabelFor(b, right - left)}
                 </text>
               </g>
             );

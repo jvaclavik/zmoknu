@@ -30,6 +30,11 @@
   --wi-rain: #5bb6ff;
   --wi-snow: #eaf4ff;
   --wi-bolt: #ffd166;
+  --wi-cloud-night: #9aa7c4;
+  --wi-cloud-night-dark: #5c6884;
+  --wi-rain-night: #4a8fd4;
+  --wi-snow-night: #b8c9e8;
+  --wi-bolt-night: #c9a045;
 }
 
 /* Světlý motiv – přebíjí jen barevné tokeny a pozadí; zbytek pravidel
@@ -59,6 +64,11 @@
   --wi-rain: #1f7fd6;
   --wi-snow: #7ba6d6;
   --wi-bolt: #e08a00;
+  --wi-cloud-night: #5a6888;
+  --wi-cloud-night-dark: #3a455c;
+  --wi-rain-night: #1a5fa8;
+  --wi-snow-night: #5a7aad;
+  --wi-bolt-night: #a66a00;
 }
 
 * {
@@ -3757,6 +3767,14 @@ input[type="range"]::-moz-range-thumb {
   stroke: rgba(var(--panel-rgb), 0.92);
   stroke-width: 3px;
 }
+.mg-threshold-line {
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.26;
+}
+.mg-threshold-label {
+  opacity: 0.72;
+}
 .mg-nowlabel {
   fill: #241a02;
   font-size: 9.5px;
@@ -4143,11 +4161,52 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-icons {
   position: relative;
-  z-index: 1;
   height: 22px;
   margin-bottom: 0;
+  overflow: hidden;
   /* Ikony počasí: dotyk propadne na plot (pan-y) → svislý scroll tu funguje. */
   pointer-events: none;
+}
+.mg-icons-shade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.mg-icons-shade.past {
+  background: rgba(0, 0, 0, 0.22);
+}
+:root[data-theme="light"] .mg-icons-shade.past {
+  background: rgba(20, 30, 55, 0.07);
+}
+.mg-icons-shade.active {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--accent) 13%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
+    color-mix(in srgb, var(--accent) 7%, transparent) 100%
+  );
+}
+:root[data-theme="light"] .mg-icons-shade.active {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--accent) 9%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 3%, transparent) 52%,
+    color-mix(in srgb, var(--accent) 5%, transparent) 100%
+  );
+}
+.mg-icons-shade.day {
+  background: rgba(255, 255, 255, 0.035);
+}
+:root[data-theme="light"] .mg-icons-shade.day {
+  background: rgba(255, 255, 255, 0.42);
+}
+.mg-icons-shade.night {
+  background: rgba(0, 0, 8, 0.26);
+}
+:root[data-theme="light"] .mg-icons-shade.night {
+  background: rgba(30, 45, 80, 0.08);
 }
 .mg-icons.zigzag {
   height: 36px;
@@ -4172,7 +4231,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-icon {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   transform: translateX(-50%);
   top: 0;
 }
@@ -4181,6 +4240,18 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-icon.row-b {
   top: 16px;
+}
+/* Noční hodiny – ikony v pásu nad grafem (počasí, vítr, oblečení…). */
+.mg-icon.night {
+  opacity: 0.58;
+  filter: saturate(0.72) brightness(0.88);
+}
+:root[data-theme="light"] .mg-icon.night {
+  opacity: 0.65;
+  filter: saturate(0.78) brightness(0.92);
+}
+.mg-icon.night .mg-outfit-icon i {
+  opacity: 0.75;
 }
 /* Zástupné „?" pro chybějící data (model mimo horizont). */
 .mg-icon-missing {
@@ -4315,13 +4386,13 @@ input[type="range"]::-moz-range-thumb {
 /* --- Meteogram oblečení ---------------------------------------------------
    Pás nad grafem: jedna ikonka na úsek se stejnou vrstvou (ne po pevných
    hodinách), pod ní barevný podtrh podle úrovně oblečení. */
-/* Pásy kreslené POD grafem (šipky větru, ikonky oblečení) – odsazení patří
-   nahoru, ke křivce, ke které se vztahují. */
+/* Pásy kreslené POD grafem (šipky větru, ikonky oblečení) – bez mezery,
+   pozadí den/noc navazuje ze SVG přímo sem. */
 .mg-icons-below {
   position: relative;
-  z-index: 1;
-  margin-top: 2px;
+  margin-top: 0;
   margin-bottom: 0;
+  overflow: hidden;
 }
 .mg-icons-outfit {
   height: 30px;
