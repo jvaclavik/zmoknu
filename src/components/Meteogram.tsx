@@ -3932,21 +3932,30 @@ function StatReadout({
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const MIN = shrinkMode ? 108 : compact ? 118 : 152;
+    const wideMq = window.matchMedia("(min-width: 720px)");
     const compute = () => {
+      if (!wideMq.matches) {
+        setCols(0);
+        return;
+      }
       const w = el.clientWidth;
       if (!w || count === 0) {
         setCols(0);
         return;
       }
       const gap = parseFloat(getComputedStyle(el).columnGap) || 10;
-      const maxCols = Math.max(1, Math.floor((w + gap) / (MIN + gap)));
+      const min = shrinkMode ? 108 : compact ? 118 : 152;
+      const maxCols = Math.max(1, Math.floor((w + gap) / (min + gap)));
       setCols(bestStatCols(count, maxCols));
     };
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
-    return () => ro.disconnect();
+    wideMq.addEventListener("change", compute);
+    return () => {
+      ro.disconnect();
+      wideMq.removeEventListener("change", compute);
+    };
   }, [count, shrinkMode, compact]);
 
   return (
