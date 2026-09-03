@@ -9,7 +9,7 @@ interface Props {
 
 export default function InfoHint({ label, children, wide }: Props) {
   const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const btnRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -49,15 +49,17 @@ export default function InfoHint({ label, children, wide }: Props) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button
+      <span
         ref={btnRef}
-        type="button"
         className="mg-info-btn"
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
         aria-label={label}
       >
         ?
-      </button>
+      </span>
       {open &&
         createPortal(
           <div

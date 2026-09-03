@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useState } from "react";
 import type { HourlyPoint } from "../types";
 import type { AirQuality } from "../lib/airQuality";
 import { bioForecastForDate, type BioLoad } from "../lib/bio";
@@ -17,24 +17,30 @@ export default function BioForecast({ hourly, date, air, lat, lon }: Props) {
   const [open, setOpen] = useState(false);
   const bio = bioForecastForDate(hourly, date, air, lat, lon);
 
-  const stopBubble = (e: MouseEvent) => e.stopPropagation();
-
   return (
     <section className={`card bio-card bio-${bio.load}`}>
-      <button
-        type="button"
-        className={`bio-head-btn ${open ? "open" : ""}`}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className="bio-head-ico" aria-hidden="true">
-          <BioGlyph />
-        </span>
-        <span className="bio-head-text">
-          <span className="bio-head-title">{tr("Biopředpověď")}</span>
-          <span className="bio-head-sub">{tr(bio.label)}</span>
-        </span>
-        <span className="bio-title-hint" onClick={stopBubble}>
+      <div className="bio-head">
+        <button
+          type="button"
+          className={`bio-head-btn ${open ? "open" : ""}`}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <span className="bio-head-ico" aria-hidden="true">
+            <BioGlyph />
+          </span>
+          <span className="bio-head-text">
+            <span className="bio-head-title">{tr("Biopředpověď")}</span>
+            <span className="bio-head-sub">{tr(bio.label)}</span>
+          </span>
+          {!open && (
+            <span className="bio-peek-ring" aria-hidden="true">
+              {bio.points}
+            </span>
+          )}
+          <Chevron open={open} />
+        </button>
+        <span className="bio-title-hint">
           <InfoHint label={tr("Co je biopředpověď")} wide>
             <p>
               {tr(
@@ -64,13 +70,7 @@ export default function BioForecast({ hourly, date, air, lat, lon }: Props) {
             </p>
           </InfoHint>
         </span>
-        {!open && (
-          <span className="bio-peek-ring" aria-hidden="true">
-            {bio.points}
-          </span>
-        )}
-        <Chevron open={open} />
-      </button>
+      </div>
 
       {open && (
         <div className="bio-body">

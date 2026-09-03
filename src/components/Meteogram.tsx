@@ -47,7 +47,7 @@ interface Props {
   utcOffset?: number;
   /** Vnořený graf v režimu více meteogramů najednou. */
   embed?: boolean;
-  parts?: "all" | "chrome" | "plot" | "head" | "axis" | "legend";
+  parts?: "all" | "chrome" | "plot" | "head" | "axis" | "legend" | "frame" | "strip" | "daylines";
   multiMode?: boolean;
   openTabs?: Tab[];
   onToggleTab?: (t: Tab) => void;
@@ -235,7 +235,7 @@ const TOP_PAD = 48;
 // Samostatná osa dnů nad zásobníkem grafů. Dva řádky jako v horním okraji
 // jediného grafu (dny / „Teď"), ale bez prázdného místa, které v plném grafu
 // patří kresbě.
-const AXIS_H = 36;
+const AXIS_H = 32;
 // Horní pruh pro „visící" mini srážky (u ostatních veličin než srážky).
 const MINI_H = 46;
 // Spodní okraj křivky – jen úzký proužek na hodinové popisky (srážky už jsou
@@ -380,10 +380,11 @@ export function MeteogramBody({
     "zmoknu.mgMultiCharts",
     false,
   );
-  const [, setOpenTabsStored] = useStoredState<Tab[]>(
+  const [openTabsStored, setOpenTabsStored] = useStoredState<Tab[]>(
     "zmoknu.mgOpenTabs",
     ["temp"],
   );
+  const effectiveOpenTabs = openTabs ?? openTabsStored;
   const chartTab = fixedTab ?? tab;
   const [compareModels, setCompareModels] = useStoredState<string[]>(
     "zmoknu.mgCompare",
@@ -452,8 +453,19 @@ export function MeteogramBody({
   const [widthLocal, setWidthLocal] = useState(0);
   const width = plotWidthProp ?? widthLocal;
 
-  const togglePin = (t: Tab) =>
-    setPinned({ ...pinned, [t]: !pinned[t] });
+  const togglePin = (t: Tab) => {
+    const next = !pinned[t];
+    setPinned({ ...pinned, [t]: next });
+    if (!next && (multiMode || multiCharts)) {
+      setOpenTabsStored((cur) => {
+        const filtered = cur.filter((x) => x !== t);
+        if (filtered.length) return filtered;
+        const fallback = tabOrder.filter((x) => x !== t && pinned[x]);
+        if (fallback.length) return [fallback[0]];
+        return tab === t ? ["temp"] : [tab];
+      });
+    }
+  };
 
   const startTabDrag = (e: React.PointerEvent, id: Tab) => {
     e.preventDefault();
@@ -608,6 +620,8 @@ export function MeteogramBody({
 
   const pph = points.length > 0 && width > 0 ? width / points.length : 0;
   const x = (i: number) => (i + 0.5) * pph;
+  // Půlnoc / hranice dne = levý okraj hodinového sloupce (0:00, 24:00).
+  const xBound = (i: number) => i * pph;
 
   // Krok ikon počasí (v hodinách) podle dostupného místa – při více dnech
   // (menší pph) se ikony ředí, ať se nepřekrývají. Na úzkém displeji cikcak
@@ -796,6 +810,11 @@ export function MeteogramBody({
   );
 
   const activeKey = activeDate || todayStr;
+  const isActiveDayEdge = (i: number) => {
+    const d = points[i]?.time.slice(0, 10);
+    const prev = i > 0 ? points[i - 1].time.slice(0, 10) : null;
+    return d === activeKey || prev === activeKey;
+  };
 
   // Popisek dne: "Dnes"/"Zítra"/"Včera", jinak zkratka + datum.
   const dayLabelFor = (b: { date: Date; dateStr: string }) => {
@@ -808,65 +827,121 @@ export function MeteogramBody({
     return `${dayShort()[b.date.getDay()]} ${b.date.getDate()}.${b.date.getMonth() + 1}.`;
   };
 
-  // Výrazný rám + pill s popiskem vybraného dne. Kreslí se buď v pozadí
-  // (většina záložek), nebo v overlay nad plochou alternativní předpovědi.
-  const renderDayHi = (
-    left: number,
-    right: number,
-    label: string,
-    isToday: boolean,
+  const renderActiveDayOverlay = (
+    segment: "top" | "stack" | "full",
   ) => {
-    const bandTop = TOP_PAD - 10;
-    const bandBottom = H - 14;
-    const cx = (left + right) / 2;
-    const pillW = Math.max(34, label.length * 6.6 + 14);
+    const band = dayBands.find((b) => b.dateStr === activeKey);
+    if (!band || !pph) return null;
+    const left = band.startI * pph;
+    const w = (band.endI + 1) * pph - left;
+    if (w <= 0) return null;
+    return (
+      <div
+        className={`mg-active-day-col seg-${segment}`}
+        style={{ left, width: w }}
+        aria-hidden="true"
+      />
+    );
+  };
+
+  const renderStormOverlays = () => {
+    if (!pph || !stormBars.length) return null;
+    return (
+      <div className="mg-storm-layer" aria-hidden="true">
+        {stormBars.map((b) => {
+          const left = x(b.startI) - pph * 0.5;
+          const width = Math.max(0, x(b.endI) + pph * 0.5 - left);
+          const op = isPrecip
+            ? 0.16 + 0.34 * (Math.max(0, b.prob) / 100)
+            : 0.09 + 0.2 * (Math.max(0, b.prob) / 100);
+          return (
+            <div
+              key={`storm-ol-${b.startI}`}
+              className="mg-storm-bar"
+              style={{ left, width }}
+            >
+              <div className="mg-storm-bar-fill" style={{ opacity: op }} />
+              <StormBoltMark hail={b.hail} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderDayBoundaries = () => {
+    if (!pph) return null;
+    return (
+      <div className="mg-day-dividers" aria-hidden="true">
+        {points.map((p, i) => {
+          const h = locDate(p.time).getHours();
+          if (h !== 0 || isActiveDayEdge(i)) return null;
+          return (
+            <span
+              key={`day-div-${i}`}
+              className="mg-day-divider"
+              style={{ left: xBound(i) }}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderPlotHairs = () => {
+    if (!pph) return null;
     return (
       <>
-        <rect
-          x={left}
-          y={bandTop}
-          width={right - left}
-          height={3}
-          fill="var(--accent)"
-          opacity="0.95"
+        {nowX >= 0 && (
+          <span
+            className="mg-plot-hair now"
+            style={{
+              left: nowX,
+              ["--now" as string]:
+                theme === "light"
+                  ? "rgba(196,124,0,0.95)"
+                  : "rgba(255,209,102,0.9)",
+            }}
+            aria-hidden="true"
+          />
+        )}
+        <span
+          className="mg-plot-hair"
+          style={{ left: x(ci) }}
+          aria-hidden="true"
         />
-        <line
-          x1={left}
-          y1={bandTop}
-          x2={left}
-          y2={bandBottom}
-          stroke="var(--accent)"
-          strokeWidth="1"
-          opacity="0.35"
-        />
-        <line
-          x1={right}
-          y1={bandTop}
-          x2={right}
-          y2={bandBottom}
-          stroke="var(--accent)"
-          strokeWidth="1"
-          opacity="0.35"
-        />
-        <rect
-          x={cx - pillW / 2}
-          y={2}
-          width={pillW}
-          height={17}
-          rx="8.5"
-          fill="var(--accent)"
-        />
-        <text
-          x={cx}
-          y={14}
-          className={`mg-daylabel selected ${isToday ? "today" : ""}`}
-          textAnchor="middle"
-        >
-          {label}
-        </text>
       </>
     );
   };
+
+  const renderCursorTip = () => {
+    if (!pph) return null;
+    return (
+      <div
+        className="mg-cursor-tip"
+        style={{ left: x(ci) }}
+        aria-hidden="true"
+      >
+        {cursorTimeLabel(active.time)}
+      </div>
+    );
+  };
+
+  const renderActiveDayLabel = (
+    cx: number,
+    y: number,
+    label: string,
+    isToday: boolean,
+  ) => (
+    <text
+      x={cx}
+      y={y}
+      className={`mg-daylabel selected ${isToday ? "today" : ""}`}
+      textAnchor="middle"
+    >
+      {label}
+    </text>
+  );
 
   const dayBands = useMemo(() => {
     const bands: { startI: number; endI: number; date: Date; dateStr: string }[] =
@@ -1083,15 +1158,6 @@ export function MeteogramBody({
   const yPrecip = (v: number) =>
     PRECIP_BASELINE -
     (v / Math.max(0.001, precipScaleMax)) * (PRECIP_BASELINE - layoutTopPad);
-
-  // Vodorovné osové linky pro velký graf srážek (hodnoty v mm).
-  const precipTicks = useMemo(() => {
-    if (!isPrecip) return [];
-    const max = precipScaleMax;
-    return [0.25, 0.5, 0.75, 1]
-      .map((f) => Math.round(max * f * 10) / 10)
-      .filter((v, i, arr) => v > 0 && arr.indexOf(v) === i);
-  }, [isPrecip, precipScaleMax]);
 
   // Srážky: vodorovné prahové čáry intenzity (mírný / silný déšť).
   const precipThresholds = useMemo(() => {
@@ -1538,6 +1604,7 @@ export function MeteogramBody({
         ? 150
         : 0;
   const valueLabelList = useMemo(() => {
+    if (chartTab === "outfit") return [];
     const all = valueLabels(points, labelValues, minGapHours);
     if (!rightLegendPad || width <= 0 || points.length === 0) return all;
     const px = width / points.length;
@@ -1609,7 +1676,7 @@ export function MeteogramBody({
   // druhý prst pokračujícího pinche – a gesto „přestane fungovat". Úklid proto
   // věsíme i na window, kam událost dorazí vždy.
   useEffect(() => {
-    if (parts === "chrome" || parts === "legend") return;
+    if (parts === "chrome" || parts === "legend" || parts === "frame" || parts === "strip" || parts === "daylines") return;
     const release = (e: PointerEvent) => {
       if (!pointers.current.has(e.pointerId)) return;
       pointers.current.delete(e.pointerId);
@@ -1634,7 +1701,7 @@ export function MeteogramBody({
   // Pinch na trackpadu (macOS) přichází jako wheel s ctrlKey. React onWheel je
   // pasivní (nejde preventDefault kvůli zoomu stránky), proto nativní listener.
   useEffect(() => {
-    if (parts === "chrome" || parts === "legend") return;
+    if (parts === "chrome" || parts === "legend" || parts === "frame" || parts === "strip" || parts === "daylines") return;
     const el = plotRef.current;
     if (!el) return;
     let accum = 0;
@@ -1707,15 +1774,59 @@ export function MeteogramBody({
   // Tendence tlaku za poslední ~3 h (pro trendovou šipku ve stats).
   const pressureDelta = active.pressure - points[Math.max(0, ci - 3)].pressure;
 
-  // Pozice tooltipu (den + čas) u kurzoru, oříznutá do šířky grafu.
-  const tipW = 78;
-  const tipX = Math.max(2, Math.min(width - tipW - 2, x(ci) - tipW / 2));
   const gradId = (name: string) => `${name}-${chartTab}`;
   // Hodnoty v legendě mají rezervovanou šířku, ať se lišta při přejíždění
   // grafem nerozskakuje (viz legendValCh).
   const legendValStyle: CSSProperties = {
     width: `${legendValCh(chartTab)}ch`,
   };
+
+  const modelCompareLegendItems =
+    compareLines.length > 0 ? (
+      <>
+        <span className="mg-legend-item" title={modelLabel(model)}>
+          <span
+            className="mg-legend-line"
+            style={{ background: series.stroke }}
+          />
+          {modelLabel(model)}
+          <strong className="mg-legend-val" style={legendValStyle}>
+            {Number.isFinite(series.primary[ci])
+              ? formatLegendValue(chartTab, series.primary[ci])
+              : "–"}
+          </strong>
+          {model === "best_match" && !multiMode && (
+            <InfoHint
+              text={tr(
+                "„Automaticky“ volí nejlepší model dle lokality (v ČR ICON, pro vzdálenější dny ECMWF).",
+              )}
+            />
+          )}
+        </span>
+        {compareLines.map((cl) => {
+          const v = modelSeries
+            .find((ms) => ms.model === cl.model)
+            ?.byTime.get(active.time);
+          return (
+            <span className="mg-legend-item" key={`lg-${cl.model}`}>
+              <span
+                className="mg-legend-line dashed"
+                style={{ background: cl.color }}
+              />
+              {modelLabel(cl.model)}
+              <strong className="mg-legend-val" style={legendValStyle}>
+                {v != null ? formatLegendValue(chartTab, v) : "–"}
+              </strong>
+            </span>
+          );
+        })}
+      </>
+    ) : null;
+
+  const modelCompareLegend =
+    modelCompareLegendItems && multiMode ? (
+      <div className="mg-legend mg-legend-compare">{modelCompareLegendItems}</div>
+    ) : null;
 
   const chromeContent = parts !== "plot" && parts !== "legend" && (
     <>
@@ -1810,9 +1921,10 @@ export function MeteogramBody({
                   checked={multiCharts}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setOpenTabsStored((cur) =>
-                        cur.length ? cur : [tab],
-                      );
+                      setOpenTabsStored((cur) => {
+                        const valid = cur.filter((t) => ALL_TABS.includes(t));
+                        return valid.length ? valid : [tab];
+                      });
                       setMultiCharts(true);
                     } else {
                       setMultiCharts(false);
@@ -1930,7 +2042,7 @@ export function MeteogramBody({
                     if (el) tabRowRefs.current.set(t, el);
                     else tabRowRefs.current.delete(t);
                   }}
-                  className={`mg-view-row ${dragTab === t ? "dragging" : ""} ${(multiMode ? openTabs?.includes(t) : tab === t) ? "active" : ""}`}
+                  className={`mg-view-row${multiMode || multiCharts ? " no-pin" : ""} ${dragTab === t ? "dragging" : ""} ${(multiMode || multiCharts ? effectiveOpenTabs.includes(t) : tab === t) ? "active" : ""}`}
                 >
                   <button
                     type="button"
@@ -1947,6 +2059,16 @@ export function MeteogramBody({
                     onClick={() => {
                       if (multiMode && onToggleTab) {
                         onToggleTab(t);
+                      } else if (multiCharts) {
+                        setOpenTabsStored((cur) => {
+                          const base = cur.filter((x) => ALL_TABS.includes(x));
+                          const open = base.length ? base : [tab];
+                          if (open.includes(t)) {
+                            if (open.length === 1) return open;
+                            return open.filter((x) => x !== t);
+                          }
+                          return [...open, t];
+                        });
                       } else {
                         setTab(t);
                         setViewOpen(false);
@@ -1956,15 +2078,17 @@ export function MeteogramBody({
                     <TabGlyph tab={t} />
                     <span>{tr(TAB_LABEL[t])}</span>
                   </button>
-                  <button
-                    type="button"
-                    className={`mg-view-pin ${pinned[t] ? "on" : ""}`}
-                    onClick={() => togglePin(t)}
-                    aria-pressed={pinned[t]}
-                    title={pinned[t] ? tr("Odepnout") : tr("Připnout nad graf")}
-                  >
-                    <PinGlyph filled={!!pinned[t]} />
-                  </button>
+                  {!multiMode && !multiCharts && (
+                    <button
+                      type="button"
+                      className={`mg-view-pin ${pinned[t] ? "on" : ""}`}
+                      onClick={() => togglePin(t)}
+                      aria-pressed={pinned[t]}
+                      title={pinned[t] ? tr("Odepnout") : tr("Připnout nad graf")}
+                    >
+                      <PinGlyph filled={!!pinned[t]} />
+                    </button>
+                  )}
                 </div>
               ))}
                 </div>
@@ -2037,7 +2161,7 @@ export function MeteogramBody({
         </div>
       )}
 
-      {active && (
+      {active && !multiMode && (
         <StatReadout
           p={active}
           tab={tab}
@@ -2048,7 +2172,7 @@ export function MeteogramBody({
           onTab={multiMode && onToggleTab ? onToggleTab : setTab}
           pressureDelta={pressureDelta}
           visible={(t) =>
-            multiMode ? true : pinned[t] || tab === t
+            multiMode ? !!openTabs?.includes(t) : pinned[t] || tab === t
           }
           range={spreadRangeAt ? spreadRangeAt(ci) : null}
         />
@@ -2059,61 +2183,6 @@ export function MeteogramBody({
       )}
     </>
   );
-
-  const legendContent =
-    multiMode && openTabs && openTabs.length > 0 ? (
-      <div className="mg-legend mg-legend-multi">
-        {openTabs.map((t) => {
-          const s = buildSeries(t, points, activity);
-          const v = s.primary[ci];
-          const pick =
-            t === "outfit" &&
-            active &&
-            Number.isFinite(active.apparentTemperature)
-              ? outfitAt(active.apparentTemperature, activity)
-              : null;
-          return (
-            <span
-              key={t}
-              className="mg-legend-item"
-              title={
-                pick
-                  ? outfitLabel(pick.top, pick.jacket, tr)
-                  : tr(TAB_LABEL[t])
-              }
-            >
-              {pick ? (
-                <span
-                  className="mg-legend-cloth"
-                  style={{ color: outfitLevelColor(pick.level) }}
-                >
-                  <ClothIcon
-                    kind={
-                      pick.jacket.kind === "none"
-                        ? pick.top.kind
-                        : pick.jacket.kind
-                    }
-                    size={18}
-                  />
-                </span>
-              ) : (
-                <span
-                  className="mg-legend-line"
-                  style={{ background: s.stroke }}
-                />
-              )}
-              {tr(TAB_LABEL[t])}
-              <strong
-                className="mg-legend-val"
-                style={{ width: `${legendValCh(t)}ch` }}
-              >
-                {v != null && Number.isFinite(v) ? formatLegendValue(t, v) : "–"}
-              </strong>
-            </span>
-          );
-        })}
-      </div>
-    ) : null;
 
   const windStrip = showWindStrip ? (
     <div className="mg-icons mg-icons-below wind">
@@ -2172,26 +2241,6 @@ export function MeteogramBody({
 
   const iconStrip = !hideIcons && !showWindStrip && !showOutfitStrip ? (
     <div className={`mg-icons${iconsZigzag ? " zigzag" : ""}`}>
-      {pph > 0 && nowX >= 0 && (
-        <span
-          className="mg-icons-hair now"
-          style={{
-            left: nowX,
-            ["--now" as string]:
-              theme === "light"
-                ? "rgba(196,124,0,0.95)"
-                : "rgba(255,209,102,0.9)",
-          }}
-          aria-hidden="true"
-        />
-      )}
-      {pph > 0 && (
-        <span
-          className="mg-icons-hair"
-          style={{ left: x(ci) }}
-          aria-hidden="true"
-        />
-      )}
       {pph > 0 &&
         weatherIconSlots.map(({ i, slot, code, isDay }) => {
           const p = points[i];
@@ -2227,31 +2276,37 @@ export function MeteogramBody({
     parts !== "chrome" &&
     parts !== "head" &&
     parts !== "axis" &&
-    parts !== "legend" && (
+    parts !== "legend" &&
+    parts !== "frame" &&
+    parts !== "strip" &&
+    parts !== "daylines" && (
     <>
       {!hideLegend &&
         !multiMode &&
         (compareLines.length > 0 || normalData) && (
         <div className="mg-legend">
-          <span className="mg-legend-item" title={modelLabel(model)}>
-            <span
-              className="mg-legend-line"
-              style={{ background: series.stroke }}
-            />
-            {modelLabel(model)}
-            <strong className="mg-legend-val" style={legendValStyle}>
-              {Number.isFinite(series.primary[ci])
-                ? formatLegendValue(chartTab, series.primary[ci])
-                : "–"}
-            </strong>
-            {model === "best_match" && (
-              <InfoHint
-                text={tr(
-                  "„Automaticky“ volí nejlepší model dle lokality (v ČR ICON, pro vzdálenější dny ECMWF).",
-                )}
+          {compareLines.length === 0 && (
+            <span className="mg-legend-item" title={modelLabel(model)}>
+              <span
+                className="mg-legend-line"
+                style={{ background: series.stroke }}
               />
-            )}
-          </span>
+              {modelLabel(model)}
+              <strong className="mg-legend-val" style={legendValStyle}>
+                {Number.isFinite(series.primary[ci])
+                  ? formatLegendValue(chartTab, series.primary[ci])
+                  : "–"}
+              </strong>
+              {model === "best_match" && (
+                <InfoHint
+                  text={tr(
+                    "„Automaticky“ volí nejlepší model dle lokality (v ČR ICON, pro vzdálenější dny ECMWF).",
+                  )}
+                />
+              )}
+            </span>
+          )}
+          {modelCompareLegendItems}
           {normalData && normalStats && (
             <>
               <span
@@ -2309,23 +2364,6 @@ export function MeteogramBody({
               )}
             </>
           )}
-          {compareLines.map((cl) => {
-            const v = modelSeries
-              .find((ms) => ms.model === cl.model)
-              ?.byTime.get(active.time);
-            return (
-              <span className="mg-legend-item" key={`lg-${cl.model}`}>
-                <span
-                  className="mg-legend-line dashed"
-                  style={{ background: cl.color }}
-                />
-                {modelLabel(cl.model)}
-                <strong className="mg-legend-val" style={legendValStyle}>
-                  {v != null ? formatLegendValue(chartTab, v) : "–"}
-                </strong>
-              </span>
-            );
-          })}
         </div>
       )}
 
@@ -2449,6 +2487,7 @@ export function MeteogramBody({
           touchStart.current = null;
         }}
       >
+        {!multiMode && renderActiveDayOverlay("full")}
         {daysHint != null && (
           <div className="mg-zoomhint" aria-hidden="true">
             {daysLabel(daysHint)}
@@ -2456,11 +2495,13 @@ export function MeteogramBody({
         )}
         {isCompactPlot && (
           <div className="mg-plot-tag" aria-hidden="true">
-            <i style={{ background: series.stroke }} />
             {tr(TAB_LABEL[chartTab])}
           </div>
         )}
+        {isCompactPlot && modelCompareLegend}
         {iconStrip}
+        {renderStormOverlays()}
+        {!multiMode && renderDayBoundaries()}
 
         <svg width={width || 1} height={layoutH} className="mg-svg">
           <defs>
@@ -2587,19 +2628,9 @@ export function MeteogramBody({
                     height={bandBottom - bandTop}
                     fill={fill}
                   />
-                  {isActive && (
-                    <rect
-                      x={left}
-                      y={bandTop}
-                      width={right - left}
-                      height={bandBottom - bandTop}
-                      fill="var(--accent)"
-                      opacity={theme === "light" ? 0.06 : 0.08}
-                    />
-                  )}
                   {isActive &&
                     spreadBands.length === 0 &&
-                    renderDayHi(left, right, label, isToday)}
+                    renderActiveDayLabel(cx, 22, label, isToday)}
                   {!isActive && (
                     <text
                       x={cx}
@@ -2621,27 +2652,15 @@ export function MeteogramBody({
               const h = locDate(p.time).getHours();
               const showHours = !multiMode || plotStackLast;
               if (h !== 0 && !(showHours && h === 12)) return null;
-              // Hranice vybraného dne dostane vlastní accent hranu (v denních
-              // pruzích), takže tady šedou linku vynecháme – jinak by u sebe
-              // byly dvě čáry a den by se v tom ztratil.
-              const atActiveEdge =
-                isCompactPlot &&
-                (p.time.slice(0, 10) === activeKey ||
-                  (i > 0 && points[i - 1].time.slice(0, 10) === activeKey));
               return (
                 <g key={`h-${i}`}>
-                  {h === 0 && !atActiveEdge && (
-                    <line
-                      x1={x(i)}
-                      y1={layoutGridTop}
-                      x2={x(i)}
-                      y2={layoutGridBottom}
-                      stroke="rgba(var(--ov-rgb),0.06)"
-                      strokeWidth="1"
-                    />
-                  )}
                   {showHours && (h === 0 || h === 12) && (
-                    <text x={x(i)} y={layoutH - 3} className="mg-hourlabel">
+                    <text
+                      x={h === 0 ? xBound(i) + 3 : x(i)}
+                      y={layoutH - 3}
+                      className="mg-hourlabel"
+                      textAnchor={h === 0 ? "start" : "middle"}
+                    >
                       {h}
                     </text>
                   )}
@@ -2708,37 +2727,11 @@ export function MeteogramBody({
               ));
             })()}
 
-          {/* bouřkové úseky i mimo srážkový tab (např. v teplotě) – jemný svislý
-              pruh přes celý graf a ikona blesku nahoře. Kreslíme před křivkou,
-              ať křivka zůstane čitelná navrchu. */}
-          {pph > 0 &&
-            !isPrecip &&
-            stormBars.map((b) => {
-              const left = x(b.startI) - pph * 0.5;
-              const right = x(b.endI) + pph * 0.5;
-              const op = 0.09 + 0.2 * (Math.max(0, b.prob) / 100);
-              const cx = (left + right) / 2;
-              return (
-                <g key={`storm-nt-${b.startI}`}>
-                  <rect
-                    x={left}
-                    y={layoutTopPad}
-                    width={Math.max(0, right - left)}
-                    height={layoutCurveBottom - layoutTopPad}
-                    fill="rgba(168,120,255,1)"
-                    opacity={op}
-                  />
-                  <StormBolt x={cx} y={layoutTopPad + 9} hail={b.hail} />
-                </g>
-              );
-            })}
-
           {isCompactPlot &&
             pph > 0 &&
             dayBands.map((b, bi) => {
               const left = b.startI * pph;
               const right = (b.endI + 1) * pph;
-              const isActive = b.dateStr === activeKey;
               const isPast = b.dateStr < todayStr;
               const fill = isPast
                 ? theme === "light"
@@ -2756,39 +2749,6 @@ export function MeteogramBody({
                     height={bandBottom - bandTop}
                     fill={fill}
                   />
-                  {isActive && (
-                    <>
-                      <rect
-                        x={left}
-                        y={bandTop}
-                        width={right - left}
-                        height={bandBottom - bandTop}
-                        fill="var(--accent)"
-                        opacity={theme === "light" ? 0.09 : 0.11}
-                      />
-                      {/* Ostré accent hrany přesně na hranicích dne. Táhnou se
-                          přes celou dlaždici, takže v zásobníku tvoří jeden
-                          nepřerušený sloupec vybraného dne. */}
-                      <line
-                        x1={left}
-                        y1={bandTop}
-                        x2={left}
-                        y2={bandBottom}
-                        stroke="var(--accent)"
-                        strokeWidth="1.5"
-                        opacity="0.75"
-                      />
-                      <line
-                        x1={right}
-                        y1={bandTop}
-                        x2={right}
-                        y2={bandBottom}
-                        stroke="var(--accent)"
-                        strokeWidth="1.5"
-                        opacity="0.75"
-                      />
-                    </>
-                  )}
                 </g>
               );
             })}
@@ -2826,31 +2786,17 @@ export function MeteogramBody({
           ) : isPrecip ? (
             pph > 0 && (
               <>
-                {/* osové linky s hodnotami v mm */}
-                {/* Jen jemné osové linky – hodnoty v mm jsou na sloupcích a
-                    prahy intenzity vpravo, popisky vlevo by duplikovaly. */}
-                {precipTicks.map((t) => (
-                  <line
-                    key={`pt-${t}`}
-                    x1={0}
-                    y1={yPrecip(t)}
-                    x2={width}
-                    y2={yPrecip(t)}
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeWidth="1"
-                  />
-                ))}
                 {precipThresholds.map((t) => (
                   <g key={`pth-${t.v}`}>
                     <line
-                      x1={0}
+                      x1={width - 52}
                       y1={t.y}
                       x2={width}
                       y2={t.y}
                       stroke={t.color}
-                      strokeWidth="1"
-                      strokeDasharray="4 4"
-                      opacity="0.55"
+                      strokeWidth="1.5"
+                      strokeDasharray="3 3"
+                      opacity="0.7"
                     />
                     <text
                       x={width - 6}
@@ -2869,30 +2815,6 @@ export function MeteogramBody({
                 {precipSpreadArea && (
                   <path d={precipSpreadArea} className="mg-precip-spread" />
                 )}
-                {/* bouřkové úseky – svislý pruh s průhledností dle pravděpodobnosti */}
-                {stormBars.map((b) => {
-                  const left = x(b.startI) - pph * 0.5;
-                  const right = x(b.endI) + pph * 0.5;
-                  const op = 0.16 + 0.34 * (Math.max(0, b.prob) / 100);
-                  const cx = (left + right) / 2;
-                  return (
-                    <g key={`storm-${b.startI}`}>
-                      <rect
-                        x={left}
-                        y={layoutTopPad}
-                        width={Math.max(0, right - left)}
-                        height={PRECIP_BASELINE - layoutTopPad}
-                        fill="rgba(168,120,255,1)"
-                        opacity={op}
-                      />
-                      <StormBolt
-                        x={cx}
-                        y={layoutTopPad + 9}
-                        hail={b.hail}
-                      />
-                    </g>
-                  );
-                })}
                 {/* porovnání modelů: hodinové čáry úhrnu (jako u teploty).
                     Kreslíme je pod sloupce, ať hlavní modré sloupce zůstanou navrchu. */}
                 {compareLines.map((cl) => (
@@ -3301,9 +3223,9 @@ export function MeteogramBody({
               const right = (b.endI + 1) * pph;
               return (
                 <g key={`band-hi-${bi}`}>
-                  {renderDayHi(
-                    left,
-                    right,
+                  {renderActiveDayLabel(
+                    (left + right) / 2,
+                    22,
                     dayLabelFor(b),
                     b.dateStr === todayStr,
                   )}
@@ -3311,59 +3233,36 @@ export function MeteogramBody({
               );
             })}
 
-          {/* značka "teď" – v multi režimu jen čára (popisek je v ose nahoře) */}
-          {nowX >= 0 && pph > 0 && (
-            <>
-              <line
-                x1={nowX}
-                y1={0}
-                x2={nowX}
-                y2={layoutGridBottom}
-                stroke={
-                  theme === "light"
-                    ? "rgba(196,124,0,0.95)"
-                    : "rgba(255,209,102,0.9)"
-                }
-                strokeWidth="2"
-                strokeDasharray="4 3"
-              />
-              {!isCompactPlot && Math.abs(nowX - x(ci)) > 44 && (
-                <g
-                  transform={`translate(${Math.max(17, Math.min(width - 17, nowX))}, ${layoutTopPad - 22})`}
+          {!isCompactPlot &&
+            nowX >= 0 &&
+            pph > 0 &&
+            Math.abs(nowX - x(ci)) > 44 && (
+              <g
+                transform={`translate(${Math.max(17, Math.min(width - 17, nowX))}, ${layoutTopPad - 22})`}
+              >
+                <rect
+                  x={-16}
+                  y={0}
+                  width={32}
+                  height={15}
+                  rx="7.5"
+                  fill={theme === "light" ? "#b9750a" : "rgba(255,209,102,0.92)"}
+                />
+                <text
+                  x={0}
+                  y={11}
+                  className="mg-nowlabel"
+                  textAnchor="middle"
+                  fill={theme === "light" ? "#fff" : undefined}
                 >
-                  <rect
-                    x={-16}
-                    y={0}
-                    width={32}
-                    height={15}
-                    rx="7.5"
-                    fill={theme === "light" ? "#b9750a" : "rgba(255,209,102,0.92)"}
-                  />
-                  <text
-                    x={0}
-                    y={11}
-                    className="mg-nowlabel"
-                    textAnchor="middle"
-                    fill={theme === "light" ? "#fff" : undefined}
-                  >
-                    {tr("Teď")}
-                  </text>
-                </g>
-              )}
-            </>
-          )}
+                  {tr("Teď")}
+                </text>
+              </g>
+            )}
 
-          {/* časový kurzor – přes celou výšku dlaždice, klidně i přes ikony */}
+          {/* časový kurzor – svislá čára v mg-plot-hair; tečka a popisek v SVG */}
           {pph > 0 && (
             <>
-              <line
-                x1={x(ci)}
-                y1={0}
-                x2={x(ci)}
-                y2={layoutGridBottom}
-                stroke="rgba(255,255,255,0.85)"
-                strokeWidth="1.5"
-              />
               {!isCloud && !isPrecip && Number.isFinite(series.primary[ci]) && (
                 <circle
                   cx={x(ci)}
@@ -3382,23 +3281,11 @@ export function MeteogramBody({
                   strokeWidth="2"
                 />
               )}
-              {!isCompactPlot && (
-                <g transform={`translate(${tipX}, ${layoutTopPad - 24})`}>
-                  <rect
-                    width={tipW}
-                    height={18}
-                    rx="6"
-                    fill="rgba(12,18,32,0.92)"
-                    stroke="rgba(255,255,255,0.18)"
-                  />
-                  <text x={tipW / 2} y={13} className="mg-tip" textAnchor="middle">
-                    {cursorTimeLabel(active.time)}
-                  </text>
-                </g>
-              )}
             </>
           )}
         </svg>
+        {renderPlotHairs()}
+        {!multiMode && renderCursorTip()}
         {/* Šipky směru větru / ikonky oblečení patří ke křivce pod ní – proto
             až za grafem, ne nad ním. */}
         {windStrip}
@@ -3408,22 +3295,57 @@ export function MeteogramBody({
   );
 
   if (parts === "legend") {
-    return legendContent;
+    if (!multiMode || !openTabs?.length) return null;
+    return (
+      <StatReadout
+        p={active}
+        tab={tab}
+        activity={activity}
+        tabOrder={tabOrder}
+        activeTabs={openTabs}
+        onTab={() => {}}
+        pressureDelta={pressureDelta}
+        visible={(t) => openTabs.includes(t)}
+        range={null}
+        shrinkMode
+        readOnly
+      />
+    );
   }
 
   if (parts === "head") {
-    if (!points.length) return null;
-    return iconStrip ? <div className="mg-plot-head">{iconStrip}</div> : null;
+    if (!points.length || !iconStrip) return null;
+    return (
+      <div className="mg-plot-head">
+        {iconStrip}
+        {renderStormOverlays()}
+        {renderPlotHairs()}
+      </div>
+    );
+  }
+
+  if (parts === "strip") {
+    if (!multiMode || !points.length) return null;
+    return renderActiveDayOverlay("top");
+  }
+
+  if (parts === "frame") {
+    if (!multiMode || !points.length) return null;
+    return renderActiveDayOverlay("stack");
+  }
+
+  if (parts === "daylines") {
+    if (!multiMode || !points.length || !pph) return null;
+    return renderDayBoundaries();
   }
 
   if (parts === "axis") {
     if (!points.length || !pph) return null;
     // Názvy dnů sedí u spodku osy (blízko grafu, dál od legendy). „Teď" má
     // vlastní řádek nad nimi, ať si nesednou na sebe.
-    const dayY = 29;
+    const dayY = 26;
     const nowY = 2;
-    // Značka „Teď" má vlastní řádek, takže ji kurzor nemá jak překrýt –
-    // neschováváme ji (v plném grafu sedí ve stejném řádku jako tooltip hodiny).
+    // Značka „Teď" má vlastní řádek, tooltip kurzoru sedí vlevo nahoře nad čárou.
     const nowPillX =
       nowX >= 0 ? Math.max(17, Math.min(width - 17, nowX)) : null;
     return (
@@ -3441,18 +3363,6 @@ export function MeteogramBody({
             const isActive = b.dateStr === activeKey;
             return (
               <g key={`ax-${bi}`}>
-                {/* Vybraný den podtrhneme accentem na celou svou šířku – jedna
-                    linka, která zároveň říká, kam přesně den v grafu sahá, a
-                    napojuje se na accent hrany v dlaždicích pod osou. */}
-                {isActive && (
-                  <rect
-                    x={left}
-                    y={AXIS_H - 2}
-                    width={right - left}
-                    height={2}
-                    fill="var(--accent)"
-                  />
-                )}
                 <text
                   x={(left + right) / 2}
                   y={dayY}
@@ -3468,20 +3378,7 @@ export function MeteogramBody({
           })}
           {nowX >= 0 && (
             <>
-              <line
-                x1={nowX}
-                y1={0}
-                x2={nowX}
-                y2={AXIS_H + 3}
-                stroke={
-                  theme === "light"
-                    ? "rgba(196,124,0,0.95)"
-                    : "rgba(255,209,102,0.9)"
-                }
-                strokeWidth="2"
-                strokeDasharray="4 3"
-              />
-              {nowPillX != null && (
+              {nowPillX != null && Math.abs(nowX - x(ci)) > 44 && (
                 <g transform={`translate(${nowPillX}, ${nowY})`}>
                   <rect
                     x={-16}
@@ -3504,15 +3401,9 @@ export function MeteogramBody({
               )}
             </>
           )}
-          <line
-            x1={x(ci)}
-            y1={0}
-            x2={x(ci)}
-            y2={AXIS_H + 3}
-            stroke="rgba(255,255,255,0.85)"
-            strokeWidth="1.5"
-          />
         </svg>
+        {renderPlotHairs()}
+        {renderCursorTip()}
       </div>
     );
   }
@@ -3521,11 +3412,6 @@ export function MeteogramBody({
     return (
       <div
         className="mg-plot-stack-item"
-        style={
-          multiMode
-            ? ({ "--mg-accent": series.stroke } as CSSProperties)
-            : undefined
-        }
         aria-label={multiMode ? tr(TAB_LABEL[chartTab]) : undefined}
       >
         {!multiMode && (
@@ -3568,7 +3454,50 @@ function MeteogramMulti(props: Props) {
   }, [openTabsRaw, tab, tabOrder]);
   const [cursor, setCursor] = useState(0);
   const stackRef = useRef<HTMLDivElement>(null);
+  const stickySentinelRef = useRef<HTMLDivElement>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   const [plotWidth, setPlotWidth] = useState(0);
+  const shrinkRaf = useRef(0);
+  const shrinkVal = useRef(-1);
+
+  useEffect(() => {
+    const SHRINK_RANGE = 72;
+
+    const update = () => {
+      shrinkRaf.current = 0;
+      const sentinel = stickySentinelRef.current;
+      const legend = legendRef.current;
+      if (!sentinel || !legend) return;
+
+      const stickyTop =
+        parseFloat(
+          getComputedStyle(
+            document.querySelector(".app") ?? document.documentElement,
+          ).getPropertyValue("--header-h"),
+        ) || 0;
+
+      const anchor = sentinel.getBoundingClientRect().bottom - stickyTop;
+      const next = Math.min(1, Math.max(0, 1 - anchor / SHRINK_RANGE));
+      if (Math.abs(next - shrinkVal.current) < 0.004) return;
+      shrinkVal.current = next;
+      legend.style.setProperty("--stats-shrink", String(next));
+    };
+
+    const schedule = () => {
+      if (!shrinkRaf.current) {
+        shrinkRaf.current = requestAnimationFrame(update);
+      }
+    };
+
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (shrinkRaf.current) cancelAnimationFrame(shrinkRaf.current);
+    };
+  }, []);
 
   useEffect(() => {
     const el = stackRef.current;
@@ -3605,8 +3534,9 @@ function MeteogramMulti(props: Props) {
         onCursorChange={setCursor}
       />
       <div ref={stackRef} className="mg-plots-wrap">
+        <div ref={stickySentinelRef} className="mg-sticky-sentinel" aria-hidden="true" />
         <div className="mg-plots-sticky">
-          <div className="mg-sticky-legend">
+          <div ref={legendRef} className="mg-sticky-legend">
             <MeteogramBody
               {...props}
               parts="legend"
@@ -3617,43 +3547,73 @@ function MeteogramMulti(props: Props) {
             />
           </div>
           {plotWidth > 0 && (
+            <div className="mg-plot-chrome">
+              <MeteogramBody
+                {...props}
+                parts="strip"
+                multiMode
+                plotWidth={plotWidth}
+                cursor={cursor}
+                onCursorChange={setCursor}
+              />
+              <MeteogramBody
+                {...props}
+                parts="axis"
+                multiMode
+                plotWidth={plotWidth}
+                cursor={cursor}
+                onCursorChange={setCursor}
+              />
+              <MeteogramBody
+                {...props}
+                parts="head"
+                multiMode
+                plotWidth={plotWidth}
+                cursor={cursor}
+                onCursorChange={setCursor}
+              />
+            </div>
+          )}
+        </div>
+        {plotWidth > 0 && (
+          <div className="mg-plots-graphs">
             <MeteogramBody
               {...props}
-              parts="axis"
+              parts="frame"
               multiMode
               plotWidth={plotWidth}
               cursor={cursor}
               onCursorChange={setCursor}
             />
-          )}
-        </div>
+            <div className="mg-plots-stack">
+              {openTabs.map((t, i) => (
+                <MeteogramBody
+                  key={t}
+                  {...props}
+                  parts="plot"
+                  multiMode
+                  fixedTab={t}
+                  hideLegend
+                  hideIcons
+                  plotStackLast={i === openTabs.length - 1}
+                  cursor={cursor}
+                  onCursorChange={setCursor}
+                  plotWidth={plotWidth}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         {plotWidth > 0 && (
           <MeteogramBody
             {...props}
-            parts="head"
+            parts="daylines"
             multiMode
             plotWidth={plotWidth}
             cursor={cursor}
             onCursorChange={setCursor}
           />
         )}
-        <div className="mg-plots-stack">
-          {openTabs.map((t, i) => (
-            <MeteogramBody
-              key={t}
-              {...props}
-              parts="plot"
-              multiMode
-              fixedTab={t}
-              hideLegend
-              hideIcons
-              plotStackLast={i === openTabs.length - 1}
-              cursor={cursor}
-              onCursorChange={setCursor}
-              plotWidth={plotWidth}
-            />
-          ))}
-        </div>
       </div>
     </section>
   );
@@ -3773,6 +3733,23 @@ function DropMini() {
   );
 }
 
+// Počet sloupců stats mřížky – co nejvíc sloupců při minimu prázdných míst
+// v posledním řádku (rovnoměrné zaplnění).
+function bestStatCols(count: number, maxCols: number): number {
+  if (count <= 0) return 0;
+  const cap = Math.min(Math.max(1, maxCols), count);
+  let best = 1;
+  let bestWaste = Infinity;
+  for (let c = 1; c <= cap; c++) {
+    const waste = c * Math.ceil(count / c) - count;
+    if (waste < bestWaste || (waste === bestWaste && c > best)) {
+      bestWaste = waste;
+      best = c;
+    }
+  }
+  return best;
+}
+
 // Panel s ikonami pro hodinu pod kurzorem – pevné rozložení, nehýbe se.
 function StatReadout({
   p,
@@ -3785,6 +3762,9 @@ function StatReadout({
   pressureDelta,
   visible,
   range,
+  compact = false,
+  shrinkMode = false,
+  readOnly = false,
 }: {
   p: HourlyPoint;
   tab: Tab;
@@ -3796,9 +3776,14 @@ function StatReadout({
   pressureDelta: number;
   visible: (t: Tab) => boolean;
   range?: { min: number; max: number } | null;
+  compact?: boolean;
+  shrinkMode?: boolean;
+  readOnly?: boolean;
 }) {
   const info = describeWeather(p.weatherCode);
-  const isOn = (t: Tab) => (multiSelect ? !!activeTabs?.includes(t) : tab === t);
+  const isOn = (t: Tab) =>
+    !readOnly &&
+    (multiSelect ? !!activeTabs?.includes(t) : tab === t);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(0);
@@ -3807,7 +3792,7 @@ function StatReadout({
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const MIN = 132;
+    const MIN = shrinkMode ? 108 : compact ? 118 : 152;
     const compute = () => {
       const w = el.clientWidth;
       if (!w || count === 0) {
@@ -3816,19 +3801,17 @@ function StatReadout({
       }
       const gap = parseFloat(getComputedStyle(el).columnGap) || 10;
       const maxCols = Math.max(1, Math.floor((w + gap) / (MIN + gap)));
-      const capped = Math.min(maxCols, count);
-      const rows = Math.ceil(count / capped);
-      setCols(Math.ceil(count / rows));
+      setCols(bestStatCols(count, maxCols));
     };
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [count]);
+  }, [count, shrinkMode, compact]);
 
   return (
     <div
-      className="mg-stats"
+      className={`mg-stats${shrinkMode ? " shrink" : compact ? " compact" : ""}${readOnly ? " readonly" : ""}`}
       ref={wrapRef}
       style={
         cols
@@ -4481,9 +4464,15 @@ function RainGlyph() {
   );
 }
 
-function StormBolt({ x, y, hail }: { x: number; y: number; hail: boolean }) {
+function StormBoltMark({ hail }: { hail: boolean }) {
   return (
-    <g transform={`translate(${x - 7} ${y - 7})`} opacity="0.95">
+    <svg
+      className="mg-storm-bolt"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      aria-hidden="true"
+    >
       <path
         d="M8 0 L3 8 H6.5 L5 14 L11 5 H7.5 L9.5 0 Z"
         fill="rgba(200,170,255,0.95)"
@@ -4497,7 +4486,7 @@ function StormBolt({ x, y, hail }: { x: number; y: number; hail: boolean }) {
           <circle cx="12.5" cy="12.5" r="1.1" fill="rgba(220,235,255,0.95)" />
         </>
       )}
-    </g>
+    </svg>
   );
 }
 
@@ -4656,7 +4645,7 @@ function recenterMeanToInstant(arr: number[]): number[] {
 const LEGEND_VAL_CH: Record<Tab, number> = {
   temp: 7,
   feels: 7,
-  outfit: 7,
+  outfit: 14,
   dewpoint: 7,
   precip: 8,
   wind: 7,
@@ -4928,7 +4917,7 @@ function isoLocal(d: Date): string {
 // (dotyk). Text se předává už přeložený.
 function InfoHint({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const btnRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -4970,9 +4959,8 @@ function InfoHint({ text }: { text: string }) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button
+      <span
         ref={btnRef}
-        type="button"
         className="mg-info-btn"
         onClick={(e) => {
           e.preventDefault();
@@ -4983,7 +4971,7 @@ function InfoHint({ text }: { text: string }) {
         title={text}
       >
         ?
-      </button>
+      </span>
       {open &&
         createPortal(
           <div

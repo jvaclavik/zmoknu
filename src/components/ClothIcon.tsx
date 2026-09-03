@@ -76,8 +76,9 @@ export function ClothIcon({
     case "jacket":
       return (
         <svg {...common}>
-          <path d="M18 8l-10 6 4 7 5-3v18h22V18l5 3 4-7-10-6c-2 4-18 4-20 0z" />
-          <path d="M24 10v32" />
+          <path d="M18 12c0-4 12-4 12 0" />
+          <path d="M18 12 10 17l3 8 5-2v17h14V23l5 2 3-8-8-5c-2 3-12 3-14 0z" />
+          <path d="M24 13v26" />
         </svg>
       );
     case "coat":
@@ -90,9 +91,10 @@ export function ClothIcon({
     case "downvest":
       return (
         <svg {...common}>
-          <path d="M18 9c1 3 11 3 12 0l4 4v29H14V13z" />
-          <path d="M24 11v31" />
-          <path d="M15 19h6M27 19h6M15 26h6M27 26h6M15 33h6M27 33h6" />
+          <path d="M18 11h12" />
+          <path d="M18 11l-4 7v24h20V18l-4-7H18" />
+          <path d="M24 12v28" />
+          <path d="M16 22h16M16 28h16M16 34h16" />
         </svg>
       );
     case "downjacket":
@@ -106,15 +108,18 @@ export function ClothIcon({
     case "beanie":
       return (
         <svg {...common}>
-          <path d="M9 30c0-15 30-15 30 0z" />
-          <path d="M7 30h34v5H7z" />
+          <path d="M10 30a14 14 0 0 1 28 0" />
+          <path d="M8 30h32v6H8z" />
+          <path d="M11 33h26" />
         </svg>
       );
     case "gloves":
       return (
         <svg {...common}>
-          <path d="M16 22v-4c0-2 3-2 3 0v3c0-3 3-3 3 0v1c0-2 3-2 3 0v2c0-2 3-2 3 0v8c0 6-4 9-9 9s-9-3-9-9c0-3 2-4 3-4z" />
-          <path d="M16 36h12" />
+          <path d="M8 19c0-5 4-8 9-8s9 3 9 8v11c0 5-4 9-9 9s-9-4-9-9V19z" />
+          <path d="M4 27c-2 0-4 2-4 5v4c0 3 2 5 5 5" />
+          <path d="M22 19c0-5 4-8 9-8s9 3 9 8v11c0 5-4 9-9 9s-9-4-9-9V19z" />
+          <path d="M40 27c2 0 4 2 4 5v4c0 3-2 5-5 5" />
         </svg>
       );
     case "scarf":
@@ -141,16 +146,19 @@ export function ClothIcon({
     case "cap":
       return (
         <svg {...common}>
-          <path d="M12 27c0-11 20-13 25-3" />
-          <path d="M12 27h21" />
-          <path d="M33 27c5-1 11 0 11 4H33z" />
+          <path d="M12 22C12 14 36 14 36 22" />
+          <path d="M12 22h24" />
+          <path d="M36 22c0 0 8 1 10 4v3H36" />
         </svg>
       );
     case "sunglasses":
       return (
         <svg {...common}>
-          <path d="M7 19h13v5c0 5-13 5-13 0zM28 19h13v5c0 5-13 5-13 0zM20 21h8" />
-          <path d="M7 19l-2-4M41 19l2-4" />
+          <path d="M7 21h13c0 5-13 5-13 0z" />
+          <path d="M28 21h13c0 5-13 5-13 0z" />
+          <path d="M20 22h8" />
+          <path d="M7 21 4 16" />
+          <path d="M41 21l3-5" />
         </svg>
       );
     case "sunscreen":
@@ -163,8 +171,10 @@ export function ClothIcon({
     case "boots":
       return (
         <svg {...common}>
-          <path d="M18 8h7v20h6c4 0 6 3 6 7v3H18z" />
-          <path d="M18 32h19" />
+          <path d="M19 10h8v15h5c3 0 6 2 7 6l2 5H15l2-5c1-4 4-6 7-6h5V10z" />
+          <path d="M14 36h26" />
+          <path d="M21 14v10M27 14v10" />
+          <path d="M20 17h8M20 21h8" />
         </svg>
       );
     case "sandals":
