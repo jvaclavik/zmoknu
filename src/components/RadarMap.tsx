@@ -53,6 +53,9 @@ type Source = "rain" | "chmi" | "omforecast" | "accum";
 
 // ID vrstev/zdrojů: předpovědní radar (Open-Meteo, spojitý rastr srážek),
 // úhrn srážek (interpolovaný rastr) a oblačnost (družice ČHMÚ image overlay).
+// Krytí zobrazené radarové vrstvy (nižší hodnoty používá predikce).
+const RADAR_OPACITY = 0.8;
+
 const OMF_ID = "omf-precip";
 const ACC_ID = "om-accum";
 const CLOUD_ID = "chmi-sat-cloud";
@@ -593,7 +596,9 @@ export default function RadarMap({
 
     // Radar vkládáme pod hranice a popisky, ať zůstanou čitelné navrchu.
     const before = labelsBeforeId(map);
-    frames.forEach((f, i) => {
+    const addFrame = (i: number) => {
+      const f = frames[i];
+      if (!f || map.getSource(`radar-src-${i}`)) return;
       const id = `radar-src-${i}`;
       if (source === "chmi") {
         map.addSource(id, { type: "image", url: f.path, coordinates: CHMI_COORDS });
@@ -616,7 +621,7 @@ export default function RadarMap({
           type: "raster",
           source: id,
           paint: {
-            "raster-opacity": i === startIdx ? 0.8 : 0,
+            "raster-opacity": i === startIdx ? RADAR_OPACITY : 0,
             "raster-opacity-transition": { duration: 0 },
             "raster-fade-duration": 0,
           },
@@ -624,13 +629,51 @@ export default function RadarMap({
         before,
       );
       radarSrcIds.current.push(id);
-    });
+    };
 
-    // Pojistka: kdyby se některý snímek nikdy neohlásil (pomalá síť, tichá
-    // chyba), po 8 s přednačítání i tak dokončíme, aby šlo přehrávat.
-    const ids = radarSrcIds.current.slice();
-    const safety = window.setTimeout(() => setLoaded(new Set(ids)), 8000);
-    return () => window.clearTimeout(safety);
+    // Načítáme pozpátku: nejdřív jen nejnovější snímek (ten se rovnou
+    // zobrazuje) a teprve až dojede, pustíme zbytek od nejnovějšího ke
+    // staršímu. Na pomalé lince je tak „teď" vidět hned, místo aby o pásmo
+    // soupeřily všechny snímky najednou.
+    const rest = frames
+      .map((_, i) => i)
+      .filter((i) => i !== startIdx)
+      .sort((a, b) => b - a);
+    addFrame(startIdx);
+
+    let safety: number | undefined;
+    let flushed = false;
+    const detach = () => {
+      map.off("sourcedata", onFirstData);
+      map.off("error", onFirstError);
+    };
+    const flushRest = () => {
+      if (flushed) return;
+      flushed = true;
+      detach();
+      for (const i of rest) addFrame(i);
+      // Pojistka: kdyby se některý snímek nikdy neohlásil (pomalá síť, tichá
+      // chyba), po 8 s přednačítání i tak dokončíme, aby šlo přehrávat.
+      const ids = radarSrcIds.current.slice();
+      safety = window.setTimeout(() => setLoaded(new Set(ids)), 8000);
+    };
+    function onFirstData(e: maplibregl.MapSourceDataEvent) {
+      if (e.sourceId === `radar-src-${startIdx}` && e.isSourceLoaded) flushRest();
+    }
+    function onFirstError(e: maplibregl.ErrorEvent) {
+      if ((e as { sourceId?: string }).sourceId === `radar-src-${startIdx}`)
+        flushRest();
+    }
+    map.on("sourcedata", onFirstData);
+    map.on("error", onFirstError);
+    // Kdyby se nejnovější snímek neozval vůbec, zbytek nedržíme donekonečna.
+    const kick = window.setTimeout(flushRest, 2500);
+
+    return () => {
+      detach();
+      window.clearTimeout(kick);
+      if (safety) window.clearTimeout(safety);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, source, framesKey]);
 
@@ -659,7 +702,11 @@ export default function RadarMap({
     frames.forEach((_, i) => {
       const lyr = `lyr-radar-src-${i}`;
       if (map.getLayer(lyr)) {
-        map.setPaintProperty(lyr, "raster-opacity", i === index ? 0.8 : 0);
+        map.setPaintProperty(
+          lyr,
+          "raster-opacity",
+          i === index ? RADAR_OPACITY : 0,
+        );
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
