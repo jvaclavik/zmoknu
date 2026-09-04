@@ -35,6 +35,9 @@ export interface RadarMotion {
   // Posun pole v pixelech snímku za `stepSec` (x doprava, y dolů).
   dxPx: number;
   dyPx: number;
+  // Týž posun jako podíl šířky/výšky snímku – použitelný bez znalosti rozlišení.
+  dxFrac: number;
+  dyFrac: number;
   stepSec: number;
   // Shoda po posunu (normalizovaná křížová korelace, 0–1) = spolehlivost.
   score: number;
@@ -73,6 +76,32 @@ function readPixels(img: HTMLImageElement): ImageData | null {
   } catch {
     return null; // tainted canvas (snímek zvenčí bez CORS)
   }
+}
+
+// Snímek jen se srážkami – bez rámečku, hlavičky s časem a obrysů hranic.
+// Posunutá (predikovaná) vrstva by jinak vezla statickou grafiku s sebou a
+// přes mapu by se táhl posunutý rámeček i druhý časový údaj.
+export async function echoOnlyImage(url: string): Promise<string | null> {
+  let px: ImageData | null = null;
+  try {
+    px = readPixels(await loadImage(url));
+  } catch {
+    return null;
+  }
+  if (!px) return null;
+  const d = px.data;
+  for (let o = 0; o < d.length; o += 4) {
+    if (d[o + 3] < 128) continue;
+    const key = (d[o] << 16) | (d[o + 1] << 8) | d[o + 2];
+    if (!ECHO_WEIGHT.has(key)) d[o + 3] = 0;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = px.width;
+  canvas.height = px.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.putImageData(px, 0, 0);
+  return canvas.toDataURL();
 }
 
 // Převede snímek na hrubší mřížku intenzit – průměr vah odrazivosti v bloku
@@ -242,6 +271,8 @@ function estimateFromPixels(
   return {
     dxPx,
     dyPx,
+    dxFrac: dxPx / older.width,
+    dyFrac: dyPx / older.height,
     stepSec,
     score: fine.score,
     speedKmh: (km / stepSec) * 3600,
@@ -282,4 +313,40 @@ export async function estimateRadarMotion(
     if (motion) return motion;
   }
   return null;
+}
+
+type Corners = [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+];
+
+const [[CHMI_S, CHMI_W], [CHMI_N, CHMI_E]] = CHMI_BOUNDS;
+
+function mercY(lat: number): number {
+  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+}
+
+function invMercY(y: number): number {
+  return ((Math.atan(Math.exp(y)) - Math.PI / 4) * 360) / Math.PI;
+}
+
+// Rohy snímku ČHMÚ posunuté o `minutes` podle odhadnutého vektoru. Snímek je
+// v EPSG:3857, takže posouváme v Mercatoru – jinak by se pole na severu a jihu
+// posunulo o různou vzdálenost.
+export function shiftedChmiCoords(m: RadarMotion, minutes: number): Corners {
+  const steps = (minutes * 60) / m.stepSec;
+  const lonOff = m.dxFrac * steps * (CHMI_E - CHMI_W);
+  const mercOff = -m.dyFrac * steps * (mercY(CHMI_N) - mercY(CHMI_S));
+  const at = (lon: number, lat: number): [number, number] => [
+    lon + lonOff,
+    invMercY(mercY(lat) + mercOff),
+  ];
+  return [
+    at(CHMI_W, CHMI_N),
+    at(CHMI_E, CHMI_N),
+    at(CHMI_E, CHMI_S),
+    at(CHMI_W, CHMI_S),
+  ];
 }

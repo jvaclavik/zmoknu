@@ -6247,6 +6247,12 @@ input[type="range"]::-moz-range-thumb {
 .radar-scrub-dot.plain {
   background: rgba(var(--ov-rgb), 0.55);
 }
+/* Predikce (extrapolace posunu) – prázdný kroužek, ať je odlišná od dat. */
+.radar-scrub-dot.pred {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #34d17a;
+  opacity: 0.6;
+}
 .radar-scrub-label {
   position: absolute;
   top: calc(50% + 9px);
