@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { GeoLocation, RadarData } from "../types";
+import type { GeoLocation, RadarData, RadarFrame } from "../types";
 import { radarTileUrl } from "../lib/rainviewer";
 import {
   fetchOmForecastGrid,
@@ -23,7 +23,13 @@ import {
   CHMI_SAT_CZ_COORDS,
   type SatFrame,
 } from "../lib/chmiSat";
-import { clockTime } from "../lib/format";
+import { clockTime, windDirLabel } from "../lib/format";
+import {
+  echoOnlyImage,
+  estimateRadarMotion,
+  shiftedChmiCoords,
+  type RadarMotion,
+} from "../lib/radarMotion";
 import { tr, getLang } from "../lib/i18n";
 import { darkStyle, loadTouristStyle, loadTouristDarkStyle } from "../lib/mapStyle";
 import { useStoredState } from "../lib/useStoredState";
@@ -50,6 +56,25 @@ interface Props {
 }
 
 type Source = "rain" | "chmi" | "omforecast" | "accum";
+
+// Krytí zobrazené radarové vrstvy (nižší hodnoty používá predikce).
+const RADAR_OPACITY = 0.8;
+
+// Predikce = extrapolace posledního snímku podle odhadnutého posunu pole.
+// Ze dvou snímků umíme jen advekci („pole se posouvá, nevzniká ani nezaniká"),
+// a ta drží zhruba hodinu – u přeháněk míň, u fronty víc. Dál už by to bylo
+// věštění, proto na hodině končíme. Krytí přitom klesá až na polovinu, aby
+// bylo vidět, že jistota ubývá, a poslední krok skoro mizí.
+const PRED_STEP_MIN = 10;
+const PRED_HORIZON_MIN = 60;
+const PRED_STEPS = PRED_HORIZON_MIN / PRED_STEP_MIN;
+const PRED_MIN_OPACITY = RADAR_OPACITY * 0.5;
+
+// Krytí k-tého kroku predikce (k = 1…PRED_STEPS).
+function predOpacity(k: number): number {
+  const t = Math.min(1, k / PRED_STEPS);
+  return RADAR_OPACITY + (PRED_MIN_OPACITY - RADAR_OPACITY) * t;
+}
 
 // ID vrstev/zdrojů: předpovědní radar (Open-Meteo, spojitý rastr srážek),
 // úhrn srážek (interpolovaný rastr) a oblačnost (družice ČHMÚ image overlay).
@@ -265,6 +290,10 @@ export default function RadarMap({
   const [activeWebcam, setActiveWebcam] = useState<Webcam | null>(null);
   // Moje (GPS) poloha – jen pokud už je oprávnění uděleno, ať nevyskakuje prompt.
   const [myLoc, setMyLoc] = useState<{ lat: number; lon: number } | null>(null);
+  // Odhadnutý posun srážkového pole (ze dvou posledních snímků ČHMÚ) a
+  // poslední snímek očištěný na samotné srážky (podklad pro posunuté vrstvy).
+  const [motion, setMotion] = useState<RadarMotion | null>(null);
+  const [predImg, setPredImg] = useState<string | null>(null);
   const [omGrid, setOmGrid] = useState<OmForecastGrid | null>(null);
   const [omError, setOmError] = useState(false);
   const [accumPeriodId, setAccumPeriodId] = useStoredState<string>(
@@ -299,6 +328,7 @@ export default function RadarMap({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const webcamMarkersRef = useRef<maplibregl.Marker[]>([]);
   const radarSrcIds = useRef<string[]>([]);
+  const predSrcIds = useRef<string[]>([]);
   const failedSrcIds = useRef<Set<string>>(new Set());
   const cloudSrcIds = useRef<string[]>([]);
   // Cache vyrenderovaných rastrů předpovědi (podle indexu kroku) – ať se při
@@ -455,7 +485,8 @@ export default function RadarMap({
     [omGrid],
   );
 
-  const frames = useMemo(() => {
+  // Reálné (stažené) snímky – jen ty mají vlastní vrstvu s obrázkem.
+  const realFrames = useMemo(() => {
     if (source === "accum") return [];
     if (source === "omforecast") return omFrames;
     return (source === "chmi" ? chmiRadar : radar)?.frames ?? [];
@@ -464,7 +495,74 @@ export default function RadarMap({
     source === "omforecast"
       ? 0
       : (source === "chmi" ? chmiRadar : radar)?.nowcastStartIndex ??
-        frames.length;
+        realFrames.length;
+
+  // Kotva predikce = nejnovější snímek, který se opravdu načetl (ten úplně
+  // poslední ještě nemusí být na serveru).
+  const anchorIdx = useMemo(() => {
+    const last = realFrames.length - 1;
+    if (last < 0) return -1;
+    let i = last;
+    while (i > 0 && !succeeded.has(`radar-src-${i}`)) i--;
+    // Dokud se nic nenačetlo, drž se posledního – ať nekotvíme na nejstarším.
+    return succeeded.has(`radar-src-${i}`) ? i : last;
+  }, [realFrames.length, succeeded]);
+  const anchor = realFrames[anchorIdx];
+
+  // Predikované snímky = tentýž obrázek posunutý po vektoru, po 10 min.
+  const predFrames = useMemo<RadarFrame[]>(() => {
+    if (source !== "chmi" || !motion || !predImg || !anchor) return [];
+    return Array.from({ length: PRED_STEPS }, (_, k) => ({
+      time: anchor.time + (k + 1) * PRED_STEP_MIN * 60,
+      path: anchor.path,
+      kind: "nowcast" as const,
+    }));
+  }, [source, motion, predImg, anchor]);
+
+  // Časová osa = reálné snímky + predikce za nimi.
+  const frames = useMemo(
+    () => [...realFrames, ...predFrames],
+    [realFrames, predFrames],
+  );
+
+  // Odhad posunu pole ze dvou posledních snímků. Pouštíme až po prvním
+  // načteném snímku, ať to nesoupeří o pásmo s přednačítáním.
+  const motionReady = loaded.size > 0;
+  useEffect(() => {
+    if (source !== "chmi" || !anchor || !motionReady) {
+      setMotion(null);
+      return;
+    }
+    let cancelled = false;
+    estimateRadarMotion(
+      realFrames.slice(Math.max(0, anchorIdx - 3), anchorIdx + 1).reverse(),
+    )
+      .then((m) => {
+        if (!cancelled) setMotion(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMotion(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, realFrames, anchorIdx, motionReady]);
+
+  // Očištěný poslední snímek – posouváme jen srážky, ne rámeček a hlavičku.
+  useEffect(() => {
+    if (source !== "chmi" || !anchor || !motionReady) {
+      setPredImg(null);
+      return;
+    }
+    let cancelled = false;
+    echoOnlyImage(anchor.path).then((url) => {
+      if (!cancelled) setPredImg(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [source, anchor, motionReady]);
 
   // Inicializace mapy (jednou).
   useEffect(() => {
@@ -568,7 +666,7 @@ export default function RadarMap({
   }, [basemap]);
 
   // Přidání/výměna radarových snímků (po načtení stylu nebo změně zdroje/dat).
-  const framesKey = frames.map((f) => f.path).join("|");
+  const framesKey = realFrames.map((f) => f.path).join("|");
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -593,7 +691,9 @@ export default function RadarMap({
 
     // Radar vkládáme pod hranice a popisky, ať zůstanou čitelné navrchu.
     const before = labelsBeforeId(map);
-    frames.forEach((f, i) => {
+    const addFrame = (i: number) => {
+      const f = realFrames[i];
+      if (!f || map.getSource(`radar-src-${i}`)) return;
       const id = `radar-src-${i}`;
       if (source === "chmi") {
         map.addSource(id, { type: "image", url: f.path, coordinates: CHMI_COORDS });
@@ -616,7 +716,7 @@ export default function RadarMap({
           type: "raster",
           source: id,
           paint: {
-            "raster-opacity": i === startIdx ? 0.8 : 0,
+            "raster-opacity": i === startIdx ? RADAR_OPACITY : 0,
             "raster-opacity-transition": { duration: 0 },
             "raster-fade-duration": 0,
           },
@@ -624,15 +724,100 @@ export default function RadarMap({
         before,
       );
       radarSrcIds.current.push(id);
-    });
+    };
 
-    // Pojistka: kdyby se některý snímek nikdy neohlásil (pomalá síť, tichá
-    // chyba), po 8 s přednačítání i tak dokončíme, aby šlo přehrávat.
-    const ids = radarSrcIds.current.slice();
-    const safety = window.setTimeout(() => setLoaded(new Set(ids)), 8000);
-    return () => window.clearTimeout(safety);
+    // Načítáme pozpátku: nejdřív jen nejnovější snímek (ten se rovnou
+    // zobrazuje) a teprve až dojede, pustíme zbytek od nejnovějšího ke
+    // staršímu. Na pomalé lince je tak „teď" vidět hned, místo aby o pásmo
+    // soupeřily všechny snímky najednou.
+    const rest = realFrames
+      .map((_, i) => i)
+      .filter((i) => i !== startIdx)
+      .sort((a, b) => b - a);
+    addFrame(startIdx);
+
+    let safety: number | undefined;
+    let flushed = false;
+    const detach = () => {
+      map.off("sourcedata", onFirstData);
+      map.off("error", onFirstError);
+    };
+    const flushRest = () => {
+      if (flushed) return;
+      flushed = true;
+      detach();
+      for (const i of rest) addFrame(i);
+      // Pojistka: kdyby se některý snímek nikdy neohlásil (pomalá síť, tichá
+      // chyba), po 8 s přednačítání i tak dokončíme, aby šlo přehrávat.
+      const ids = radarSrcIds.current.slice();
+      safety = window.setTimeout(() => setLoaded(new Set(ids)), 8000);
+    };
+    function onFirstData(e: maplibregl.MapSourceDataEvent) {
+      if (e.sourceId === `radar-src-${startIdx}` && e.isSourceLoaded) flushRest();
+    }
+    function onFirstError(e: maplibregl.ErrorEvent) {
+      if ((e as { sourceId?: string }).sourceId === `radar-src-${startIdx}`)
+        flushRest();
+    }
+    map.on("sourcedata", onFirstData);
+    map.on("error", onFirstError);
+    // Kdyby se nejnovější snímek neozval vůbec, zbytek nedržíme donekonečna.
+    const kick = window.setTimeout(flushRest, 2500);
+
+    return () => {
+      detach();
+      window.clearTimeout(kick);
+      if (safety) window.clearTimeout(safety);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, source, framesKey]);
+
+  // Vrstvy predikce: pořád tentýž obrázek, jen posunutý o k×10 min po
+  // odhadnutém vektoru. Přidáváme je zvlášť, ať přepočet posunu nesahá na
+  // (už načtené) radarové vrstvy.
+  const predKey =
+    motion && predImg
+      ? `${anchor?.path ?? ""}|${motion.dxFrac.toFixed(5)}|${motion.dyFrac.toFixed(5)}`
+      : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const clear = () => {
+      for (const id of predSrcIds.current) {
+        if (map.getLayer(`lyr-${id}`)) map.removeLayer(`lyr-${id}`);
+        if (map.getSource(id)) map.removeSource(id);
+      }
+      predSrcIds.current = [];
+    };
+    clear();
+    if (!predKey || !motion || !predImg || !predFrames.length) return;
+
+    const before = labelsBeforeId(map);
+    predFrames.forEach((_f, k) => {
+      const id = `pred-src-${k}`;
+      map.addSource(id, {
+        type: "image",
+        url: predImg,
+        coordinates: shiftedChmiCoords(motion, (k + 1) * PRED_STEP_MIN),
+      });
+      map.addLayer(
+        {
+          id: `lyr-${id}`,
+          type: "raster",
+          source: id,
+          paint: {
+            "raster-opacity": 0,
+            "raster-opacity-transition": { duration: 0 },
+            "raster-fade-duration": 0,
+          },
+        },
+        before,
+      );
+      predSrcIds.current.push(id);
+    });
+    return clear;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, predKey, framesKey]);
 
   // Vyrenderuje (a nakešuje) rastr předpovědi pro daný krok.
   const omfFrameUrl = (ti: number): string | null => {
@@ -656,14 +841,29 @@ export default function RadarMap({
       if (src && url) src.updateImage({ url });
       return;
     }
-    frames.forEach((_, i) => {
+    realFrames.forEach((_, i) => {
       const lyr = `lyr-radar-src-${i}`;
       if (map.getLayer(lyr)) {
-        map.setPaintProperty(lyr, "raster-opacity", i === index ? 0.8 : 0);
+        map.setPaintProperty(
+          lyr,
+          "raster-opacity",
+          i === index ? RADAR_OPACITY : 0,
+        );
+      }
+    });
+    // Predikce: čím dál dopředu, tím průhlednější.
+    predFrames.forEach((_, k) => {
+      const lyr = `lyr-pred-src-${k}`;
+      if (map.getLayer(lyr)) {
+        map.setPaintProperty(
+          lyr,
+          "raster-opacity",
+          realFrames.length + k === index ? predOpacity(k + 1) : 0,
+        );
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, mapReady, frames, source]);
+  }, [index, mapReady, realFrames, predFrames, source]);
 
   // Předpovědní radar: spojitý rastr srážek z mřížky Open-Meteo jako image
   // overlay (barva = intenzita mm/h). Slider mění, který krok se vykreslí.
@@ -1000,7 +1200,7 @@ export default function RadarMap({
       ? !!omGrid
       : source === "accum"
         ? !!accumImg
-        : frames.length > 0 && loaded.size >= frames.length;
+        : realFrames.length > 0 && loaded.size >= realFrames.length;
 
   const errored =
     (source === "rain" && radarStatus === "error") ||
@@ -1035,8 +1235,7 @@ export default function RadarMap({
   }, [playing, frames.length, allLoaded, source]);
 
   const active = frames[index];
-  const isForecast =
-    source === "omforecast" || (source === "rain" && index >= nowcastStart);
+  const isForecast = source === "omforecast" || index >= nowcastStart;
   const spanHours =
     frames.length > 1
       ? Math.round((frames[frames.length - 1].time - frames[0].time) / 3600)
@@ -1215,6 +1414,23 @@ export default function RadarMap({
           )}
 
           {inCz && source === "chmi" && (
+            <p className="radar-set-note">
+              {motion
+                ? tr(
+                    "Za posledním snímkem je predikce na {n} min – pole se posouvá {v} km/h k {d}, extrapolujeme jeho posun. Čím dál dopředu, tím průhlednější.",
+                    {
+                      n: PRED_HORIZON_MIN,
+                      v: Math.round(motion.speedKmh),
+                      d: windDirLabel(motion.dirDeg),
+                    },
+                  )
+                : tr(
+                    "Predikci spočítáme z posunu pole mezi dvěma posledními snímky – teď na ni nejsou data.",
+                  )}
+            </p>
+          )}
+
+          {inCz && source === "chmi" && (
             <div className="radar-set-group">
               <span className="radar-set-label">{tr("Interval")}</span>
               <div className="radar-seg">
@@ -1359,7 +1575,9 @@ export default function RadarMap({
         <div className="radar-attr">
           © OpenStreetMap · {basemap === "tourist" ? "MapTiler" : "CARTO"} ·{" "}
           {source === "chmi"
-            ? "radar ČHMÚ (CZRAD)"
+            ? predFrames.length
+              ? "radar ČHMÚ (CZRAD) + predikce posunu"
+              : "radar ČHMÚ (CZRAD)"
             : source === "omforecast"
               ? "předpověď Open-Meteo (ICON)"
               : source === "accum"
@@ -1452,7 +1670,9 @@ export default function RadarMap({
             </span>
             <span className="radar-scale-end">
               {source === "chmi"
-                ? tr("teď")
+                ? predFrames.length
+                  ? tr("za {n} min", { n: PRED_HORIZON_MIN })
+                  : tr("teď")
                 : source === "omforecast"
                   ? tr("za {n} h", { n: spanHours })
                   : tr("předpověď")}
@@ -1495,9 +1715,11 @@ export default function RadarMap({
                     const status =
                       source === "omforecast"
                         ? "plain"
-                        : succeeded.has(`radar-src-${i}`)
-                          ? "ok"
-                          : "pending";
+                        : i >= realFrames.length
+                          ? "pred"
+                          : succeeded.has(`radar-src-${i}`)
+                            ? "ok"
+                            : "pending";
                     return (
                       <span
                         key={i}

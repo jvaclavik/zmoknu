@@ -656,6 +656,11 @@ const EN: Record<string, string> = {
   "před {n} dny": "{n} days ago",
   "před {n} h": "{n} h ago",
   "za {n} h": "in {n} h",
+  "za {n} min": "in {n} min",
+  "Za posledním snímkem je predikce na {n} min – pole se posouvá {v} km/h k {d}, extrapolujeme jeho posun. Čím dál dopředu, tím průhlednější.":
+    "The last frame is followed by a {n} min nowcast – the field moves {v} km/h towards {d} and we extrapolate that shift. The further ahead, the more transparent.",
+  "Predikci spočítáme z posunu pole mezi dvěma posledními snímky – teď na ni nejsou data.":
+    "The nowcast comes from the shift between the last two frames – there is no data for it right now.",
   Předpověď: "Forecast",
   "Předpověď srážek z modelu (Open-Meteo, ICON). Není to radar – ukazuje očekávaný vývoj na příštích 24 h.":
     "Model precipitation forecast (Open-Meteo, ICON). Not radar – shows the expected development over the next 24 h.",
