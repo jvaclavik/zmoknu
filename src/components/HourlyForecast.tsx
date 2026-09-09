@@ -117,6 +117,7 @@ function buildDetailRows(pts: HourlyPoint[], step: DetailStep): DetailRow[] {
 
   return order.map((key) => {
     const group = buckets.get(key)!;
+    const padH = (h: number) => String(h).padStart(2, "0");
     const firstH = locDate(group[0].time).getHours();
     const lastH = locDate(group[group.length - 1].time).getHours();
     const precipitation = group.reduce((s, p) => s + p.precipitation, 0);
@@ -138,7 +139,7 @@ function buildDetailRows(pts: HourlyPoint[], step: DetailStep): DetailRow[] {
     return {
       key,
       iso: group[0].time,
-      timeLabel: `${firstH}–${end}`,
+      timeLabel: `${padH(firstH)}–${padH(end)}`,
       weatherCode: rep.weatherCode,
       isDay: rep.isDay,
       tempMax,

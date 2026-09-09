@@ -684,6 +684,7 @@ export default function App() {
       ".mg-view-menu",
       ".dbg-modal",
       ".webcams-scroll",
+      ".mg-compare-legend-wrap",
       ".dd-daylight-plot",
       "input[type='range']",
     ].join(",");

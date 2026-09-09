@@ -245,6 +245,17 @@ function labelsBeforeId(map: maplibregl.Map): string | undefined {
   return hit?.id;
 }
 
+function dropMapSource(map: maplibregl.Map | null | undefined, id: string) {
+  if (!map) return;
+  try {
+    const lyr = `lyr-${id}`;
+    if (map.getLayer(lyr)) map.removeLayer(lyr);
+    if (map.getSource(id)) map.removeSource(id);
+  } catch {
+    /* styl se právě mění nebo je mapa zničená */
+  }
+}
+
 export default function RadarMap({
   location,
   radar,
@@ -621,7 +632,11 @@ export default function RadarMap({
       map.off("sourcedata", onSourceData);
       map.off("error", onError);
       map.off("idle", onIdle);
-      map.remove();
+      try {
+        map.remove();
+      } catch {
+        /* mapa už může být zničená */
+      }
       mapRef.current = null;
       setMapReady(false);
     };
@@ -672,10 +687,7 @@ export default function RadarMap({
     if (!map || !mapReady) return;
 
     // Odstraníme předchozí radarové vrstvy a zdroje.
-    for (const id of radarSrcIds.current) {
-      if (map.getLayer(`lyr-${id}`)) map.removeLayer(`lyr-${id}`);
-      if (map.getSource(id)) map.removeSource(id);
-    }
+    for (const id of radarSrcIds.current) dropMapSource(map, id);
     radarSrcIds.current = [];
     failedSrcIds.current = new Set();
     didAutoIndex.current = false;
@@ -783,10 +795,8 @@ export default function RadarMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const clear = () => {
-      for (const id of predSrcIds.current) {
-        if (map.getLayer(`lyr-${id}`)) map.removeLayer(`lyr-${id}`);
-        if (map.getSource(id)) map.removeSource(id);
-      }
+      const m = mapRef.current;
+      for (const id of predSrcIds.current) dropMapSource(m, id);
       predSrcIds.current = [];
     };
     clear();
@@ -872,8 +882,7 @@ export default function RadarMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    if (map.getLayer(`lyr-${OMF_ID}`)) map.removeLayer(`lyr-${OMF_ID}`);
-    if (map.getSource(OMF_ID)) map.removeSource(OMF_ID);
+    dropMapSource(map, OMF_ID);
 
     if (source !== "omforecast" || !omGrid) return;
 
@@ -911,8 +920,7 @@ export default function RadarMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    if (map.getLayer(`lyr-${ACC_ID}`)) map.removeLayer(`lyr-${ACC_ID}`);
-    if (map.getSource(ACC_ID)) map.removeSource(ACC_ID);
+    dropMapSource(map, ACC_ID);
 
     if (source !== "accum" || !accumImg) return;
 
@@ -962,21 +970,14 @@ export default function RadarMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const dropSource = (id: string) => {
-      try {
-        if (map.getLayer(`lyr-${id}`)) map.removeLayer(`lyr-${id}`);
-        if (map.getSource(id)) map.removeSource(id);
-      } catch {
-        /* vrstva/zdroj už nemusí existovat (po přestylování) */
-      }
-    };
+    const dropSource = (id: string) => dropMapSource(mapRef.current, id);
 
     // Teardown starých vrstev oblačnosti (spolehlivě i při vypnutí – cleanup).
     const teardown = () => {
-      for (const id of cloudSrcIds.current) dropSource(id);
+      const m = mapRef.current;
+      for (const id of cloudSrcIds.current) dropMapSource(m, id);
       cloudSrcIds.current = [];
-      // Legacy jednosnímková vrstva (kdyby po hot-reloadu zůstala).
-      dropSource(CLOUD_ID);
+      dropMapSource(m, CLOUD_ID);
     };
 
     teardown();
@@ -988,11 +989,16 @@ export default function RadarMap({
 
     // Vlož pod srážkovou vrstvu (dlaždice radaru / heatmapu), případně aspoň
     // pod hranice a popisky, ať zůstanou nahoře.
-    const beforeId = radarSrcIds.current.length
-      ? `lyr-${radarSrcIds.current[0]}`
-      : map.getLayer(`lyr-${OMF_ID}`)
-        ? `lyr-${OMF_ID}`
-        : labelsBeforeId(map);
+    let beforeId: string | undefined;
+    try {
+      beforeId = radarSrcIds.current.length
+        ? `lyr-${radarSrcIds.current[0]}`
+        : map.getLayer(`lyr-${OMF_ID}`)
+          ? `lyr-${OMF_ID}`
+          : labelsBeforeId(map);
+    } catch {
+      beforeId = undefined;
+    }
 
     // Snímky nejdřív předzpracujeme na průhledné (jen mraky), teprve pak je
     // vložíme jako image vrstvy. Fallback na surové URL, kdyby maska selhala.

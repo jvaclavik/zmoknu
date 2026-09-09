@@ -43,6 +43,11 @@ export function modelLabel(id: string): string {
   return tr(modelById(id)?.label ?? id);
 }
 
+export function modelShort(id: string): string {
+  const m = modelById(id);
+  return m ? `${m.flag} ${m.short}` : id;
+}
+
 export function modelColor(id: string): string {
   return modelById(id)?.color ?? "#9aa7c4";
 }

@@ -99,7 +99,26 @@ export function todayISO(offsetSec?: number): string {
 
 export function hourLabel(iso: string): string {
   const d = locDate(iso);
-  return `${d.getHours()}:00`;
+  const hour = String(d.getHours()).padStart(2, "0");
+  return `${hour}:00`;
+}
+
+/** Popisek u kurzoru v meteogramu: den (bez data) + hodina, např. „Pátek, 02“. */
+export function cursorHourLabel(iso: string, offsetSec?: number): string {
+  const d = locDate(iso);
+  const today = zonedNow(offsetSec);
+  const tomorrow = zonedNow(offsetSec);
+  tomorrow.setDate(today.getDate() + 1);
+  const yesterday = zonedNow(offsetSec);
+  yesterday.setDate(today.getDate() - 1);
+  const en = getLang() === "en";
+  let dayPart: string;
+  if (isSameDay(d, today)) dayPart = en ? "Today" : "Dnes";
+  else if (isSameDay(d, tomorrow)) dayPart = en ? "Tomorrow" : "Zítra";
+  else if (isSameDay(d, yesterday)) dayPart = en ? "Yesterday" : "Včera";
+  else dayPart = dayLong()[d.getDay()];
+  const hour = String(d.getHours()).padStart(2, "0");
+  return `${dayPart}, ${hour}`;
 }
 
 export function clockTime(date: Date): string {

@@ -274,7 +274,7 @@ body::before {
 
 /* Topbar – fixed, aby „nereagoval" na bounce scrollu (rubber-band). Vycentrovaný
    a s max-width jako .app, ať brand zůstane zarovnaný s obsahem i na širokých
-   obrazovkách; frosted pozadí (::before) přeteče na plnou šířku okna. */
+   obrazovkách; pozadí (::before) přeteče na plnou šířku okna. */
 .topbar {
   position: fixed;
   top: 0;
@@ -286,9 +286,9 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: calc(12px + var(--sat, env(safe-area-inset-top, 0px)))
-    calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px))) 12px
+  gap: 3px;
+  padding: calc(8px + var(--sat, env(safe-area-inset-top, 0px)))
+    calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px))) 8px
     calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
@@ -334,10 +334,10 @@ body::before {
   display: block;
 }
 .hb-logo-img {
-  height: 30px;
+  height: 26px;
   /* Pevná šířka (poměr loga 487×509) rezervuje místo i před načtením obrázku,
      jinak by měl img šířku 0 a text „zmoknu?" by po dotažení loga poskočil. */
-  width: 29px;
+  width: 25px;
   object-fit: contain;
   display: block;
 }
@@ -345,7 +345,7 @@ body::before {
   flex-shrink: 0;
   margin: 0 4px 0 0;
   font-weight: 800;
-  font-size: 1.12rem;
+  font-size: 1.02rem;
   letter-spacing: -0.02em;
   color: var(--text);
 }
@@ -353,9 +353,9 @@ body::before {
   color: var(--accent);
 }
 .hb-text {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 500;
-  line-height: 1.55;
+  line-height: 1.35;
   color: var(--muted);
 }
 .hb-pick {
@@ -364,11 +364,11 @@ body::before {
   border: none;
   cursor: pointer;
   border-radius: 7px;
-  padding: 2px 7px;
+  padding: 1px 6px;
   white-space: nowrap;
   vertical-align: middle;
   position: relative;
-  top: -2px;
+  top: -1px;
   transition:
     background 0.15s ease,
     box-shadow 0.15s ease;
@@ -403,17 +403,17 @@ body::before {
   cursor: default;
 }
 .hb-today {
-  /* Záporné svislé okraje zajistí, že 34px tlačítko nezvětší výšku řádku
-     (řádek si drží výšku loga ~30px), ať se ikonka zobrazuje nebo ne. */
+  /* Záporné svislé okraje zajistí, že tlačítko nezvětší výšku řádku
+     (řádek si drží výšku loga ~26px), ať se ikonka zobrazuje nebo ne. */
   margin-top: -2px;
   margin-bottom: -2px;
   flex-shrink: 0;
   display: grid;
   grid-auto-flow: column;
   place-items: center;
-  gap: 6px;
-  width: 34px;
-  height: 34px;
+  gap: 5px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--card-border);
   background: var(--card);
   color: var(--text);
@@ -432,9 +432,9 @@ body::before {
   display: grid;
   grid-auto-flow: column;
   place-items: center;
-  gap: 6px;
-  width: 34px;
-  height: 34px;
+  gap: 5px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--card-border);
   background: var(--card);
   color: var(--text);
@@ -464,16 +464,16 @@ body::before {
 @media (min-width: 641px) {
   .hb-today {
     width: auto;
-    padding: 0 12px;
-    height: 32px;
+    padding: 0 10px;
+    height: 28px;
   }
   .hb-today-label {
     display: inline;
   }
   .hb-locate {
     width: auto;
-    padding: 0 12px;
-    height: 32px;
+    padding: 0 10px;
+    height: 28px;
   }
   .hb-locate-label {
     display: inline;
@@ -614,9 +614,9 @@ body::before {
   left: calc(50% - 50vw);
   right: calc(50% - 50vw);
   z-index: -1;
-  background: rgba(var(--panel-rgb), 0.68);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background:
+    linear-gradient(var(--card), var(--card)),
+    var(--sky-mid);
   border-bottom: 1px solid var(--card-border);
 }
 
@@ -874,7 +874,7 @@ body::before {
     --page-px: 10px;
   }
   .topbar {
-    gap: 8px;
+    gap: 4px;
   }
   .topbar-ctx {
     min-width: 0;
@@ -894,7 +894,7 @@ body::before {
   /* Panel hledání ukotvíme k viewportu, ať nevyjede mimo obrazovku. */
   .search-panel {
     position: fixed;
-    top: 60px;
+    top: 54px;
     left: 10px;
     right: 10px;
     width: auto;
@@ -3069,12 +3069,6 @@ body::before {
   gap: 1px;
   min-width: 0;
 }
-.mg-head-when {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
 .mg-dataview {
   position: relative;
 }
@@ -3390,12 +3384,12 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-view-compare-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 2px 8px;
 }
 .mg-view-model {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 12px;
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -3478,6 +3472,16 @@ input[type="range"]::-moz-range-thumb {
   width: 18px;
   height: 18px;
   flex: none;
+}
+.mg-legend-outfit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mg-compare-legend .mg-legend-outfit {
+  font-size: 0.64rem;
 }
 .mg-legend-note {
   flex-basis: 100%;
@@ -3769,7 +3773,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-threshold-line {
   stroke-width: 1;
-  stroke-dasharray: 4 4;
+  stroke-dasharray: 1.5 4;
+  stroke-linecap: round;
   opacity: 0.26;
 }
 .mg-threshold-label {
@@ -3781,19 +3786,39 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 800;
   letter-spacing: 0.02em;
 }
-.meteogram-card {
+.meteogram-card,
+.meteogram-card-multi {
   overflow: hidden;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background:
+    linear-gradient(var(--card), var(--card)),
+    var(--sky-mid);
+}
+.meteogram-card {
+  padding-bottom: 0;
 }
 .meteogram-card-multi {
-  overflow: visible;
   /* backdrop-filter na kartě by vytvořil scroll-kontejner a sticky osa
      by se při scrollu stránky neodlepila od grafů. */
-  backdrop-filter: none;
+  overflow: visible;
+  padding-bottom: 0;
 }
 .mg-plots-wrap {
   position: relative;
   margin-left: calc(-1 * var(--card-px));
   margin-right: calc(-1 * var(--card-px));
+}
+.mg-plots-graphs {
+  position: relative;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  overflow: hidden;
+  --mg-plot-bottom-pad: 20px;
+  --mg-day-edge: 1.5px;
+  --mg-day-bracket: 2.5px;
+  --mg-day-pill-edge: 1px;
+  padding-bottom: var(--mg-plot-bottom-pad);
 }
 /* Svislé oddělovače dnů (půlnoc) – stejná linka jako mezi grafy v zásobníku. */
 .mg-day-dividers {
@@ -3829,8 +3854,6 @@ input[type="range"]::-moz-range-thumb {
   background:
     linear-gradient(var(--card), var(--card)),
     var(--sky-mid);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 .mg-sticky-sentinel {
   height: 1px;
@@ -3840,7 +3863,7 @@ input[type="range"]::-moz-range-thumb {
 .mg-sticky-legend {
   --stats-shrink: 0;
   --stats-row-h: 56px;
-  --stat-tile-h: 44px;
+  --stat-tile-h: 28px;
   padding: 0 var(--card-px) 6px;
 }
 .mg-stats.readonly .mg-stat-btn {
@@ -3859,84 +3882,83 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-stats.shrink {
   margin: 0 0 6px;
-  gap: 4px 5px;
+  gap: 3px 4px;
   align-items: stretch;
-  --stat-tile-h: calc(var(--stats-row-h) - 14px * var(--stats-shrink));
+  --stat-tile-h: 28px;
+}
+.mg-stats.shrink.no-icons {
+  --stat-tile-h: 24px;
 }
 .mg-stats.shrink .mg-stat {
   box-sizing: border-box;
   height: var(--stat-tile-h);
   min-height: var(--stat-tile-h);
-  padding: 4px 6px;
-  gap: calc(4px + 2px * (1 - var(--stats-shrink)));
-  border-radius: 8px;
-}
-.mg-stats.shrink .mg-stat-v {
-  gap: 1px;
+  padding: 1px 4px;
+  gap: 3px;
+  border-radius: 7px;
 }
 .mg-stats.shrink .mg-stat-v strong {
-  font-size: calc(0.94rem + 0.18rem * (1 - var(--stats-shrink)));
-  line-height: 1.2;
+  font-size: calc(0.74rem + 0.1rem * (1 - var(--stats-shrink)));
+  line-height: 1;
 }
-.mg-stats.shrink .mg-stat-v span {
-  font-size: calc(0.66rem + 0.08rem * (1 - var(--stats-shrink)));
-  line-height: 1.25;
+.mg-stats.shrink.no-icons .mg-stat-v strong {
+  font-size: calc(0.68rem + 0.08rem * (1 - var(--stats-shrink)));
 }
 .mg-stats.shrink .mg-stat > svg,
-.mg-stats.shrink .mg-stat-cloth,
-.mg-stats.shrink .mg-drops4,
-.mg-stats.shrink .mg-stat-missing {
-  transform: scale(calc(0.82 + 0.1 * (1 - var(--stats-shrink))));
-  transform-origin: left center;
+.mg-stats.shrink .mg-stat-cloth svg {
+  width: 18px;
+  height: 18px;
+}
+.mg-stats.shrink .mg-stat-cloth {
+  width: 18px;
+  height: 18px;
 }
 .mg-stats.shrink .mg-stat-outfit .mg-stat-extras svg {
   transform: scale(calc(0.92 + 0.08 * (1 - var(--stats-shrink))));
 }
 .mg-stats.compact {
-  --stat-tile-h: 38px;
+  --stat-tile-h: 34px;
   margin: 0 0 4px;
   gap: 4px 5px;
 }
 .mg-stats.compact .mg-stat {
   padding: 2px 5px;
-  gap: 5px;
+  gap: 4px;
   border-radius: 7px;
 }
 .mg-stats.compact .mg-stat-v strong {
-  font-size: 0.88rem;
-}
-.mg-stats.compact .mg-stat-v span {
-  font-size: 0.62rem;
-}
-.mg-stats.compact .mg-stat > svg,
-.mg-stats.compact .mg-stat-cloth,
-.mg-stats.compact .mg-drops4,
-.mg-stats.compact .mg-stat-missing {
-  transform: scale(0.82);
-  transform-origin: left center;
-}
-.mg-stats.compact .mg-stat-outfit .mg-stat-extras svg {
-  transform: scale(0.9);
+  font-size: 0.86rem;
 }
 .mg-plot-chrome {
   position: relative;
 }
 .mg-plot-head {
   position: relative;
+  z-index: 1;
   margin: 0;
   padding: 0;
   overflow: visible;
 }
+.mg-plot-head .mg-plot-hair {
+  z-index: 1;
+}
 .mg-plot-axis {
   position: relative;
+  z-index: 1;
   margin: 0;
   padding: 0;
   line-height: 0;
+  overflow: visible;
 }
-/* Sloupec vybraného dne – jeden souvislý rám (multi: osa + zásobník grafů). */
-.mg-plots-graphs {
-  position: relative;
+.mg-plot-chrome,
+.mg-plot-axis,
+.meteogram-plot,
+.mg-active-day-col {
+  --mg-day-edge: 1.5px;
+  --mg-day-bracket: 2.5px;
+  --mg-day-pill-edge: 1px;
 }
+/* Sloupec vybraného dne – svislé vodítka + rohové značky, bez výplně. */
 .mg-active-day-col {
   position: absolute;
   top: 0;
@@ -3945,51 +3967,128 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: none;
   z-index: 0;
   border: none;
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--accent) 13%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
-    color-mix(in srgb, var(--accent) 7%, transparent) 100%
-  );
+  background: none;
+  box-shadow: none;
 }
-:root[data-theme="light"] .mg-active-day-col {
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--accent) 9%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 3%, transparent) 52%,
-    color-mix(in srgb, var(--accent) 5%, transparent) 100%
-  );
+.mg-active-day-col::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.11);
+}
+.mg-active-day-col.seg-chrome::before,
+.mg-active-day-col.seg-full::before {
+  top: var(--mg-ad-edge-top, 0);
+}
+:root[data-theme="light"] .mg-active-day-col::before {
+  background: rgba(20, 30, 55, 0.08);
+}
+.mg-active-day-col.seg-stack,
+.mg-active-day-col.seg-full {
+  bottom: var(--mg-plot-bottom-pad, 20px);
 }
 .mg-active-day-col.seg-top {
-  top: 3px;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  display: none;
 }
-:root[data-theme="light"] .mg-active-day-col.seg-top {
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent);
+.mg-active-day-col.seg-chrome .mg-ad-edge-l,
+.mg-active-day-col.seg-chrome .mg-ad-edge-r,
+.mg-active-day-col.seg-full .mg-ad-edge-l,
+.mg-active-day-col.seg-full .mg-ad-edge-r {
+  top: var(--mg-ad-edge-top, 0);
 }
-.mg-active-day-col.seg-stack {
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-top: none;
-  border-radius: 0 0 10px 10px;
+.mg-day-bracket path {
+  stroke: var(--accent);
+  stroke-width: var(--mg-day-bracket, 2.5px);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: geometricPrecision;
 }
-:root[data-theme="light"] .mg-active-day-col.seg-stack {
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-}
-.mg-active-day-col.seg-full {
+.mg-ad-edge {
+  position: absolute;
   top: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-radius: 10px;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  bottom: 0;
+  width: var(--mg-day-edge, 1.5px);
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-:root[data-theme="light"] .mg-active-day-col.seg-full {
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent);
+.mg-ad-edge-l {
+  left: 0;
+  margin-left: calc(var(--mg-day-edge, 1.5px) / -2);
 }
-/* Kurzor a „Teď" – svislé čáry přes celou výšku bloku, nad ikonami. */
+.mg-ad-edge-r {
+  right: 0;
+  margin-right: calc(var(--mg-day-edge, 1.5px) / -2);
+}
+.mg-active-day-col.seg-stack .mg-ad-edge-l,
+.mg-active-day-col.seg-stack .mg-ad-edge-r,
+.mg-active-day-col.seg-full .mg-ad-edge-l,
+.mg-active-day-col.seg-full .mg-ad-edge-r {
+  bottom: calc(var(--mg-day-edge, 1.5px) / 2);
+}
+.mg-active-day-col.seg-full .mg-ad-edge-b {
+  top: auto;
+  bottom: calc(var(--mg-day-edge, 1.5px) / 2);
+  left: 0;
+  right: 0;
+  width: auto;
+  height: var(--mg-day-edge, 1.5px);
+  margin: 0;
+}
+.mg-active-day-col.seg-stack .mg-ad-edge-b {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: var(--mg-day-edge, 1.5px);
+  margin: 0;
+}
+.mg-ad-cap {
+  position: absolute;
+  height: calc(var(--mg-day-edge, 1.5px) + 1px);
+  width: min(24px, 22%);
+  border-radius: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+.mg-ad-cap-tl {
+  top: 0;
+  left: 0;
+}
+.mg-ad-cap-tr {
+  top: 0;
+  right: 0;
+}
+.mg-ad-cap-bl {
+  bottom: 0;
+  left: 0;
+  margin-left: calc(var(--mg-day-edge, 1.5px) / -2);
+}
+.mg-ad-cap-br {
+  bottom: 0;
+  right: 0;
+  margin-right: calc(var(--mg-day-edge, 1.5px) / -2);
+}
+:root[data-theme="light"] .mg-ad-edge,
+:root[data-theme="light"] .mg-ad-cap {
+  box-shadow: none;
+}
+.mg-day-pill {
+  fill: var(--card-solid);
+  stroke: var(--accent);
+  stroke-width: var(--mg-day-pill-edge, 1px);
+}
+.mg-day-pill.inactive {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: var(--mg-day-pill-edge, 1px);
+}
+/* Kurzor a „Teď" – svislé čáry; v HTML jen pruh ikon (multi), jinak v SVG. */
 .mg-plot-hair {
   position: absolute;
   top: 0;
@@ -3998,7 +4097,7 @@ input[type="range"]::-moz-range-thumb {
   margin-left: -0.75px;
   background: rgba(255, 255, 255, 0.88);
   pointer-events: none;
-  z-index: 3;
+  z-index: 1;
 }
 .mg-plot-hair.now {
   width: 2px;
@@ -4009,14 +4108,25 @@ input[type="range"]::-moz-range-thumb {
     transparent 4px 7px
   );
 }
+.mg-hair-line {
+  stroke: rgba(255, 255, 255, 0.88);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.mg-hair-line.now {
+  stroke: var(--now, rgba(255, 209, 102, 0.9));
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+}
 .mg-cursor-tip {
   position: absolute;
-  top: 0;
+  top: -6px;
   z-index: 5;
   transform: translateX(-50%);
   padding: 2px 8px;
   border-radius: 7.5px;
-  background: rgba(12, 18, 32, 0.92);
+  background: var(--card-solid);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #eaf1ff;
   font-size: 10px;
@@ -4025,9 +4135,15 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.3;
   pointer-events: none;
   white-space: nowrap;
+  isolation: isolate;
+}
+.mg-plot-axis .mg-cursor-tip {
+  top: -5px;
 }
 :root[data-theme="light"] .mg-cursor-tip {
-  background: rgba(12, 18, 32, 0.88);
+  background: var(--card-solid);
+  border-color: rgba(28, 40, 66, 0.14);
+  color: #1a2740;
 }
 /* Bouřkové úseky – svislý fialový pruh přes celou výšku bloku včetně ikon. */
 .mg-storm-layer {
@@ -4056,9 +4172,12 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-svg-axis {
   position: relative;
-  z-index: 4;
+  z-index: 2;
   display: block;
   overflow: visible;
+}
+.mg-hairs-svg {
+  pointer-events: none;
 }
 /* Osa dnů nad zásobníkem grafů: čistý text bez podkladu i bez obtahu –
    nekreslí se přes žádnou křivku, takže „pozadí" pro čitelnost nepotřebuje. */
@@ -4072,9 +4191,12 @@ input[type="range"]::-moz-range-thumb {
 .mg-svg-axis .mg-daylabel.selected,
 .mg-svg-axis .mg-daylabel.selected.today {
   fill: var(--accent);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 800;
 }
 .mg-plots-stack {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -4103,24 +4225,46 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-plots-stack .meteogram-plot {
   margin: 0;
+  padding-bottom: 0;
+}
+.mg-plot-stack-item.focused {
+  z-index: 1;
+  scroll-margin-top: calc(var(--header-h, 0px) + 96px);
+}
+.mg-plot-stack-item.focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 44%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.mg-plot-stack-item.focused .mg-plot-tag {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, rgba(var(--panel-rgb), 0.78));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
 }
 .mg-plot-tag {
   position: absolute;
-  left: 6px;
+  left: 4px;
   top: 4px;
-  z-index: 2;
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   pointer-events: none;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
-  background: rgba(var(--panel-rgb), 0.78);
-  padding: 2px 7px;
+  background: var(--card-solid);
+  padding: 2px 6px;
   border-radius: 6px;
+}
+.mg-plot-stack-item .mg-plot-tag {
+  left: 4px;
 }
 .mg-legend-compare {
   position: absolute;
@@ -4134,15 +4278,54 @@ input[type="range"]::-moz-range-thumb {
   font-size: 0.64rem;
   pointer-events: none;
 }
+.mg-legend-compare .mg-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .mg-legend-compare .mg-legend-val {
-  width: auto;
-  min-width: 0;
+  min-width: 2.6em;
+  text-align: left;
   font-size: 0.64rem;
+}
+.mg-compare-legend-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  margin: 0 calc(-1 * var(--card-px));
+  padding: 0 var(--card-px);
+}
+.mg-compare-legend {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px 12px;
+  padding: 4px 0 6px;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.mg-compare-legend .mg-legend-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mg-compare-legend .mg-legend-val {
+  min-width: 2.6em;
+  text-align: left;
+}
+@media (min-width: 600px) {
+  .mg-compare-legend-wrap {
+    overflow-x: visible;
+  }
+  .mg-compare-legend {
+    flex-wrap: wrap;
+  }
 }
 .mg-plot-label {
   margin: 0;
-  padding: 0 var(--card-px);
-  font-size: 0.82rem;
+  padding: 0 4px;
+  font-size: 0.74rem;
   font-weight: 650;
   letter-spacing: 0.02em;
   color: var(--muted);
@@ -4150,9 +4333,14 @@ input[type="range"]::-moz-range-thumb {
 }
 .meteogram-plot {
   position: relative;
+  --mg-plot-bottom-pad: 20px;
+  padding-bottom: var(--mg-plot-bottom-pad);
   /* Roztáhni graf až ke krajům karty (zruš vnitřní padding karty). */
   margin-left: calc(-1 * var(--card-px));
   margin-right: calc(-1 * var(--card-px));
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  overflow: hidden;
   /* Svislé tažení = scroll stránky; vodorovné řeší JS (scrub). */
   touch-action: pan-y;
   cursor: crosshair;
@@ -4161,11 +4349,16 @@ input[type="range"]::-moz-range-thumb {
   user-select: none;
   -webkit-touch-callout: none;
 }
+.mg-plot-chart {
+  position: relative;
+  z-index: 1;
+}
 .mg-icons {
   position: relative;
   height: 22px;
   margin-bottom: 0;
   overflow: hidden;
+  z-index: 2;
   /* Ikony počasí: dotyk propadne na plot (pan-y) → svislý scroll tu funguje. */
   pointer-events: none;
 }
@@ -4183,20 +4376,8 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(20, 30, 55, 0.07);
 }
 .mg-icons-shade.active {
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--accent) 13%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
-    color-mix(in srgb, var(--accent) 7%, transparent) 100%
-  );
-}
-:root[data-theme="light"] .mg-icons-shade.active {
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--accent) 9%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 3%, transparent) 52%,
-    color-mix(in srgb, var(--accent) 5%, transparent) 100%
-  );
+  background: transparent;
+  box-shadow: none;
 }
 .mg-icons-shade.day {
   background: rgba(255, 255, 255, 0.035);
@@ -4303,6 +4484,14 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: auto;
   touch-action: pan-y;
 }
+.mg-svg-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+}
 /* Zoom nápověda (např. „3 dny") uprostřed grafu. */
 .mg-zoomhint {
   position: absolute;
@@ -4329,15 +4518,12 @@ input[type="range"]::-moz-range-thumb {
   stroke: rgba(var(--panel-rgb), 0.85);
   stroke-width: 3px;
 }
-.mg-daylabel.today {
-  fill: var(--accent-warm);
-  font-size: 12px;
-}
 .mg-daylabel.selected,
 .mg-daylabel.selected.today {
   fill: var(--accent);
   stroke: none;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 800;
 }
 .mg-hourlabel {
   fill: var(--muted);
@@ -5421,21 +5607,24 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
-/* Ikonový readout hodiny pod kurzorem (pevné rozložení). */
+/* Ikonový readout hodiny pod kurzorem – mobil: kompaktní mřížka, vyrovnané řádky. */
 .mg-stats {
-  --stat-tile-h: 44px;
-  display: flex;
-  flex-wrap: wrap;
+  --stat-tile-h: 30px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  grid-auto-rows: var(--stat-tile-h);
   align-items: stretch;
-  gap: 5px 6px;
+  gap: 3px 4px;
   margin: 2px 0 16px;
+}
+.mg-stats.no-icons {
+  --stat-tile-h: 26px;
+  gap: 3px;
 }
 .mg-stats .mg-stat-btn {
   box-sizing: border-box;
-  flex: 1 1 58px;
-  width: auto;
+  width: 100%;
   min-width: 0;
-  max-width: 100%;
   height: var(--stat-tile-h);
   min-height: var(--stat-tile-h);
   align-items: center;
@@ -5443,18 +5632,20 @@ input[type="range"]::-moz-range-thumb {
 .mg-stat {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
-  overflow: hidden;
-  padding: 3px 5px;
-  border-radius: 8px;
+  padding: 1px 5px;
+  border-radius: 7px;
   border: 1px solid transparent;
   container-type: inline-size;
+}
+.mg-stats.no-icons .mg-stat {
+  justify-content: center;
+  padding: 1px 4px;
 }
 /* Klikatelné statistiky = přepínač grafu. */
 .mg-stat-btn {
   min-width: 0;
-  overflow: hidden;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -5485,21 +5676,45 @@ input[type="range"]::-moz-range-thumb {
 .mg-stats:not(.shrink) .mg-stat-cloth,
 .mg-stats:not(.shrink) .mg-drops4,
 .mg-stats:not(.shrink) .mg-stat-missing {
-  transform: scale(0.8);
-  transform-origin: left center;
+  flex-shrink: 0;
+}
+.mg-stats:not(.shrink) .mg-stat > svg,
+.mg-stats:not(.shrink) .mg-stat-cloth svg {
+  width: 20px;
+  height: 20px;
+}
+.mg-stats:not(.shrink) .mg-stat-cloth {
+  width: 20px;
+  height: 20px;
+}
+.mg-stats:not(.shrink) .mg-stat-missing {
+  width: 20px;
+  height: 20px;
+  font-size: 0.78rem;
+}
+.mg-stats.no-icons .mg-stat > svg,
+.mg-stats.no-icons .mg-stat-cloth,
+.mg-stats.no-icons .mg-drops4,
+.mg-stats.no-icons .mg-stat-missing,
+.mg-stats.no-icons .mg-glyph {
+  display: none;
 }
 .mg-stat-v {
   display: flex;
   flex: 1;
   flex-direction: column;
-  line-height: 1.15;
+  justify-content: center;
+  line-height: 1;
   min-width: 0;
-  overflow: hidden;
+}
+.mg-stats.no-icons .mg-stat-v {
+  flex: none;
+  text-align: center;
 }
 .mg-stat-v strong {
   display: block;
-  font-size: 0.96rem;
-  font-weight: 900;
+  font-size: 0.78rem;
+  font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   max-width: 100%;
@@ -5507,21 +5722,21 @@ input[type="range"]::-moz-range-thumb {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mg-stat-v span {
+.mg-stats.no-icons .mg-stat-v strong {
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.mg-stat-outfit .mg-stat-v strong {
+  font-size: 0.74rem;
+}
+.mg-stats.no-icons .mg-stat-outfit .mg-stat-v strong {
   font-size: 0.66rem;
-  color: var(--muted);
-  line-height: 1.25;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.mg-stat-v span {
+  display: none;
 }
 .mg-stat-outfit .mg-stat-v span.mg-stat-extras {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 2px 3px;
-  min-width: 0;
+  display: none;
 }
 @container (max-width: 128px) {
   .mg-stat-v strong {
@@ -5557,6 +5772,11 @@ input[type="range"]::-moz-range-thumb {
 }
 .mg-ptrend {
   vertical-align: -2px;
+}
+@media (max-width: 719px) {
+  .mg-ptrend {
+    display: none;
+  }
 }
 /* Srážky: hodnota (mm) a drobný text (šance). */
 .mg-precip-top {
@@ -5607,17 +5827,14 @@ input[type="range"]::-moz-range-thumb {
   color: #aebccf;
 }
 
-/* Široký displej: původní mřížka s většími dlaždicemi. */
+/* Široký displej: dvouřádkové popisky a větší dlaždice. */
 @media (min-width: 720px) {
   .mg-stats {
     --stat-tile-h: 48px;
-    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 152px), 1fr));
-    grid-auto-rows: var(--stat-tile-h);
     gap: 8px 10px;
   }
   .mg-stats .mg-stat-btn {
-    flex: none;
     width: 100%;
     max-width: none;
   }
@@ -5625,18 +5842,81 @@ input[type="range"]::-moz-range-thumb {
     gap: 8px;
     padding: 4px 7px;
     border-radius: 9px;
+    overflow: hidden;
   }
-  .mg-stats:not(.shrink) .mg-stat > svg,
-  .mg-stats:not(.shrink) .mg-stat-cloth,
-  .mg-stats:not(.shrink) .mg-drops4,
-  .mg-stats:not(.shrink) .mg-stat-missing {
-    transform: none;
+  .mg-stat-btn {
+    overflow: hidden;
+  }
+  .mg-stat-v {
+    line-height: 1.15;
+    overflow: hidden;
   }
   .mg-stat-v strong {
     font-size: 1.08rem;
+    font-weight: 900;
   }
   .mg-stat-v span {
+    display: block;
     font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.25;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mg-stat-outfit .mg-stat-v span.mg-stat-extras {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px 3px;
+    min-width: 0;
+  }
+  .mg-stats:not(.shrink) .mg-stat > svg,
+  .mg-stats:not(.shrink) .mg-stat-cloth svg {
+    width: 30px;
+    height: 30px;
+  }
+  .mg-stats:not(.shrink) .mg-stat-cloth {
+    width: 30px;
+    height: 30px;
+  }
+  .mg-stats:not(.shrink) .mg-stat-missing {
+    width: 30px;
+    height: 30px;
+    font-size: 1.2rem;
+  }
+  .mg-stats.shrink {
+    --stat-tile-h: calc(var(--stats-row-h) - 14px * var(--stats-shrink));
+  }
+  .mg-stats.shrink .mg-stat {
+    padding: 4px 6px;
+    gap: calc(4px + 2px * (1 - var(--stats-shrink)));
+  }
+  .mg-stats.shrink .mg-stat-v span {
+    display: block;
+    font-size: calc(0.66rem + 0.08rem * (1 - var(--stats-shrink)));
+    line-height: 1.25;
+  }
+  .mg-stats.shrink .mg-stat-v strong {
+    font-size: calc(0.94rem + 0.18rem * (1 - var(--stats-shrink)));
+    line-height: 1.2;
+  }
+  .mg-stats.shrink .mg-stat > svg,
+  .mg-stats.shrink .mg-stat-cloth svg {
+    width: auto;
+    height: auto;
+  }
+  .mg-stats.shrink .mg-stat-cloth {
+    width: 30px;
+    height: 30px;
+  }
+  .mg-stats.shrink .mg-stat > svg,
+  .mg-stats.shrink .mg-stat-cloth,
+  .mg-stats.shrink .mg-drops4,
+  .mg-stats.shrink .mg-stat-missing {
+    transform: scale(calc(0.82 + 0.1 * (1 - var(--stats-shrink))));
+    transform-origin: left center;
   }
 }
 
@@ -6576,30 +6856,24 @@ input[type="range"]::-moz-range-thumb {
 }
 /* Mřížka „stat“ dlaždic meteogramu (kopíruje .mg-stats) */
 .skel-stats {
-  --stat-tile-h: 44px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 6px;
+  --stat-tile-h: 30px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  grid-auto-rows: var(--stat-tile-h);
+  gap: 3px 4px;
   /* Stejné vnější okraje jako reálné .mg-stats, ať výška meteogram karty sedí. */
   margin: 2px 0 16px;
 }
 .skel-stat {
-  flex: 1 1 58px;
   min-width: 0;
   height: var(--stat-tile-h);
-  border-radius: 8px;
+  border-radius: 7px;
 }
 @media (min-width: 720px) {
   .skel-stats {
     --stat-tile-h: 48px;
-    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 152px), 1fr));
-    grid-auto-rows: var(--stat-tile-h);
     gap: 8px 10px;
-  }
-  .skel-stat {
-    flex: none;
-    width: 100%;
   }
 }
 @media (min-width: 1280px) {
@@ -7954,7 +8228,7 @@ input[type="range"]::-moz-range-thumb {
     display: none;
   }
   .topbar {
-    gap: 8px;
+    gap: 4px;
   }
   .day-row {
     grid-template-columns: 56px 30px minmax(64px, 1fr) 26px 1fr 26px;
