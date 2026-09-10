@@ -44,7 +44,7 @@ export default function WeatherAlerts({ lat, lon }: Props) {
   // Sbalení všech výstrah (šetří místo) – volba se pamatuje mezi návštěvami.
   const [collapsed, setCollapsed] = useStoredState<boolean>(
     "zmoknu.alertsCollapsed",
-    false,
+    true,
   );
 
   useEffect(() => {
@@ -67,6 +67,11 @@ export default function WeatherAlerts({ lat, lon }: Props) {
     alerts[0].color,
   );
 
+  const worstAlert = [...alerts].sort(
+    (a, b) => (LEVEL_RANK[b.color] ?? 0) - (LEVEL_RANK[a.color] ?? 0),
+  )[0];
+  const headEvent = en ? worstAlert.eventEn : worstAlert.event;
+
   return (
     <section
       className={`card wx-card lvl-${worst}`}
@@ -80,7 +85,12 @@ export default function WeatherAlerts({ lat, lon }: Props) {
         aria-expanded={!collapsed}
       >
         <WarnIcon />
-        <span className="wx-card-title">{tr("Výstrahy")}</span>
+        <span className="wx-card-head-text">
+          <span className="wx-card-title">{tr("Výstrahy")}</span>
+          {collapsed && (
+            <span className="wx-card-head-event">{headEvent}</span>
+          )}
+        </span>
         <span className="wx-count-badge" aria-label={tr("Počet výstrah")}>
           {alerts.length}
         </span>

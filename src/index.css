@@ -22,13 +22,22 @@
   --accent-ink: #08131f;
   --radius: 18px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  /* Dolní tab bar: výška obsahu + safe-area, ať radar i padding appky sedí. */
+  /* Dolní tab bar: výška obsahu + safe-area, ať radar i padding appky sedí.
+     --vv-bottom = mezera layout vs. vizuální viewport (Safari chrome).
+     --tabbar-safe = home indicator, ale ne dvakrát když už --vv-bottom
+     zvedá bar nad systémovou lištu. */
+  --vv-bottom: 0px;
   --tabbar-pad-y: 6px;
   --tabbar-btn: 48px;
   --tabbar-content: calc(var(--tabbar-pad-y) * 2 + var(--tabbar-btn));
-  --tabbar-h: calc(
-    var(--tabbar-content) + var(--sab, env(safe-area-inset-bottom, 0px))
+  --tabbar-safe: max(
+    0px,
+    calc(
+      max(var(--sab, 0px), env(safe-area-inset-bottom, 0px)) -
+        var(--vv-bottom, 0px)
+    )
   );
+  --tabbar-h: calc(var(--tabbar-content) + var(--tabbar-safe));
   /* Barvy ikonek počasí (WeatherIcon). */
   --wi-sun: #ffd166;
   --wi-moon: #cfd8ff;
@@ -259,7 +268,8 @@ body::before {
   margin: 0 auto;
   /* Header je nahoře → žádný horní padding. Boční insety kvůli notchi v landscape. */
   padding: 0 calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px)))
-    calc(24px + var(--tabbar-h)) calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
+    calc(24px + var(--tabbar-h) + var(--vv-bottom, 0px))
+    calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
 /* Nenápadný čas poslední aktualizace schovaný pod fixním headerem – odkryje se
@@ -493,11 +503,11 @@ body::before {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--vv-bottom, 0px);
   z-index: 2100;
   padding: var(--tabbar-pad-y)
     calc(8px + var(--sar, env(safe-area-inset-right, 0px)))
-    calc(var(--tabbar-pad-y) + var(--sab, env(safe-area-inset-bottom, 0px)))
+    calc(var(--tabbar-pad-y) + var(--tabbar-safe))
     calc(8px + var(--sal, env(safe-area-inset-left, 0px)));
   background:
     linear-gradient(var(--card), var(--card)),
@@ -1592,6 +1602,46 @@ body::before {
   color: #05203a;
 }
 
+.yr-headbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.yr-headbar .card-title {
+  margin: 0;
+}
+.yr-settings {
+  position: relative;
+  flex-shrink: 0;
+}
+.yr-settings-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(var(--panel-rgb), 0.98);
+  border: 1px solid rgba(var(--ov-rgb), 0.12);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.yr-settings-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.yr-settings-menu .yr-seg {
+  width: 100%;
+}
+.yr-settings-menu .yr-seg button {
+  flex: 1;
+}
+
 .yr-head,
 .yr-row {
   display: grid;
@@ -1606,8 +1656,8 @@ body::before {
 }
 .yr-24 .yr-head,
 .yr-24 .yr-row {
-  /* Široký sloupec ikon (4×24 + gap), větší mezera před teplotou přes column-gap. */
-  grid-template-columns: minmax(100px, 1.25fr) 132px 76px 1fr 84px;
+  /* Široký sloupec ikon (4×24 + gap), místo na šipku rozbalení. */
+  grid-template-columns: minmax(100px, 1.25fr) 132px 76px 1fr 72px 16px;
   column-gap: 22px;
 }
 .yr-24 .yr-icon {
@@ -1622,84 +1672,128 @@ body::before {
 .yr-24 .yr-row {
   padding-top: 13px;
   padding-bottom: 13px;
-  /* Stejná výška sbaleno i rozbaleno (ikony 24px + padding + border). */
   min-height: calc(24px + 26px + 1px);
   box-sizing: border-box;
 }
-/* Rozbalený den + jeho hodiny tvoří jeden blok – bez viditelné čáry mezi nimi.
-   Border necháme (transparentní), ať se výška řádku nehne. */
-.yr-24 .yr-row.expanded,
-.yr-24 .yr-row.expanded.selected {
-  background: rgba(91, 182, 255, 0.06);
-  border-bottom-color: transparent;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+.yr-24 .yr-row.today .yr-time {
+  color: var(--accent-warm);
 }
-.yr-24 .yr-row.expanded .yr-time {
-  min-width: 0;
-  /* Stejná barva jako časy v rozpisu; tučnost dne necháváme. */
-  color: var(--muted);
-}
-/* Přepínač 1h/4h/6h – stejná výška jako denní ikony (24px). */
-.yr-seg-inline {
-  justify-self: end;
-  align-self: center;
-  height: 24px;
-  padding: 1px;
-  box-sizing: border-box;
-}
-.yr-seg-inline button {
-  min-width: 32px;
-  height: 100%;
-  padding: 0 8px;
-  font-size: 0.72rem;
-  line-height: 1;
-  display: inline-flex;
+.yr-chevron {
+  display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--muted);
+  opacity: 0.55;
 }
-/* Podrobný rozpis dne (1h / 4h / 6h) – stejný grid jako denní řádky / hlavička. */
-.yr-detail {
-  margin: 0 calc(-1 * var(--card-px));
-  padding: 0 0 18px;
-  background: rgba(91, 182, 255, 0.06);
-  border-bottom: 1px solid rgba(var(--ov-rgb), 0.08);
+.yr-chevron-ico {
+  display: block;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
 }
-.yr-detail .yr-detail-row {
-  /* Stejné vodorovné odsazení jako denní řádek (grid dědí z .yr-24 .yr-row). */
+.yr-day.is-open .yr-chevron {
+  opacity: 0.9;
+  color: var(--text);
+}
+.yr-day.is-open .yr-chevron-ico {
+  transform: rotate(180deg);
+}
+.yr-day.is-open {
+  margin: 6px calc(-1 * var(--card-px) + 8px);
+  padding: 2px 8px 10px;
+  border-radius: 16px;
+  background: rgba(var(--ov-rgb), 0.055);
+  border: 1px solid rgba(var(--ov-rgb), 0.1);
+}
+.yr-day.is-open > .yr-row {
   margin-left: 0;
   margin-right: 0;
-  padding-left: var(--card-px);
-  padding-right: var(--card-px);
-  padding-top: 7px;
-  padding-bottom: 7px;
-  border-bottom-color: rgba(var(--ov-rgb), 0.04);
+  padding-left: 8px;
+  padding-right: 8px;
   background: transparent;
+  border-bottom-color: transparent;
 }
-.yr-detail .yr-detail-row:last-child {
-  border-bottom: none;
+.yr-day.is-open > .yr-row.selected,
+.yr-day.is-open > .yr-row.expanded,
+.yr-day.is-open > .yr-row.expanded.selected {
+  background: transparent;
+  border-bottom-color: transparent;
+}
+.yr-list:has(.yr-day.is-open) > .yr-day:not(.is-open) {
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .yr-list:has(.yr-day.is-open) > .yr-day:not(.is-open):hover {
+    opacity: 0.92;
+  }
+  .yr-day.is-open .yr-row.clickable:hover {
+    background: rgba(var(--ov-rgb), 0.04);
+  }
+}
+:root[data-theme="light"] .yr-day.is-open {
+  background: rgba(28, 40, 66, 0.035);
+  border-color: rgba(28, 40, 66, 0.1);
+}
+.yr-detail {
+  margin: -4px -2px 2px;
+  padding: 2px 0 6px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(var(--ov-rgb), 0.06);
+}
+:root[data-theme="light"] .yr-detail {
+  background: rgba(28, 40, 66, 0.04);
+  border-color: rgba(28, 40, 66, 0.07);
+}
+.yr-24 .yr-hour {
+  min-height: 0;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 6px 8px;
+  cursor: default;
+  background: transparent;
+  border-bottom-color: rgba(var(--ov-rgb), 0.05);
 }
 @media (hover: hover) {
-  .yr-detail .yr-detail-row:hover {
+  .yr-24 .yr-hour:hover {
     background: transparent;
   }
 }
-.yr-detail .yr-time {
+.yr-24 .yr-hour .yr-time {
   font-weight: 500;
+  font-size: 0.78rem;
   color: var(--muted);
 }
-.yr-detail .yr-icon {
-  /* Jedna ikona – ať sedí pod první denní ikonou, ne uprostřed širokého sloupce. */
+.yr-24 .yr-hour .yr-temp {
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.yr-24 .yr-hour .yr-icon {
   justify-content: flex-start;
   padding-right: 0;
   overflow: visible;
 }
 .yr-row.clickable {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
-@media (hover: hover) {
+.yr-row.clickable:focus {
+  outline: none;
+}
+.yr-row.clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: -2px;
+}
+@media (hover: hover) and (pointer: fine) {
   .yr-row.clickable:hover {
     background: rgba(var(--ov-rgb), 0.05);
+  }
+}
+@media (hover: none) {
+  .yr-row.clickable:active {
+    background: rgba(var(--ov-rgb), 0.06);
   }
 }
 .yr-head {
@@ -1727,18 +1821,24 @@ body::before {
   border-bottom: 1px solid rgba(var(--ov-rgb), 0.03);
 }
 /* Poslední den (nebo jeho rozbalený detail) – bez spodní čáry nad hranou karty. */
-.yr-list > div:last-child > .yr-row,
-.yr-list > div:last-child .yr-detail {
+.yr-list > div:last-child > .yr-row {
   border-bottom: none;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .yr-row:hover {
     background: rgba(var(--ov-rgb), 0.03);
   }
 }
 .yr-row.selected {
-  background: rgba(91, 182, 255, 0.12);
-  border-bottom-color: rgba(91, 182, 255, 0.2);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.yr-day.is-open > .yr-row.selected,
+.yr-day.is-open > .yr-row.expanded,
+.yr-day.is-open > .yr-row.expanded.selected,
+.yr-day.is-open > .yr-row.clickable:active {
+  background: transparent;
+  border-bottom-color: transparent;
 }
 /* Řádek „teď" – nenápadný žlutý okraj, stejná barva jako „Teď" v grafu. */
 .yr-row.now {
@@ -1826,6 +1926,7 @@ body::before {
   gap: 4px;
   white-space: nowrap;
   flex-wrap: nowrap;
+  color: var(--muted);
 }
 .yr-wind strong,
 .yr-wind em {
@@ -1891,7 +1992,7 @@ body::before {
   margin: 0;
   font-size: 1.6rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
 }
 .loc-meta {
   margin: 2px 0 0;
@@ -2588,6 +2689,9 @@ body::before {
   border: 1px solid color-mix(in srgb, var(--bw-accent) 30%, transparent);
   margin: 0;
 }
+.wear-card .bestwin {
+  margin-top: 12px;
+}
 .bestwin-bad {
   background: rgba(var(--ov-rgb), 0.04);
   border-color: var(--card-border);
@@ -2662,7 +2766,130 @@ body::before {
   justify-content: flex-end;
 }
 .details-body {
-  padding: 6px 16px 18px;
+  padding: 0 12px 14px;
+}
+.dd-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 12px 2px 8px;
+}
+.dd-group-title:first-child {
+  margin-top: 2px;
+}
+.dd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 6px;
+}
+@media (min-width: 640px) {
+  .dd-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+.dd-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 11px 9px;
+  border-radius: 12px;
+  background: rgba(var(--ov-rgb), 0.04);
+  border: 1px solid transparent;
+}
+.dd-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dd-tile-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--accent);
+}
+.dd-tile-ico svg {
+  width: 14px;
+  height: 14px;
+}
+.dd-tile-value {
+  font-size: 0.98rem;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.25;
+  min-height: 1.25em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dd-tile-sep {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--muted);
+}
+.dd-tile-note {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.3;
+  min-height: 1.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dd-tone-good {
+  color: #6ee7a8;
+}
+.dd-tone-fair {
+  color: #b6e36e;
+}
+.dd-tone-moderate {
+  color: #e6c15a;
+}
+.dd-tone-poor {
+  color: #ff9f5b;
+}
+.dd-tone-verypoor {
+  color: #ff7a4d;
+}
+.dd-tone-extreme {
+  color: #e879f9;
+}
+:root[data-theme="light"] .dd-tone-good {
+  color: #1a9a5c;
+}
+:root[data-theme="light"] .dd-tone-fair {
+  color: #5a8a1e;
+}
+:root[data-theme="light"] .dd-tone-moderate {
+  color: #b8860b;
+}
+:root[data-theme="light"] .dd-tone-poor {
+  color: #d46b1c;
+}
+:root[data-theme="light"] .dd-tone-verypoor {
+  color: #c4471a;
+}
+:root[data-theme="light"] .dd-tone-extreme {
+  color: #a33ab8;
+}
+.dd-tile-alert {
+  box-shadow: inset 2px 0 0 var(--accent-warm);
 }
 
 /* ---- Webkamery v okolí ---------------------------------------------------- */
@@ -2825,173 +3052,53 @@ body::before {
   color: var(--muted);
   text-decoration: underline;
 }
-/* Nadpis skupiny detailů */
-.dd-group-title {
+.dd-aqi-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 12px 2px 8px;
-}
-.dd-group-title:first-child {
-  margin-top: 2px;
-}
-/* Responzivní mřížka dlaždic – stejně široké sloupce (stabilní při přepnutí dnů) */
-.dd-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 8px;
-}
-/* Sekce „Slunce a Měsíc“ – pevně 2 sloupce (2×2), sloučená délka dne přes celou šířku */
-.dd-grid-sun {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.dd-tile {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 11px 12px;
-  border-radius: 14px;
-  background: rgba(var(--ov-rgb), 0.04);
-  border: 1px solid var(--card-border);
-  min-width: 0;
-}
-.dd-tile-ico {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  border-radius: 9px;
-  background: rgba(var(--ov-rgb), 0.05);
-  color: var(--accent);
-  font-size: 1.05rem;
-  line-height: 1;
-}
-.dd-tile-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-.dd-tile-label {
-  font-size: 0.76rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-.dd-tile-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.dd-tile-value {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.15;
-}
-.dd-tile-value-sm {
-  font-size: 1rem;
-}
-.dd-tile-sep {
-  font-style: normal;
-  font-weight: 500;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-.dd-tile-unit {
-  font-style: normal;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--muted);
+.dd-aqi-scale.compact {
+  width: 5.6rem;
+  margin-top: 0;
+  gap: 0;
 }
-.dd-tile-note {
-  font-size: 0.74rem;
-  color: var(--muted);
-  line-height: 1.35;
-}
-/* Zvýraznění dlaždice při vysokém riziku (bouřky) */
-.dd-tile-alert {
-  background: rgba(255, 149, 0, 0.12);
-  border-color: rgba(255, 149, 0, 0.4);
-}
-.dd-tile-alert .dd-tile-ico {
-  color: var(--accent-warm, #ff9f43);
-}
-:root[data-theme="light"] .dd-tile-alert {
-  background: rgba(230, 130, 0, 0.15);
-  border-color: rgba(200, 120, 0, 0.5);
-}
-
-/* Sloučená dlaždice „Délka dne“ (hodnota + roční graf), přes celou šířku 2×2 */
-.dd-daylight {
-  grid-column: 1 / -1;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-.dd-daylight-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.dd-daylight-headtext {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.dd-daylight-now {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.dd-daylight-trend {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-.dd-daylight-plot {
+.dd-aqi-track {
   position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    #6ee7a8 0%,
+    #b6e36e 20%,
+    #ffd166 40%,
+    #ff9f5b 60%,
+    #ff7a4d 80%,
+    #e879f9 100%
+  );
 }
-.dd-daylight-axis {
-  fill: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+.dd-aqi-scale.compact .dd-aqi-track {
+  height: 4px;
 }
-.dd-daylight-svg {
-  display: block;
-  width: 100%;
-  touch-action: none;
-}
-.dd-daylight-tip {
+.dd-aqi-now {
   position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px var(--card-solid);
   pointer-events: none;
-  z-index: 2;
-  padding: 3px 7px;
-  border-radius: 8px;
-  background: rgba(var(--panel-rgb), 0.96);
-  border: 1px solid rgba(var(--ov-rgb), 0.14);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-  font-size: 0.72rem;
-  white-space: nowrap;
-  color: var(--muted);
 }
-.dd-daylight-tip strong {
-  color: var(--text);
-  font-weight: 700;
-}
-/* Pyl uvnitř široké dlaždice */
-.aqi-pill {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: #06121f;
+.dd-aqi-scale.compact .dd-aqi-now {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 2px var(--card-solid);
 }
 .aqi-good {
   background: #6ee7a8;
@@ -4863,13 +4970,29 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
   color: var(--wx-accent, var(--accent-warm));
 }
+.wx-card-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
 .wx-card-title {
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-right: auto;
+}
+.wx-card-head-event {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wx-count-badge {
   display: inline-flex;
@@ -4901,12 +5024,15 @@ input[type="range"]::-moz-range-thumb {
 }
 .wx-card.lvl-yellow {
   --wx-accent: #ffd166;
+  background: color-mix(in srgb, var(--wx-accent) 12%, var(--card));
 }
 .wx-card.lvl-orange {
   --wx-accent: #ff9f43;
+  background: color-mix(in srgb, var(--wx-accent) 14%, var(--card));
 }
 .wx-card.lvl-red {
   --wx-accent: #ff6b6b;
+  background: color-mix(in srgb, var(--wx-accent) 16%, var(--card));
 }
 :root[data-theme="light"] .wx-card.lvl-yellow {
   --wx-accent: #a06b00;
@@ -4918,33 +5044,200 @@ input[type="range"]::-moz-range-thumb {
   --wx-accent: #c62222;
 }
 
-/* Přehledová věta o počasí (nahoře) + nowcast */
+/* Hero dne: teplota + výčet, ikona jako grafika přes okraj karty. */
 .smart-summary {
+  --hero-icon: clamp(5.6rem, 30vw, 7.2rem);
+  position: relative;
+  overflow: hidden;
+  padding: 12px 16px 11px;
+}
+.smart-summary::before {
+  content: "";
+  position: absolute;
+  left: -12%;
+  top: -55%;
+  width: 62%;
+  height: 140%;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--now-c, transparent) 18%, transparent),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+.smart-hero {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - var(--hero-icon) + 1.4rem);
 }
-.smart-summary-foot {
+.smart-hero-now {
+  display: block;
+  color: var(--now-c, var(--text));
+  font-size: clamp(3.1rem, 12vw, 4.25rem);
+  font-weight: 600;
+  line-height: 0.86;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.smart-hero-deg {
+  display: inline-block;
+  margin-left: 0.04em;
+  font-size: 0.42em;
+  font-weight: 500;
+  line-height: 0;
+  vertical-align: super;
+  opacity: 0.78;
+}
+.smart-hero-line {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  padding-top: 11px;
-  border-top: 1px solid var(--card-border);
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
 }
-.smart-summary-tone {
-  align-self: center;
-}
-.smart-summary-text {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--muted);
-  font-weight: 400;
-}
-.smart-summary-foot .smart-summary-text {
+.smart-hero-headline {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.28;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smart-hero-meta {
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.smart-hero-meta::before {
+  content: "·";
+  margin: 0 0.4em;
+  opacity: 0.5;
+}
+.smart-hero-icon {
+  position: absolute;
+  right: -1.35rem;
+  top: 50%;
+  z-index: 0;
+  width: var(--hero-icon);
+  height: var(--hero-icon);
+  transform: translateY(-50%);
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.22));
+  pointer-events: none;
+}
+.smart-hero-icon.skel {
+  width: var(--hero-icon);
+  height: var(--hero-icon);
+  border-radius: 28px;
+  filter: none;
+}
+:root[data-theme="light"] .smart-hero-icon {
+  filter: drop-shadow(0 6px 14px rgba(30, 50, 90, 0.12));
+}
+.smart-hero-facts {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+}
+.smart-hero-wear,
+.smart-hero-scale,
+.smart-hero-rain,
+.smart-hero-rest {
+  display: flex;
+  align-items: center;
+}
+.smart-hero-rest {
+  min-width: 0;
+}
+.smart-hero-facts > * + *,
+.smart-hero-rest > * + * {
+  padding-left: 13px;
+  margin-left: 13px;
+  border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+.smart-hero-scale {
+  gap: 8px;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.smart-hero-scale-track {
+  position: relative;
+  flex: none;
+  width: 5.6rem;
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--min-c), var(--max-c));
+}
+.smart-hero-scale-now {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--card-solid);
+  pointer-events: none;
+}
+.smart-hero-rain {
+  flex: 0 0 auto;
+  color: var(--wi-rain);
+  font-size: 0.78rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.smart-hero-rain.is-dry {
+  color: var(--muted);
+}
+.smart-hero-mm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.smart-hero-mm .model-agree-plain {
+  width: 18px;
+  height: 18px;
+  transform: none;
+}
+.smart-hero-wear {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 11rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .smart-hero-facts {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    row-gap: 3px;
+  }
+  .smart-hero-facts > .smart-hero-rest {
+    padding-left: 0;
+    margin-left: 0;
+    border-left: none;
+  }
+  .smart-hero-wear {
+    max-width: none;
+  }
 }
 /* Biopředpověď */
 .bio-card {
@@ -5298,45 +5591,74 @@ input[type="range"]::-moz-range-thumb {
 /* Shoda modelů jako prostý text vpravo (bez badge) + klikací tooltip */
 .model-agree-plain {
   flex-shrink: 0;
-  margin-left: auto;
-  align-self: center;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
   color: var(--muted);
   background: none;
   border: none;
-  padding: 0;
   cursor: pointer;
+  border-radius: 6px;
+  transform: translateY(1px);
+}
+.model-agree-plain.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+.model-agree-plain:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.model-agree-plain:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+@media (hover: hover) {
+  .model-agree-plain:not(:disabled):hover {
+    background: color-mix(in srgb, currentColor 14%, transparent);
+  }
 }
 .model-agree-plain.lvl-high {
   color: #4ccf8e;
 }
 .model-agree-plain.lvl-medium {
-  color: var(--accent-warm);
+  color: #ffd166;
 }
 .model-agree-plain.lvl-low {
+  color: #ff9f43;
+}
+.model-agree-plain.lvl-poor {
   color: #ff6b6b;
 }
-/* Mini barevná tečka (na desktopu skrytá, ukazujeme text) */
 .model-agree-dot {
-  display: none;
-  width: 12px;
-  height: 12px;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+}
+.model-agree-txt {
+  min-width: 4.6em;
+}
+.model-agree-chev {
+  display: inline-flex;
+  color: currentColor;
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+.model-agree-chev.open {
+  transform: rotate(180deg);
 }
 /* Klikací tooltip se shodou modelů (portál na <body>) */
 .model-agree-tip {
   position: fixed;
   z-index: 3000;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 12px 14px 13px;
+  border-radius: 12px;
   background: rgba(var(--panel-rgb), 0.98);
   border: 1px solid rgba(var(--ov-rgb), 0.18);
   border-left: 3px solid var(--muted);
@@ -5352,10 +5674,14 @@ input[type="range"]::-moz-range-thumb {
   --agree-c: #4ccf8e;
 }
 .model-agree-tip.lvl-medium {
-  border-left-color: var(--accent-warm);
-  --agree-c: var(--accent-warm);
+  border-left-color: #ffd166;
+  --agree-c: #ffd166;
 }
 .model-agree-tip.lvl-low {
+  border-left-color: #ff9f43;
+  --agree-c: #ff9f43;
+}
+.model-agree-tip.lvl-poor {
   border-left-color: #ff6b6b;
   --agree-c: #ff6b6b;
 }
@@ -5416,50 +5742,75 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+.agree-kicker {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .agree-explain {
   margin: 0;
   color: var(--muted);
   font-size: 0.74rem;
 }
-/* Mobil: jen mini ikonka (barva dle shody), text schovaný. */
-@media (max-width: 640px) {
-  .model-agree-txt {
-    display: none;
-  }
-  .model-agree-dot {
-    display: inline-block;
-  }
-  .model-agree-plain {
-    padding: 6px;
-    margin: -6px 0 -6px auto;
-  }
-}
-.smart-nowcast {
+.smart-hero-nowcast-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 0.86rem;
-  font-weight: 600;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
 }
-.smart-nowcast svg {
+span.smart-hero-nowcast-btn {
+  cursor: default;
+}
+.smart-hero-nowcast-btn span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.smart-hero-nowcast-btn.now,
+.smart-hero-nowcast-btn.stopping {
+  color: var(--accent-warm);
+}
+.smart-hero-nowcast-btn svg {
   flex-shrink: 0;
 }
-.smart-nowcast.stopping {
-  color: var(--accent-warm);
-  background: color-mix(in srgb, var(--accent-warm) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent-warm) 34%, transparent);
+@media (hover: hover) {
+  button.smart-hero-nowcast-btn:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
-.smart-summary-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+@media (min-width: 860px) {
+  .smart-summary {
+    --hero-icon: 9.5rem;
+    padding: 14px 20px 12px;
+  }
+  .smart-hero-now {
+    font-size: 4.4rem;
+  }
+  .smart-hero-icon {
+    right: -1.7rem;
+  }
+  .smart-hero-scale-track {
+    width: 6.75rem;
+  }
 }
 
 /* Chip shody modelů (edukace: shoda = jistota) */
@@ -5501,12 +5852,18 @@ input[type="range"]::-moz-range-thumb {
 .model-agree.lvl-low .model-agree-dots i:first-child {
   opacity: 1;
 }
-/* Light režim: světlá zelená/červená by jako text na světlém pozadí splývala. */
+/* Light režim: světlá zelená/žlutá/červená by jako ikona na světlém pozadí splývala. */
 :root[data-theme="light"] .model-agree-plain.lvl-high,
 :root[data-theme="light"] .model-agree.lvl-high {
   color: #0f9a54;
 }
-:root[data-theme="light"] .model-agree-plain.lvl-low,
+:root[data-theme="light"] .model-agree-plain.lvl-medium {
+  color: #c07d00;
+}
+:root[data-theme="light"] .model-agree-plain.lvl-low {
+  color: #c45a0a;
+}
+:root[data-theme="light"] .model-agree-plain.lvl-poor,
 :root[data-theme="light"] .model-agree.lvl-low {
   color: #d42a2a;
 }
@@ -5514,7 +5871,15 @@ input[type="range"]::-moz-range-thumb {
   border-left-color: #0f9a54;
   --agree-c: #0f9a54;
 }
+:root[data-theme="light"] .model-agree-tip.lvl-medium {
+  border-left-color: #c07d00;
+  --agree-c: #c07d00;
+}
 :root[data-theme="light"] .model-agree-tip.lvl-low {
+  border-left-color: #c45a0a;
+  --agree-c: #c45a0a;
+}
+:root[data-theme="light"] .model-agree-tip.lvl-poor {
   border-left-color: #d42a2a;
   --agree-c: #d42a2a;
 }
@@ -6011,6 +6376,53 @@ input[type="range"]::-moz-range-thumb {
 .radar-timebadge.forecast {
   color: var(--accent-warm);
 }
+.radar-here {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(var(--panel-rgb), 0.72);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.radar-here.now {
+  border-color: color-mix(in srgb, var(--accent-warm) 55%, transparent);
+  color: var(--accent-warm);
+}
+.radar-human-legend {
+  position: absolute;
+  top: calc(6px + var(--sat, env(safe-area-inset-top, 0px)));
+  left: calc(8px + var(--sal, env(safe-area-inset-left, 0px)));
+  z-index: 640;
+  width: 138px;
+  pointer-events: none;
+  padding: 6px 8px 5px;
+  border-radius: 10px;
+  background: rgba(var(--panel-rgb), 0.72);
+  border: 1px solid rgba(var(--ov-rgb), 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.radar-human-legend-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.radar-human-legend-bar span {
+  flex: 1;
+}
+.radar-human-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.62rem;
+  font-weight: 650;
+  color: var(--text);
+  opacity: 0.9;
+}
 .radar-expand {
   display: grid;
   place-items: center;
@@ -6083,12 +6495,18 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Radar přes celou obrazovku – nad obsahem, pod dolními taby */
+html.radar-open,
+html.radar-open body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .radar-fullscreen {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  bottom: var(--tabbar-h);
+  bottom: calc(var(--tabbar-h) + var(--vv-bottom, 0px));
   z-index: 2000;
   margin: 0;
   border-radius: 0;
@@ -6191,11 +6609,19 @@ input[type="range"]::-moz-range-thumb {
   bottom: 4px;
   left: 6px;
   z-index: 600;
-  font-size: 0.62rem;
+  max-width: calc(100% - 12px);
+  font-size: 0.58rem;
+  line-height: 1.2;
   color: rgba(var(--ov-rgb), 0.6);
   background: rgba(0, 0, 0, 0.35);
   padding: 1px 6px;
   border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.radar-attr a {
+  color: inherit;
 }
 
 /* Sdílený mapový pin (teardrop). Barvu určuje `color` rodiče. */
@@ -6827,11 +7253,9 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
 }
 
-/* Skeleton (placeholder při načítání) */
+/* Skeleton – vlastní mřížky, bez class ostrých karet (.smart-summary, .yr-24…). */
 .skeleton .card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
 }
 /* Déšť přes skeleton – jemný, ať evokuje „počasí se načítá".
    Pozor: v @keyframes nesmí být var() – Safari/iOS je v keyframes ignoruje,
@@ -7015,31 +7439,134 @@ input[type="range"]::-moz-range-thumb {
   height: 62px;
   border-radius: 14px;
 }
-/* Tlačítko „zobrazení dat" v meteogramu (34×34, kopíruje .mg-view-btn) */
+.skel-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 16px 11px;
+}
+.skel-hero-icon {
+  position: absolute;
+  right: -1.35rem;
+  top: 50%;
+  width: clamp(5.6rem, 30vw, 7.2rem);
+  height: clamp(5.6rem, 30vw, 7.2rem);
+  border-radius: 28px;
+  transform: translateY(-50%);
+}
+.skel-hero-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - clamp(5.6rem, 30vw, 7.2rem) + 1.4rem);
+}
+.skel-hero-now {
+  width: 5.4rem;
+  height: clamp(2.66rem, 10.3vw, 3.65rem);
+  border-radius: 12px;
+}
+.skel-hero-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.skel-hero-facts {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+}
+.skel-hero-scale,
+.skel-hero-rest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skel-hero-rest {
+  min-width: 0;
+  padding-left: 13px;
+  margin-left: 13px;
+  border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+.skel-hero-track {
+  width: 5.6rem;
+  height: 4px;
+  border-radius: 99px;
+}
+@media (min-width: 860px) {
+  .skel-hero-icon {
+    width: 9.5rem;
+    height: 9.5rem;
+    right: -1.7rem;
+  }
+  .skel-hero-body {
+    max-width: calc(100% - 9.5rem + 1.4rem);
+  }
+  .skel-hero-now {
+    width: 6rem;
+    height: 3.78rem;
+  }
+  .skel-hero-track {
+    width: 6.75rem;
+  }
+}
+@media (max-width: 640px) {
+  .skel-hero-facts {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    row-gap: 3px;
+  }
+  .skel-hero-rest {
+    padding-left: 0;
+    margin-left: 0;
+    border-left: none;
+  }
+}
+.skel-typeinfo {
+  height: 36px;
+  border-radius: 10px;
+  margin: 0 0 10px;
+}
+.skel-mg-plot {
+  height: 284px;
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.skel-how {
+  width: 92px;
+  height: 22px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
 .skel-btn {
   width: 34px;
   height: 34px;
   border-radius: 10px;
   flex-shrink: 0;
 }
-/* Segmentový přepínač 1h/6h/24h ve výhledu (kopíruje .yr-seg) */
 .skel-seg {
   width: 150px;
   height: 36px;
   border-radius: 999px;
   flex-shrink: 0;
 }
-/* Přepínač aktivity v „Co na sebe" (3 pilulky) */
 .skel-acts {
   display: flex;
   gap: 6px;
+  margin: -4px 0 14px;
 }
-/* Vodorovné dlaždice oblečení (kopíruje .wear-grid / .wear-item 92×104) */
 .skel-wear-grid {
   display: flex;
   gap: 10px;
   overflow: hidden;
-  padding-bottom: 4px;
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  padding: 0 var(--card-px) 4px;
 }
 .skel-wear-item {
   flex: 0 0 auto;
@@ -7047,38 +7574,65 @@ input[type="range"]::-moz-range-thumb {
   height: 104px;
   border-radius: 14px;
 }
-/* „Nejlepší okno na ven" (kopíruje .bestwin) */
 .skel-bestwin {
-  height: 64px;
+  height: 44px;
   border-radius: 14px;
+  margin-top: 12px;
 }
-/* Výhled: hlavička sloupců + řádky po dnech (kopíruje .yr-head / .yr-row) */
+.skel-has-more {
+  position: relative;
+  padding-bottom: calc(var(--card-py) + 8px);
+  margin-bottom: 32px;
+}
 .skel-yrhead,
 .skel-yrrow {
   display: grid;
-  grid-template-columns: 60px 44px 64px 1fr 96px;
-  gap: 8px;
+  grid-template-columns: minmax(100px, 1.25fr) 132px 76px 1fr 72px 16px;
+  column-gap: 22px;
   align-items: center;
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  padding-left: var(--card-px);
+  padding-right: var(--card-px);
 }
 .skel-yrhead {
+  padding-top: 0;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(var(--ov-rgb), 0.08);
-}
-.skel-yrlist {
-  display: flex;
-  flex-direction: column;
-}
-.skel-dayhead {
-  height: 43px;
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: 8px;
+  border-bottom: 1px solid var(--card-border);
 }
 .skel-yrrow {
-  height: 43px;
-  border-bottom: 1px solid rgba(var(--ov-rgb), 0.03);
+  padding-top: 13px;
+  padding-bottom: 13px;
 }
-/* Detaily – sbalená karta bez paddingu s hlavičkou 14/16 (kopíruje .details-*) */
+.skel-yricon {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.skel-yricon-solo {
+  display: none;
+}
+.skel-end {
+  justify-self: end;
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .skel-yrhead,
+  .skel-yrrow {
+    grid-template-columns: minmax(80px, 1.25fr) 26px 52px minmax(44px, 1fr) 36px 14px;
+    column-gap: 12px;
+    gap: 12px;
+  }
+  .skel-yricon {
+    gap: 4px;
+  }
+  .skel-yricon-solo {
+    display: block;
+  }
+  .skel-yricon .skel:not(:first-child) {
+    display: none;
+  }
+}
 .skel-details {
   padding: 0;
   overflow: hidden;
@@ -7531,20 +8085,50 @@ input[type="range"]::-moz-range-thumb {
   user-select: none;
 }
 
-/* Panel s výběrem zdroje dat (modelu) nad patičkou */
 /* Řádek nastavení uvnitř footeru: vlevo model, vpravo jazyk + schéma. */
 .footer-settings {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 18px;
+  gap: 10px 18px;
   margin-bottom: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+.footer-settings-kicker {
+  flex: 1 1 100%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
 }
 .footer-settings-right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+.footer-customize {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .footer-customize:hover {
+    background: rgba(var(--ov-rgb), 0.07);
+    border-color: var(--accent);
+  }
 }
 
 /* Tlačítko „Přizpůsobit obsah" pod nastavením. */
@@ -8249,9 +8833,9 @@ input[type="range"]::-moz-range-thumb {
   }
   .yr-24 .yr-head,
   .yr-24 .yr-row {
-    grid-template-columns: minmax(80px, 1.25fr) 26px 52px minmax(44px, 1fr) 44px;
-    column-gap: 14px;
-    gap: 14px;
+    grid-template-columns: minmax(80px, 1.25fr) 26px 52px minmax(44px, 1fr) 36px 14px;
+    column-gap: 12px;
+    gap: 12px;
   }
   .yr-24 .yr-time {
     font-size: 0.8rem;
@@ -8267,9 +8851,9 @@ input[type="range"]::-moz-range-thumb {
   .yr-24 .yr-temp {
     font-size: 0.95rem;
   }
-  .yr-detail .yr-detail-row {
-    padding-left: var(--card-px);
-    padding-right: var(--card-px);
+  .yr-detail .yr-hour {
+    padding-left: 8px;
+    padding-right: 8px;
   }
   .yr-head {
     font-size: 0.6rem;
@@ -8282,7 +8866,8 @@ input[type="range"]::-moz-range-thumb {
     display: block;
   }
   .yr-icon svg:not(:first-child),
-  .yr-icon .yr-missing:not(:first-child) {
+  .yr-icon .yr-missing:not(:first-child),
+  .yr-icon .skel:not(:first-child) {
     display: none;
   }
   .yr-temp-min {

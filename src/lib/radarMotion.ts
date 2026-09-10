@@ -11,7 +11,7 @@ import { CHMI_SAT_CZ_BOUNDS } from "./chmiSat";
 // Stupnice odrazivosti CZRAD (od nejslabší po nejsilnější). Snímek obsahuje i
 // statickou grafiku (rámeček, obrysy hranic) – ta je v obou snímcích shodná a
 // táhla by korelaci k nulovému posunu, proto bereme jen tyhle barvy.
-const ECHO_COLORS: [number, number, number][] = [
+export const CHMI_ECHO_COLORS: [number, number, number][] = [
   [56, 0, 112],
   [48, 0, 168],
   [0, 0, 252],
@@ -29,7 +29,7 @@ const ECHO_COLORS: [number, number, number][] = [
 ];
 
 const ECHO_WEIGHT = new Map<number, number>(
-  ECHO_COLORS.map(([r, g, b], i) => [(r << 16) | (g << 8) | b, i + 1]),
+  CHMI_ECHO_COLORS.map(([r, g, b], i) => [(r << 16) | (g << 8) | b, i + 1]),
 );
 
 export interface RadarMotion {
@@ -448,4 +448,71 @@ export function shiftedChmiCoords(m: RadarMotion, minutes: number): Corners {
     m,
     minutes,
   );
+}
+
+export function unshiftLatLon(
+  lat: number,
+  lon: number,
+  m: RadarMotion,
+  minutes: number,
+): { lat: number; lon: number } {
+  const steps = (minutes * 60) / m.stepSec;
+  const lonOff = m.dxFrac * steps * (CHMI_E - CHMI_W);
+  const mercOff = -m.dyFrac * steps * (mercY(CHMI_N) - mercY(CHMI_S));
+  return {
+    lon: lon - lonOff,
+    lat: invMercY(mercY(lat) - mercOff),
+  };
+}
+
+const echoPxCache = new Map<string, Promise<ImageData | null>>();
+
+export async function radarImageData(url: string): Promise<ImageData | null> {
+  let p = echoPxCache.get(url);
+  if (!p) {
+    p = loadImage(url)
+      .then((img) => readPixels(img))
+      .catch(() => null);
+    echoPxCache.set(url, p);
+    if (echoPxCache.size > 24) {
+      const first = echoPxCache.keys().next().value;
+      if (first) echoPxCache.delete(first);
+    }
+  }
+  return p;
+}
+
+export function echoWeightAt(
+  px: ImageData,
+  lat: number,
+  lon: number,
+): number {
+  const x = Math.round(((lon - CHMI_W) / (CHMI_E - CHMI_W)) * (px.width - 1));
+  const y = Math.round(((CHMI_N - lat) / (CHMI_N - CHMI_S)) * (px.height - 1));
+  let best = 0;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const xx = x + dx;
+      const yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= px.width || yy >= px.height) continue;
+      const o = (yy * px.width + xx) * 4;
+      if (px.data[o + 3] < 128) continue;
+      const w =
+        ECHO_WEIGHT.get(
+          (px.data[o] << 16) | (px.data[o + 1] << 8) | px.data[o + 2],
+        ) ?? 0;
+      if (w > best) best = w;
+    }
+  }
+  return best;
+}
+
+export async function echoAtLatLon(
+  url: string,
+  lat: number,
+  lon: number,
+): Promise<number | null> {
+  const px = await radarImageData(url);
+  if (!px) return null;
+  return echoWeightAt(px, lat, lon);
 }

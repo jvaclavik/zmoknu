@@ -522,32 +522,122 @@ interface RawGeo {
     longitude: number;
     country?: string;
     admin1?: string;
+    feature_code?: string;
   }[];
 }
 
-// Hledání místa. Primárně MapTiler geocoding (umí i ulice/adresy a čtvrti,
-// např. „Šlikova 9 Praha“ nebo „Praha Břevnov“); když není klíč nebo nic
-// nevrátí, spadneme na Open-Meteo (názvy měst/obcí).
+// GeoNames kódy terénu – hory, kopce, sedla. Viz geonames.org/export/codes.html
+const LANDFORM_CODES = new Set([
+  "MT",
+  "MTS",
+  "PK",
+  "PKT",
+  "HLL",
+  "HLLS",
+  "VLC",
+  "RDGE",
+  "PASS",
+]);
+
+function foldName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function sameSpot(a: GeoLocation, b: GeoLocation): boolean {
+  const dlat = a.latitude - b.latitude;
+  const dlon = a.longitude - b.longitude;
+  return dlat * dlat + dlon * dlon < 0.004 * 0.004;
+}
+
+function peakNameOk(name: string, query: string): boolean {
+  const n = foldName(name);
+  const q = foldName(query);
+  if (!n || !q) return false;
+  if (n === q || n.startsWith(`${q} `) || n.startsWith(q)) {
+    if (q.length <= 3) {
+      const n0 = n.split(/\s+/)[0];
+      return n0 === q || n === q;
+    }
+    return true;
+  }
+  const tokens = n.split(/\s+/);
+  const qTokens = q.split(/\s+/);
+  if (qTokens.length > 1) {
+    return qTokens.every((t) => tokens.some((x) => x.startsWith(t)));
+  }
+  return q.length >= 4 && tokens.some((t) => t === q);
+}
+
+function countryBoost(g: GeoLocation): number {
+  const c = foldName(g.country ?? "");
+  if (/cesko|czechia|czech republic|slovensko|slovakia/.test(c)) return 15;
+  return 0;
+}
+
+function searchScore(g: GeoLocation, query: string): number {
+  const n = foldName(g.name);
+  const q = foldName(query);
+  let s = countryBoost(g);
+  if (n === q) s += 100;
+  else if (n.startsWith(q)) s += 60;
+  else s += 20;
+  return s;
+}
+
+// Hledání místa. MapTiler umí ulice/adresy a čtvrti; Open-Meteo a Photon
+// doplní vrcholy kopců, které v čistém geocodingu měst často chybí.
 export async function searchLocations(query: string): Promise<GeoLocation[]> {
   const q = query.trim();
   if (q.length < 2) return [];
 
   const key = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
-  if (key) {
-    try {
-      const res = await geocodeMapTiler(q, key);
-      if (res.length) return res;
-    } catch {
-      /* spadneme na Open-Meteo */
-    }
-  }
-  return geocodeOpenMeteo(q);
+  const [mapped, om, photon] = await Promise.all([
+    key
+      ? geocodeMapTiler(q, key).catch(() => [] as GeoLocation[])
+      : Promise.resolve([] as GeoLocation[]),
+    geocodeOpenMeteo(q, 20).catch(() => [] as GeoLocation[]),
+    geocodePhotonPeaks(q).catch(() => [] as GeoLocation[]),
+  ]);
+
+  const places = mapped.length ? mapped : om;
+  const peaks = [...om.filter((l) => l.kind === "peak"), ...photon].filter(
+    (p) => peakNameOk(p.name, q),
+  );
+  return mergeSearchResults(places, peaks, q);
+}
+
+function mergeSearchResults(
+  places: GeoLocation[],
+  peaks: GeoLocation[],
+  query: string,
+): GeoLocation[] {
+  const out: GeoLocation[] = [];
+  const add = (g: GeoLocation) => {
+    if (out.some((s) => sameSpot(s, g))) return;
+    out.push(g);
+  };
+  for (const p of places) add(p);
+  for (const p of peaks) add(p);
+  out.sort((a, b) => {
+    const d = searchScore(b, query) - searchScore(a, query);
+    if (d) return d;
+    // Při stejném názvu město/adresa před vrcholem (Praha město > Praha kopec).
+    const ap = a.kind === "peak" ? 1 : 0;
+    const bp = b.kind === "peak" ? 1 : 0;
+    return ap - bp;
+  });
+  return out.slice(0, 12);
 }
 
 interface MapTilerFeature {
   text?: string;
   place_name?: string;
   center?: [number, number]; // [lon, lat]
+  place_type?: string[];
 }
 
 async function geocodeMapTiler(
@@ -574,20 +664,25 @@ async function geocodeMapTiler(
         .map((s) => s.trim())
         .filter(Boolean)
         .join(", ");
+      const isLandform = f.place_type?.includes("major_landform");
       return {
         name: f.text || full,
         latitude: lat,
         longitude: lon,
         admin1: rest || undefined,
+        kind: isLandform ? "peak" : undefined,
       };
     })
     .filter((g): g is GeoLocation => g !== null);
 }
 
-async function geocodeOpenMeteo(query: string): Promise<GeoLocation[]> {
+async function geocodeOpenMeteo(
+  query: string,
+  count = 8,
+): Promise<GeoLocation[]> {
   const params = new URLSearchParams({
     name: query,
-    count: "8",
+    count: String(count),
     language: getLang(),
     format: "json",
   });
@@ -601,7 +696,51 @@ async function geocodeOpenMeteo(query: string): Promise<GeoLocation[]> {
     longitude: r.longitude,
     country: r.country,
     admin1: r.admin1,
+    kind: r.feature_code && LANDFORM_CODES.has(r.feature_code) ? "peak" : undefined,
   }));
+}
+
+interface PhotonFeature {
+  geometry?: { coordinates?: [number, number] };
+  properties?: {
+    name?: string;
+    state?: string;
+    county?: string;
+    country?: string;
+    osm_id?: number;
+    osm_value?: string;
+  };
+}
+
+// OSM vrcholy přes Photon (komoot). Bez lang=cs – ten u českých názvů vrací
+// prázdno; jména stejně přijdou z OSM v češtině.
+async function geocodePhotonPeaks(query: string): Promise<GeoLocation[]> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: "8",
+    osm_tag: "natural:peak",
+  });
+  const res = await fetch(`https://photon.komoot.io/api/?${params.toString()}`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { features?: PhotonFeature[] };
+  return (data.features ?? [])
+    .map((f): GeoLocation | null => {
+      const coords = f.geometry?.coordinates;
+      const name = f.properties?.name;
+      if (!coords || coords.length < 2 || !name) return null;
+      const [lon, lat] = coords;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        id: f.properties?.osm_id,
+        name,
+        latitude: lat,
+        longitude: lon,
+        country: f.properties?.country,
+        admin1: f.properties?.state || f.properties?.county,
+        kind: "peak",
+      };
+    })
+    .filter((g): g is GeoLocation => g !== null);
 }
 
 // ---- Klimatologický normál (historický průměr) ----------------------------

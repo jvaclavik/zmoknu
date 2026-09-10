@@ -5,6 +5,7 @@ export interface GeoLocation {
   longitude: number;
   country?: string;
   admin1?: string;
+  kind?: "peak";
 }
 
 export interface CurrentWeather {

@@ -73,6 +73,13 @@ const STORAGE_KEY = "zmoknu.location";
 const FAV_KEY = "zmoknu.favorites";
 const HISTORY_MAX = 8;
 
+function bootHeaderHeight(): number {
+  if (typeof document === "undefined") return 80;
+  const el = document.querySelector("#boot .b-top");
+  if (el instanceof HTMLElement && el.offsetHeight > 40) return el.offsetHeight;
+  return 80;
+}
+
 // Lokace z URL (deep-link), např. ?lat=50.08&lon=14.42&name=Praha.
 function locationFromUrl(): GeoLocation | null {
   try {
@@ -171,7 +178,9 @@ const WIDGET_DEFS: WidgetDef[] = [
   { id: "bio", label: "Biopředpověď" },
   { id: "details", label: "Další detaily" },
 ];
-const DEFAULT_WIDGETS = WIDGET_DEFS.map((w) => w.id);
+const ALL_WIDGET_IDS = WIDGET_DEFS.map((w) => w.id);
+const DEFAULT_WIDGETS = ALL_WIDGET_IDS.filter((id) => id !== "bio");
+const DEFAULT_HIDDEN = ["bio"];
 
 export default function App() {
   const { lang, setLang } = useLang();
@@ -235,20 +244,22 @@ export default function App() {
   );
   const [widgetHidden, setWidgetHidden] = useStoredState<string[]>(
     "zmoknu.widgetsHidden",
-    [],
+    DEFAULT_HIDDEN,
   );
   // Normalizace: jen známé sekce, chybějící (nově přidané) doplníme na konec.
   const { enabledOrder, hiddenOrder } = useMemo(() => {
-    const known = DEFAULT_WIDGETS;
+    const known = ALL_WIDGET_IDS;
     const en = widgetEnabled.filter((id) => known.includes(id));
     const hi = widgetHidden.filter(
       (id) => known.includes(id) && !en.includes(id),
     );
     const missing = known.filter((id) => !en.includes(id) && !hi.includes(id));
+    const missingShow = missing.filter((id) => !DEFAULT_HIDDEN.includes(id));
+    const missingHide = missing.filter((id) => DEFAULT_HIDDEN.includes(id));
     // Chybějící (nově přidané) sekce vložíme na jejich výchozí pozici podle
     // WIDGET_DEFS, ne natvrdo na konec – aby např. „Výstrahy" zůstaly nahoře.
     const merged = [...en];
-    for (const id of missing) {
+    for (const id of missingShow) {
       const defIdx = known.indexOf(id);
       let at = merged.length;
       for (let k = 0; k < merged.length; k++) {
@@ -265,8 +276,23 @@ export default function App() {
       merged.splice(bioIdx, 1);
       merged.splice(merged.indexOf("details"), 0, "bio");
     }
-    return { enabledOrder: merged, hiddenOrder: hi };
+    return { enabledOrder: merged, hiddenOrder: [...hi, ...missingHide] };
   }, [widgetEnabled, widgetHidden]);
+  // Jednorázově schovat bio u lidí, co nikdy nic neskryli (starý default).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("zmoknu.layout.v2")) return;
+      localStorage.setItem("zmoknu.layout.v2", "1");
+    } catch {
+      return;
+    }
+    if (widgetHidden.length === 0 && widgetEnabled.includes("bio")) {
+      setWidgetEnabled((en) => en.filter((id) => id !== "bio"));
+      setWidgetHidden(["bio"]);
+    }
+    // Jen při prvním načtení po aktualizaci – záměrně bez deps na widgety.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
   const [offline, setOffline] = useState(false);
   const lastReloadTick = useRef(0);
@@ -282,12 +308,26 @@ export default function App() {
   // Header je fixed (aby nereagoval na bounce scrollu) → obsahu doplníme horní
   // odsazení podle jeho skutečné výšky (mění se s bezpečnou zónou, orientací…).
   const headerRef = useRef<HTMLElement>(null);
-  const [headerH, setHeaderH] = useState(0);
+  const [headerH, setHeaderH] = useState(bootHeaderHeight);
+  // První načtení: nechat HTML #boot (mimo #root), ať React skeleton
+  // nesežere first-paint a layout nepřehodí. Další loady už jdou přes <Skeleton />.
+  const [keepBoot, setKeepBoot] = useState(
+    () => typeof document !== "undefined" && !!document.getElementById("boot"),
+  );
   // Neblokující hláška (např. „starší historii se teď nepodařilo načíst").
   const [notice, setNotice] = useState<string | null>(null);
   // Uložená předpověď pro tuto lokalitu, kterou nabídneme, když se čerstvá data
   // načítají podezřele dlouho (pomalá síť) – ať uživatel nečeká na prázdno.
   const [slowSaved, setSlowSaved] = useState<SavedForecast | null>(null);
+  const showBoot =
+    keepBoot && loading && !forecast && !error && !slowSaved;
+
+  useLayoutEffect(() => {
+    const boot = document.getElementById("boot");
+    if (showBoot) return;
+    if (boot) boot.hidden = true;
+    if (keepBoot) setKeepBoot(false);
+  }, [showBoot, keepBoot]);
 
   // Nabídku ukaž až po SLOW_LOAD_MS a jen když pro místo něco uloženého máme.
   useEffect(() => {
@@ -425,7 +465,7 @@ export default function App() {
       window.removeEventListener("orientationchange", measure);
       window.clearTimeout(t);
     };
-  }, []);
+  }, [showBoot]);
 
   // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
   // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
@@ -455,8 +495,19 @@ export default function App() {
       setMax("--sar", s.paddingRight, reset);
       setMax("--sab", s.paddingBottom, reset);
       setMax("--sal", s.paddingLeft, reset);
+      // Mezera mezi layout viewportem (position:fixed) a viditelným oknem.
+      // Na iOS Safari se s lištou mění – bez ní taby visí nad chrome / pod ním
+      // a na radaru (jiný stav lišty) jsou jinde než na předpovědi.
+      const vv = window.visualViewport;
+      let vvBottom = 0;
+      if (vv) {
+        const gap =
+          document.documentElement.clientHeight - (vv.offsetTop + vv.height);
+        vvBottom = gap > 1 ? gap : 0;
+      }
+      root.style.setProperty("--vv-bottom", `${vvBottom}px`);
     };
-    update(true);
+    update(false);
     const onChange = () => update(false);
     // Otočení mění insety (portrét×krajina) → nastavíme baseline znovu od nuly.
     const onOrient = () => window.setTimeout(() => update(true), 300);
@@ -471,6 +522,8 @@ export default function App() {
     window.addEventListener("resize", onChange);
     window.addEventListener("orientationchange", onOrient);
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.visualViewport?.addEventListener("resize", onChange);
+    window.visualViewport?.addEventListener("scroll", onChange);
     // iOS reportuje správný inset až chvíli po prvním vykreslení – doměříme.
     const t1 = window.setTimeout(onChange, 300);
     const t2 = window.setTimeout(onChange, 1200);
@@ -478,6 +531,8 @@ export default function App() {
       window.removeEventListener("resize", onChange);
       window.removeEventListener("orientationchange", onOrient);
       window.removeEventListener("scroll", onScroll);
+      window.visualViewport?.removeEventListener("resize", onChange);
+      window.visualViewport?.removeEventListener("scroll", onChange);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
       probe.remove();
@@ -1222,6 +1277,13 @@ export default function App() {
     }
   }, [location]);
 
+  // Tab radar nesmí lockovat body přes position:fixed – na iOS to posune
+  // position:fixed taby jinam než na předpovědi. Stačí overflow:hidden.
+  useEffect(() => {
+    document.documentElement.classList.toggle("radar-open", radarOpen);
+    return () => document.documentElement.classList.remove("radar-open");
+  }, [radarOpen]);
+
   // Klávesa "r" přepíná tab radaru. Ignoruje psaní v inputech/textarea/contenteditable.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1297,6 +1359,8 @@ export default function App() {
     dayHours.some((h) => Number.isFinite(h.temperature));
 
   if (radarOpen && !radarMounted) setRadarMounted(true);
+
+  if (showBoot) return null;
 
   return (
     <div
@@ -1596,12 +1660,15 @@ export default function App() {
                     hourly={forecast.hourly}
                     date={selectedDate}
                     isToday={selectedDate === today}
+                    isPast={selectedDate < today}
                     minutely={forecast.minutely15}
+                    current={forecast.current}
                     lat={location.latitude}
                     lon={location.longitude}
                     utcOffset={forecast.utcOffsetSeconds}
                     feelsMax={feelsMax}
                     feelsMin={feelsMin}
+                    onOpenRadar={() => setTab("radar")}
                   />
                 ) : null,
                 bio: dayHasData ? (
@@ -1689,20 +1756,9 @@ export default function App() {
         </Suspense>
       )}
 
-      <button
-        type="button"
-        className="customize-btn"
-        onClick={() => {
-          posthog.capture("customize_opened");
-          setCustomizeOpen(true);
-        }}
-      >
-        <GearGlyph />
-        {tr("Přizpůsobit obsah")}
-      </button>
-
-      <footer className="footer">
-        <div className="footer-top">
+      {!radarOpen && (
+        <footer className="footer">
+          <div className="footer-top">
           <div className="footer-about">
             <div className="footer-brand">
               <img
@@ -1756,6 +1812,7 @@ export default function App() {
         </div>
 
         <div className="footer-settings">
+          <span className="footer-settings-kicker">{tr("Nastavení")}</span>
           <label className="settings-model">
             <span className="settings-model-label">
               {tr("Zdroj dat (model)")}
@@ -1773,6 +1830,17 @@ export default function App() {
             </select>
           </label>
           <div className="footer-settings-right">
+            <button
+              type="button"
+              className="footer-customize"
+              onClick={() => {
+                posthog.capture("customize_opened");
+                setCustomizeOpen(true);
+              }}
+            >
+              <GearGlyph />
+              {tr("Přizpůsobit obsah")}
+            </button>
             <div className="lang-switch" role="group" aria-label={tr("jazyk")}>
               <button
                 type="button"
@@ -1863,7 +1931,8 @@ export default function App() {
             <ReloadPrompt />
           </div>
         </div>
-      </footer>
+        </footer>
+      )}
 
       <nav className="app-tabs" aria-label={tr("Zobrazení")}>
         <div className="app-tabs-inner" role="tablist">

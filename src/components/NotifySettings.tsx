@@ -274,7 +274,7 @@ export default function NotifySettings({ onClose }: Props) {
 
           <p className="notif-note notif-foot">
             {tr(
-              "Upozornění se vyhodnocují podle předpovědi pro aktuální lokaci, dokud je appka spuštěná (i na pozadí). Doručení, když je appka úplně zavřená, web negarantuje.",
+              "Funguje, jen když máš appku otevřenou (i na pozadí). Když ji úplně zavřeš, nic nepřijde – web to negarantuje.",
             )}
           </p>
         </div>

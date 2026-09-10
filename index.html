@@ -151,7 +151,16 @@
       :root[data-theme="light"] #boot .s {
         background: rgba(28, 40, 66, 0.07);
       }
-      :root[data-theme="light"] #boot .foot,
+      :root[data-theme="light"] #boot .b-text {
+        color: rgba(19, 24, 38, 0.55);
+      }
+      :root[data-theme="light"] #boot .b-locate {
+        background: rgba(28, 40, 66, 0.05);
+        border-color: rgba(28, 40, 66, 0.1);
+      }
+      :root[data-theme="light"] #boot .b-hero-rest {
+        border-left-color: rgba(28, 40, 66, 0.12);
+      }
       :root[data-theme="light"] #boot .yrhead {
         border-color: rgba(28, 40, 66, 0.12);
       }
@@ -159,18 +168,22 @@
         border-color: rgba(28, 40, 66, 0.06);
       }
       /* Okamžitý skeleton ještě před spuštěním JS. Plně samostatné styly
-         (v devu se index.css injektuje až přes JS), ať se skeleton zobrazí
-         vždy správně. React ho po připojení nahradí vizuálně shodným skeletonem. */
+         (v devu se index.css injektuje až přes JS). Classy jsou prefixované
+         b-*, ať je globální index.css po načtení bundle nerozpadne. React
+         #boot nemaže – drží ho, dokud nedorazí data. */
       #boot,
       #boot * {
         box-sizing: border-box;
+      }
+      #boot[hidden] {
+        display: none !important;
       }
       #boot {
         --px: clamp(12px, 3vw, 28px);
         position: relative;
         max-width: 1460px;
         margin: 0 auto;
-        padding: 0 var(--px) 40px;
+        padding: 0 var(--px) calc(24px + 60px + env(safe-area-inset-bottom, 0px));
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         letter-spacing: -0.003em;
         -webkit-font-smoothing: antialiased;
@@ -229,9 +242,9 @@
         z-index: 4;
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: calc(12px + env(safe-area-inset-top, 0px)) 0 12px;
-        margin-bottom: 12px;
+        gap: 3px;
+        padding: calc(8px + env(safe-area-inset-top, 0px)) 0 8px;
+        margin-bottom: 16px;
       }
       /* Stejné frosted pozadí headeru přes celou šířku viewportu jako
          .topbar::before v index.css. */
@@ -253,18 +266,31 @@
         align-items: center;
         gap: 8px;
       }
-      /* Výška 2. řádku odpovídá reálné větě „předpověď pro … na …"
-         (0.92rem × line-height 1.55 ≈ 23px), ať header nemá jinou výšku než
-         po naběhnutí Reactu a ohraničení/obsah neposkočí. */
+      /* Výška 2. řádku odpovídá reálné větě „předpověď pro … na …". */
       #boot .b-row2 {
         display: flex;
         align-items: center;
-        /* Reálný 2. řádek obsahuje „pill" tlačítka (lokace/den) ~28px vysoká. */
-        min-height: 28px;
+        min-height: 24px;
+      }
+      #boot .b-text {
+        font-size: 0.88rem;
+        font-weight: 500;
+        line-height: 1.35;
+        color: rgba(238, 242, 251, 0.55);
+        white-space: nowrap;
+      }
+      #boot .b-pick {
+        display: inline-block;
+        height: 22px;
+        border-radius: 7px;
+        vertical-align: middle;
+        position: relative;
+        top: -1px;
+        margin: 0 2px;
       }
       #boot .b-logo {
-        height: 30px;
-        width: 29px;
+        height: 26px;
+        width: 25px;
         display: block;
         background: url(/logo.svg) center / contain no-repeat;
       }
@@ -273,7 +299,7 @@
       }
       #boot .b-brand {
         font-weight: 800;
-        font-size: 1.12rem;
+        font-size: 1.02rem;
         letter-spacing: -0.02em;
         color: #eef2fb;
       }
@@ -281,27 +307,32 @@
         color: #5bb6ff;
         font-style: normal;
       }
+      #boot .b-locate {
+        margin-left: auto;
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        flex-shrink: 0;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
       #boot .b-card {
+        --card-px: 18px;
+        --card-py: 18px;
         background: rgba(255, 255, 255, 0.06);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 18px;
-        padding: 18px;
+        padding: var(--card-py) var(--card-px);
         margin-bottom: 16px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 0;
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
       }
       #boot .s {
         background: rgba(255, 255, 255, 0.06);
         border-radius: 8px;
-      }
-      #boot .line {
-        height: 14px;
-      }
-      #boot .lg {
-        height: 20px;
       }
       #boot .sm {
         height: 11px;
@@ -314,45 +345,8 @@
         border-radius: 50%;
         flex-shrink: 0;
       }
-      #boot .c36 {
-        width: 36px;
-        height: 36px;
-      }
-      #boot .c28 {
-        width: 28px;
-        height: 28px;
-      }
       #boot .block {
         border-radius: 14px;
-      }
-      #boot .tile {
-        height: 62px;
-        border-radius: 14px;
-      }
-      #boot .hour {
-        flex: 1;
-        min-width: 40px;
-        height: 96px;
-        border-radius: 12px;
-      }
-      #boot .stat {
-        height: 43px;
-        border-radius: 9px;
-      }
-      #boot .row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      #boot .col {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        min-width: 0;
-      }
-      #boot .col.end {
-        align-items: flex-end;
-        margin-left: auto;
       }
       #boot .split {
         display: flex;
@@ -360,92 +354,247 @@
         justify-content: space-between;
         gap: 12px;
       }
-      #boot .split .col {
-        flex: 1;
-      }
-      #boot .foot {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding-top: 11px;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-      }
-      #boot .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-        gap: 8px 10px;
-        margin: 2px 0 16px;
-      }
       #boot .btn {
         width: 34px;
         height: 34px;
         border-radius: 10px;
         flex-shrink: 0;
       }
-      #boot .seg {
-        width: 150px;
+      #boot .r {
+        margin-left: auto;
+      }
+      /* Hero – kopíruje .smart-summary / .smart-hero */
+      #boot .b-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 12px 16px 11px;
+      }
+      #boot .b-hero-icon {
+        position: absolute;
+        right: -1.35rem;
+        top: 50%;
+        width: clamp(5.6rem, 30vw, 7.2rem);
+        height: clamp(5.6rem, 30vw, 7.2rem);
+        border-radius: 28px;
+        transform: translateY(-50%);
+      }
+      #boot .b-hero-body {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        max-width: calc(100% - clamp(5.6rem, 30vw, 7.2rem) + 1.4rem);
+      }
+      #boot .b-hero-now {
+        width: 5.4rem;
+        height: clamp(2.66rem, 10.3vw, 3.65rem);
+        border-radius: 12px;
+      }
+      #boot .b-hero-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+      #boot .b-hero-facts {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        width: 100%;
+      }
+      #boot .b-hero-scale,
+      #boot .b-hero-rest {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #boot .b-hero-rest {
+        min-width: 0;
+        padding-left: 13px;
+        margin-left: 13px;
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      #boot .b-hero-track {
+        width: 5.6rem;
+        height: 4px;
+        border-radius: 99px;
+      }
+      /* Meteogram */
+      #boot .b-mghead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      #boot .b-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+        grid-auto-rows: 30px;
+        gap: 3px 4px;
+        margin: 2px 0 16px;
+      }
+      #boot .b-stat {
+        height: 30px;
+        border-radius: 7px;
+      }
+      #boot .b-typeinfo {
         height: 36px;
+        border-radius: 10px;
+        margin: 0 0 10px;
+      }
+      #boot .b-mgplot {
+        height: 284px;
+        margin-left: calc(-1 * var(--card-px));
+        margin-right: calc(-1 * var(--card-px));
+        border-radius: 0 0 18px 18px;
+      }
+      /* Oblečení */
+      #boot .how {
+        width: 92px;
+        height: 22px;
         border-radius: 999px;
         flex-shrink: 0;
       }
       #boot .acts {
         display: flex;
         gap: 6px;
+        margin: -4px 0 14px;
       }
-      #boot .wear-grid {
+      #boot .b-wear {
         display: flex;
         gap: 10px;
         overflow: hidden;
+        margin-left: calc(-1 * var(--card-px));
+        margin-right: calc(-1 * var(--card-px));
+        padding: 0 var(--card-px) 4px;
       }
-      #boot .wear-item {
+      #boot .b-witem {
         flex: 0 0 auto;
         width: 92px;
         height: 104px;
         border-radius: 14px;
       }
-      #boot .bestwin {
-        height: 64px;
+      #boot .b-bestwin {
+        height: 44px;
         border-radius: 14px;
+        margin-top: 12px;
+      }
+      #boot .has-more {
+        position: relative;
+        padding-bottom: calc(var(--card-py) + 8px);
+        margin-bottom: 32px;
+      }
+      /* Výhled – kopíruje .yr-24 */
+      #boot .b-yrbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
       }
       #boot .yrhead,
       #boot .yrrow {
         display: grid;
-        grid-template-columns: 60px 44px 64px 1fr 96px;
-        gap: 8px;
+        grid-template-columns: minmax(100px, 1.25fr) 132px 76px 1fr 72px 16px;
+        column-gap: 22px;
         align-items: center;
+        margin-left: calc(-1 * var(--card-px));
+        margin-right: calc(-1 * var(--card-px));
+        padding-left: var(--card-px);
+        padding-right: var(--card-px);
       }
       #boot .yrhead {
+        padding-top: 0;
         padding-bottom: 6px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       }
-      #boot .dayhead {
-        height: 43px;
+      #boot .yrrow:last-of-type {
+        border-bottom: none;
+      }
+      #boot .b-yricon {
         display: flex;
-        align-items: flex-end;
-        padding-bottom: 8px;
+        align-items: center;
+        gap: 9px;
       }
-      #boot .yrrow {
-        height: 43px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-      }
-      #boot .r {
-        margin-left: auto;
+      #boot .b-yricon .solo {
+        display: none;
       }
       #boot .details {
         padding: 0;
         overflow: hidden;
       }
-      #boot .details-head {
+      #boot .b-dhead {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 14px 16px;
       }
-      #boot .details-peek {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-left: auto;
+      @media (min-width: 720px) {
+        #boot .b-stats {
+          grid-auto-rows: 48px;
+          grid-template-columns: repeat(auto-fit, minmax(min(100%, 152px), 1fr));
+          gap: 8px 10px;
+        }
+        #boot .b-stat {
+          height: 48px;
+          border-radius: 9px;
+        }
+      }
+      @media (min-width: 860px) {
+        #boot .b-hero-icon {
+          width: 9.5rem;
+          height: 9.5rem;
+          right: -1.7rem;
+        }
+        #boot .b-hero-body {
+          max-width: calc(100% - 9.5rem + 1.4rem);
+        }
+        #boot .b-hero-now {
+          width: 6rem;
+          height: 3.78rem;
+        }
+        #boot .b-hero-track {
+          width: 6.75rem;
+        }
+      }
+      @media (max-width: 640px) {
+        #boot .b-card {
+          --card-px: 10px;
+          --card-py: 14px;
+        }
+        #boot .b-hero-facts {
+          flex-direction: column;
+          align-items: flex-start;
+          flex-wrap: nowrap;
+          row-gap: 3px;
+        }
+        #boot .b-hero-rest {
+          padding-left: 0;
+          margin-left: 0;
+          border-left: none;
+        }
+        #boot .yrhead,
+        #boot .yrrow {
+          grid-template-columns: minmax(80px, 1.25fr) 26px 52px minmax(44px, 1fr) 36px 14px;
+          column-gap: 12px;
+          gap: 12px;
+        }
+        #boot .b-yricon {
+          gap: 4px;
+        }
+        #boot .b-yricon .solo {
+          display: block;
+        }
+        #boot .b-yricon .s:not(:first-child) {
+          display: none;
+        }
+        #boot .b-yrtemp,
+        #boot .yrrow > .s.r {
+          justify-self: end;
+        }
       }
       /* Mobil: shodně s .app / .topbar v index.css (@media max-width:560px). */
       @media (max-width: 560px) {
@@ -453,161 +602,167 @@
           --px: 10px;
         }
         #boot .b-top {
-          gap: 8px;
+          gap: 4px;
         }
       }
     </style>
   </head>
   <body>
-    <!-- Okamžitý „first paint": samostatný skeleton se scoped styly (#boot),
-         nezávislý na index.css (ten se v devu injektuje až přes JS). React po
-         připojení #root nahradí vizuálně shodným skeletonem. -->
-    <div id="root">
-      <div id="boot" aria-hidden="true">
+    <!-- Okamžitý first paint mimo #root: React ho nesmaže. Drží se, dokud
+         nedorazí data; index.css ho nesmí přepsat (classy b-*). -->
+    <div id="boot" aria-hidden="true">
         <div class="b-rain" id="b-rain"></div>
         <div class="b-top">
           <div class="b-row1">
             <span class="b-logo" aria-hidden="true"></span>
             <span class="b-brand">zmoknu<i>?</i></span>
+            <span class="b-locate" aria-hidden="true"></span>
           </div>
           <div class="b-row2">
-            <div class="s" style="width: 190px; height: 12px"></div>
+            <span class="b-text">předpověď pro <span class="s b-pick" style="width: 88px"></span> na <span class="s b-pick" style="width: 72px"></span></span>
           </div>
         </div>
 
         <!-- Souhrn dne -->
-        <div class="b-card">
-          <div class="row">
-            <div class="s circle c36"></div>
-            <div class="col">
-              <div class="s lg" style="width: 78px"></div>
-              <div class="s sm" style="width: 116px"></div>
+        <div class="b-card b-hero">
+          <div class="s b-hero-icon"></div>
+          <div class="b-hero-body">
+            <div class="s b-hero-now"></div>
+            <div class="b-hero-line">
+              <div class="s" style="width: 168px; height: 14px"></div>
             </div>
-            <div class="col end">
-              <div class="s" style="width: 62px; height: 16px"></div>
-              <div class="s sm" style="width: 46px"></div>
+            <div class="b-hero-facts">
+              <div class="b-hero-scale">
+                <div class="s sm" style="width: 28px"></div>
+                <div class="s b-hero-track"></div>
+                <div class="s sm" style="width: 28px"></div>
+              </div>
+              <div class="b-hero-rest">
+                <div class="s sm" style="width: 108px"></div>
+                <div class="s sm" style="width: 40px"></div>
+              </div>
             </div>
-          </div>
-          <div class="foot">
-            <div class="s line" style="flex: 1"></div>
-            <div class="s line" style="width: 92px"></div>
-            <div class="s pill" style="width: 52px; height: 22px"></div>
           </div>
         </div>
 
         <!-- Meteogram -->
         <div class="b-card">
-          <div class="split">
-            <div class="col">
-              <div class="s sm" style="width: 80px"></div>
-              <div class="s" style="width: 132px; height: 13px"></div>
-            </div>
+          <div class="b-mghead">
+            <div class="s sm" style="width: 96px"></div>
             <div class="s btn"></div>
           </div>
-          <div class="stats">
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
-            <div class="s stat"></div>
+          <div class="b-stats">
+            <div class="s b-stat"></div>
+            <div class="s b-stat"></div>
+            <div class="s b-stat"></div>
+            <div class="s b-stat"></div>
           </div>
-          <div class="s block" style="height: 267px"></div>
+          <div class="s b-typeinfo"></div>
+          <div class="s block b-mgplot"></div>
         </div>
 
         <!-- Co si vzít na sebe -->
-        <div class="b-card">
-          <div class="s" style="width: 46%; height: 18px"></div>
+        <div class="b-card has-more">
+          <div class="split" style="margin-bottom: 14px">
+            <div class="s sm" style="width: 46%"></div>
+            <div class="s how"></div>
+          </div>
           <div class="acts">
-            <div class="s pill" style="width: 82px; height: 34px"></div>
-            <div class="s pill" style="width: 82px; height: 34px"></div>
-            <div class="s pill" style="width: 82px; height: 34px"></div>
+            <div class="s pill" style="width: 82px; height: 28px"></div>
+            <div class="s pill" style="width: 82px; height: 28px"></div>
+            <div class="s pill" style="width: 82px; height: 28px"></div>
           </div>
-          <div class="wear-grid">
-            <div class="s wear-item"></div>
-            <div class="s wear-item"></div>
-            <div class="s wear-item"></div>
-            <div class="s wear-item"></div>
-            <div class="s wear-item"></div>
+          <div class="b-wear">
+            <div class="s b-witem"></div>
+            <div class="s b-witem"></div>
+            <div class="s b-witem"></div>
+            <div class="s b-witem"></div>
+            <div class="s b-witem"></div>
           </div>
-          <div class="s" style="width: 60%; height: 20px"></div>
-          <div class="s bestwin"></div>
+          <div class="s b-bestwin"></div>
         </div>
 
         <!-- Výhled -->
-        <div class="b-card">
-          <div class="split">
+        <div class="b-card has-more">
+          <div class="b-yrbar">
             <div class="s sm" style="width: 64px"></div>
-            <div class="s seg"></div>
+            <div class="s btn"></div>
           </div>
           <div class="yrhead">
             <div class="s sm" style="width: 34px"></div>
             <span></span>
             <div class="s sm r" style="width: 44px"></div>
             <div class="s sm r" style="width: 40px"></div>
-            <div class="s sm r" style="width: 60px"></div>
-          </div>
-          <div class="dayhead"><div class="s sm" style="width: 118px"></div></div>
-          <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
-            <div class="s sm r" style="width: 40px"></div>
-            <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 48px"></div>
+            <span></span>
           </div>
           <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm" style="width: 88px"></div>
+            <div class="b-yricon">
+              <div class="s circle solo" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+            </div>
             <div class="s sm r" style="width: 40px"></div>
             <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 36px"></div>
+            <div class="s circle r" style="width: 14px; height: 14px"></div>
           </div>
           <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm" style="width: 88px"></div>
+            <div class="b-yricon">
+              <div class="s circle solo" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+            </div>
             <div class="s sm r" style="width: 40px"></div>
             <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 36px"></div>
+            <div class="s circle r" style="width: 14px; height: 14px"></div>
           </div>
           <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm" style="width: 88px"></div>
+            <div class="b-yricon">
+              <div class="s circle solo" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+            </div>
             <div class="s sm r" style="width: 40px"></div>
             <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 36px"></div>
+            <div class="s circle r" style="width: 14px; height: 14px"></div>
           </div>
-          <div class="dayhead"><div class="s sm" style="width: 118px"></div></div>
           <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
+            <div class="s sm" style="width: 88px"></div>
+            <div class="b-yricon">
+              <div class="s circle solo" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+              <div class="s circle" style="width: 24px; height: 24px"></div>
+            </div>
             <div class="s sm r" style="width: 40px"></div>
             <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
-          </div>
-          <div class="yrrow">
-            <div class="s sm" style="width: 46px"></div>
-            <div class="s circle" style="width: 26px; height: 26px"></div>
-            <div class="s sm r" style="width: 40px"></div>
-            <div class="s sm r" style="width: 28px"></div>
-            <div class="s sm r" style="width: 44px"></div>
+            <div class="s sm r" style="width: 36px"></div>
+            <div class="s circle r" style="width: 14px; height: 14px"></div>
           </div>
         </div>
 
         <!-- Další detaily (sbalené) -->
         <div class="b-card details">
-          <div class="details-head">
+          <div class="b-dhead">
             <div class="s sm" style="width: 96px"></div>
-            <div class="details-peek">
-              <div class="s sm" style="width: 40px"></div>
-              <div class="s sm" style="width: 54px"></div>
-              <div class="s circle" style="width: 18px; height: 18px"></div>
-            </div>
+            <div class="s circle" style="width: 18px; height: 18px; margin-left: auto"></div>
           </div>
         </div>
       </div>
-    </div>
+    <div id="root"></div>
     <script>
       // Déšť pro prvotní (boot) skeleton – vygeneruje kapky hned při parsování,
       // ještě než naběhne React. Částečně náhodné, stejně jako v Skeleton.tsx.

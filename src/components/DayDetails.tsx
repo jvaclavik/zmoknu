@@ -1,8 +1,6 @@
 import {
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -75,17 +73,6 @@ function dayOfYear(iso: string): number {
   return Math.floor((d.getTime() - start.getTime()) / 86_400_000);
 }
 
-function fmtDur(hours: number): string {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return `${h} h ${m} min`;
-}
-
-// Barevná pilulka s úrovní (dobré/špatné) – sdílené barvy přes .lvl-{tier}.
-function LevelPill({ tier, text }: { tier: LevelTier; text: string }) {
-  return <span className={`lvl-pill lvl-${tier}`}>{tr(text)}</span>;
-}
-
 function uvInfo(uv: number): { level: string; note: string; tier: LevelTier } {
   if (uv < 3)
     return { level: "nízký", note: tr("Krém netřeba."), tier: "good" };
@@ -138,14 +125,6 @@ function moonInfo(dateISO: string): {
   ];
   const idx = Math.round(phase * 8) % 8;
   return { ...phases[idx], illum };
-}
-
-// Barva odznaku kvality západu podle skóre (šedá → jantar → oranžová → růžová).
-function skyColor(score: number): string {
-  if (score < 35) return "linear-gradient(135deg,#8b93a4,#6f7686)";
-  if (score < 55) return "linear-gradient(135deg,#f0b45a,#e0913a)";
-  if (score < 75) return "linear-gradient(135deg,#ff9a54,#f2672e)";
-  return "linear-gradient(135deg,#ff8f6b,#e5487f)";
 }
 
 // Krátké datum "D. M." z ISO řetězce (pro popisek vrcholu průtoku).
@@ -229,6 +208,9 @@ export default function DayDetails({
     return best && best.rainbow >= 0.35 ? best : null;
   }, [sky]);
 
+  const pollen =
+    air && air.pollen.length > 0 ? pollenSummary(air.pollen) : null;
+
   return (
     <section className="card details-card">
       <button
@@ -238,215 +220,146 @@ export default function DayDetails({
         aria-expanded={open}
       >
         <span className="details-title">{tr("Další detaily")}</span>
-        {open && (
-          <span className="details-peek">
-            <span title={tr("Délka dne")}>
-              ☀ {daylight(day.sunrise, day.sunset)}
-            </span>
-            <span className="details-peek-uv" title={tr("UV index")}>
-              <span className={`lvl-dot lvl-${uv.tier}`} />
-              UV {Math.round(day.uvIndexMax)}
-            </span>
-            {aqi && (
-              <span
-                className={`aqi-pill aqi-${aqi.tier}`}
-                title={tr("Kvalita ovzduší")}
-              >
-                {tr(aqi.text)}
-              </span>
-            )}
-          </span>
-        )}
         <Chevron open={open} />
       </button>
 
       {open && (
         <div className="details-body">
-          <div className="dd-group-title">{tr("Slunce a Měsíc")}</div>
-          <div className="dd-grid dd-grid-sun">
-            <Tile icon="sunrise" label={tr("Východ / západ")}>
-              <span className="dd-tile-value">
-                {clockTime(sunriseD)}
-                <em className="dd-tile-sep"> / </em>
-                {clockTime(sunsetD)}
-              </span>
-            </Tile>
-            <Tile emoji={moon.emoji} label={tr("Měsíc")}>
-              <span className="dd-tile-value dd-tile-value-sm">
-                {tr(moon.name)}
-              </span>
-              <span className="dd-tile-note">
-                {tr("osvětlení {n} %", { n: moon.illum })}
-              </span>
-            </Tile>
+          <div className="dd-grid">
+            <Tile
+              icon="sunrise"
+              label={tr("Východ / západ")}
+              value={
+                <>
+                  {clockTime(sunriseD)}
+                  <em className="dd-tile-sep"> / </em>
+                  {clockTime(sunsetD)}
+                </>
+              }
+            />
+            {lat != null && (
+              <Tile
+                icon="daylight"
+                label={tr("Délka dne")}
+                value={daylight(day.sunrise, day.sunset)}
+                note={daylightTrend(lat, date)}
+              />
+            )}
+            <Tile
+              emoji={moon.emoji}
+              label={tr("Měsíc")}
+              value={tr(moon.name)}
+              note={tr("osvětlení {n} %", { n: moon.illum })}
+            />
             {goldenOk && (
-              <Tile icon="golden" label={tr("Zlatá hodinka")}>
-                <span className="dd-tile-value dd-tile-value-sm">
-                  {clockTime(sunriseD)}–{clockTime(goldenAmEnd)}
-                </span>
-                <span className="dd-tile-note">
-                  {tr("večer")} {clockTime(goldenPmStart)}–{clockTime(sunsetD)}
-                </span>
-              </Tile>
+              <Tile
+                icon="golden"
+                label={tr("Zlatá hodinka")}
+                value={`${clockTime(sunriseD)}–${clockTime(goldenAmEnd)}`}
+                note={`${tr("večer")} ${clockTime(goldenPmStart)}–${clockTime(sunsetD)}`}
+              />
             )}
             {sky?.sunset && (
-              <Tile emoji="🌇" label={tr("Barvy západu")}>
-                <div className="dd-tile-main">
-                  <span
-                    className="sky-pill"
-                    style={{ background: skyColor(sky.sunset.score) }}
-                  >
-                    {tr(sky.sunset.label)}
-                  </span>
-                  <span className="dd-tile-value dd-tile-value-sm">
-                    {sky.sunset.score}
-                    <em className="dd-tile-unit"> /100</em>
-                  </span>
-                </div>
-                {rainbow ? (
-                  <span className="dd-tile-note sky-rainbow">
-                    🌈{" "}
-                    {rainbow.kind === "sunrise"
+              <Tile
+                icon="sunset"
+                label={tr("Barvy západu")}
+                value={tr(sky.sunset.label)}
+                note={
+                  rainbow
+                    ? rainbow.kind === "sunrise"
                       ? tr("šance na duhu ráno")
-                      : tr("šance na duhu večer")}
-                  </span>
-                ) : (
-                  <span className="dd-tile-note">
-                    {tr("odhad z oblačnosti")}
-                  </span>
-                )}
-              </Tile>
-            )}
-            {lat != null && (
-              <DaylightYearChart
-                lat={lat}
-                date={date}
-                lengthLabel={daylight(day.sunrise, day.sunset)}
-                todayHours={
-                  (new Date(day.sunset).getTime() -
-                    new Date(day.sunrise).getTime()) /
-                  3_600_000
+                      : tr("šance na duhu večer")
+                    : String(sky.sunset.score)
+                }
+                title={
+                  rainbow
+                    ? `${tr(sky.sunset.label)} · ${sky.sunset.score}`
+                    : undefined
                 }
               />
             )}
-          </div>
-
-          {storm && (
-            <>
-              <div className="dd-group-title">{tr("Bouřky")}</div>
-              <div className="dd-grid">
-                <Tile
-                  icon="storm"
-                  label={tr("Riziko bouřek")}
-                  className={storm.level === "high" ? "dd-tile-alert" : ""}
-                >
-                  <div className="dd-tile-main">
-                    <LevelPill tier={storm.tier} text={storm.label} />
-                  </div>
-                  {storm.from ? (
-                    <span className="dd-tile-note">
-                      {tr("mezi {a} a {b}", {
+            <Tile
+              icon="uv"
+              label={tr("UV index")}
+              value={Math.round(day.uvIndexMax)}
+              note={tr(uv.level)}
+              tone={uv.tier}
+              toneOn="note"
+              title={uv.note}
+            />
+            {aqi && air && (
+              <Tile
+                icon="air"
+                label={tr("Kvalita ovzduší")}
+                value={tr(aqi.text)}
+                note={`AQI ${air.aqi}`}
+                tone={aqi.tier}
+              />
+            )}
+            {pm && (
+              <Tile
+                icon="dust"
+                label={tr("Prach")}
+                value={
+                  <>
+                    {air!.pm25}
+                    <em className="dd-tile-sep"> / </em>
+                    {air!.pm10}
+                  </>
+                }
+                note="PM2.5 / PM10"
+              />
+            )}
+            {pollen && air && (
+              <Tile
+                icon="pollen"
+                label={tr("Pyl")}
+                value={tr(pollen.text)}
+                note={air.pollen.map((p) => tr(p.label)).join(" · ")}
+                tone={pollen.tier}
+              />
+            )}
+            {storm && (
+              <Tile
+                icon="storm"
+                label={tr("Riziko bouřek")}
+                className={storm.level === "high" ? "dd-tile-alert" : ""}
+                value={tr(storm.label)}
+                tone={storm.tier}
+                note={
+                  storm.from
+                    ? `${tr("mezi {a} a {b}", {
                         a: clockTime(locDate(storm.from)),
                         b: clockTime(
                           new Date(locDate(storm.to!).getTime() + 3_600_000),
                         ),
-                      })}
-                      {storm.hail ? ` · ${tr("možné kroupy")}` : ""}
-                    </span>
-                  ) : storm.maxCape > 0 ? (
-                    <span className="dd-tile-note">
-                      {tr("energie CAPE {n} J/kg", {
-                        n: Math.round(storm.maxCape),
-                      })}
-                    </span>
-                  ) : null}
-                </Tile>
-              </div>
-            </>
-          )}
-
-          {floodInfo && flood && (
-            <>
-              <div className="dd-group-title">{tr("Voda")}</div>
-              <div className="dd-grid">
-                <Tile
-                  icon="flood"
-                  label={tr("Riziko povodní")}
-                  className={floodInfo.risk.alert ? "dd-tile-alert" : ""}
-                >
-                  <div className="dd-tile-main">
-                    <LevelPill
-                      tier={floodInfo.risk.tier}
-                      text={floodInfo.risk.label}
-                    />
-                    <span className="dd-tile-value dd-tile-value-sm">
-                      {floodInfo.q.toFixed(1)}
-                      <em className="dd-tile-unit"> m³/s</em>
-                    </span>
-                  </div>
-                  {flood.peakDate !== date &&
-                  flood.peakValue >= flood.thresholds.p90 ? (
-                    <span className="dd-tile-note">
-                      {tr("vrchol {d}: {n} m³/s", {
+                      })}${storm.hail ? ` · ${tr("možné kroupy")}` : ""}`
+                    : storm.maxCape > 0
+                      ? tr("energie CAPE {n} J/kg", {
+                          n: Math.round(storm.maxCape),
+                        })
+                      : undefined
+                }
+              />
+            )}
+            {floodInfo && flood && (
+              <Tile
+                icon="flood"
+                label={tr("Riziko povodní")}
+                className={floodInfo.risk.alert ? "dd-tile-alert" : ""}
+                value={tr(floodInfo.risk.label)}
+                tone={floodInfo.risk.tier}
+                note={
+                  flood.peakDate !== date &&
+                  flood.peakValue >= flood.thresholds.p90
+                    ? tr("vrchol {d}: {n} m³/s", {
                         d: shortDate(flood.peakDate),
                         n: flood.peakValue.toFixed(1),
-                      })}
-                    </span>
-                  ) : (
-                    <span className="dd-tile-note">
-                      {tr("průtok řek (GloFAS)")}
-                    </span>
-                  )}
-                </Tile>
-              </div>
-            </>
-          )}
-
-          <div className="dd-group-title">{tr("Ovzduší a UV")}</div>
-          <div className="dd-grid">
-            <Tile icon="uv" label={tr("UV index")}>
-              <div className="dd-tile-main">
-                <span className="dd-tile-value">
-                  {Math.round(day.uvIndexMax)}
-                </span>
-                <LevelPill tier={uv.tier} text={uv.level} />
-              </div>
-              <span className="dd-tile-note">{uv.note}</span>
-            </Tile>
-
-            {aqi && (
-              <Tile icon="air" label={tr("Kvalita ovzduší")}>
-                <div className="dd-tile-main">
-                  <span className="dd-tile-value">AQI {air!.aqi}</span>
-                  <LevelPill tier={aqi.tier} text={aqi.text} />
-                </div>
-              </Tile>
+                      })
+                    : `${floodInfo.q.toFixed(1)} m³/s`
+                }
+              />
             )}
-
-            {pm && (
-              <Tile icon="dust" label={tr("Prach")}>
-                <div className="dd-tile-main">
-                  <span className="dd-tile-value dd-tile-value-sm">
-                    {air!.pm25} / {air!.pm10}
-                    <em className="dd-tile-unit"> µg/m³</em>
-                  </span>
-                  <LevelPill tier={pm.tier} text={pm.text} />
-                </div>
-                <span className="dd-tile-note">PM2.5 / PM10</span>
-              </Tile>
-            )}
-
-            {air &&
-              air.pollen.map((p) => {
-                const lvl = pollenLevel(p.kind, p.value);
-                return (
-                  <Tile icon="pollen" label={tr(p.label)} key={p.kind}>
-                    <div className="dd-tile-main">
-                      <LevelPill tier={lvl.tier} text={lvl.text} />
-                    </div>
-                  </Tile>
-                );
-              })}
           </div>
         </div>
       )}
@@ -454,282 +367,89 @@ export default function DayDetails({
   );
 }
 
-// Graf, jak se během roku prodlužuje a zkracuje den, s markerem aktuálního dne.
-// Slučuje v sobě i hodnotu „Délka dne“ (lengthLabel) – tvoří širokou dlaždici.
-function DaylightYearChart({
-  lat,
-  date,
-  lengthLabel,
-  todayHours,
-}: {
-  lat: number;
-  date: string;
-  lengthLabel: string;
-  todayHours: number;
-}) {
-  // Graf kreslíme v pixelech (viewBox = skutečná šířka × výška), aby byl vždy na
-  // 100 % šířky, s pevnou max. výškou a bez deformace (kulaté body, ostrý text).
-  const svgRef = useRef<SVGSVGElement>(null);
-  const plotRef = useRef<HTMLDivElement>(null);
-  const [cw, setCw] = useState(0);
-  useLayoutEffect(() => {
-    const el = plotRef.current;
-    if (!el) return;
-    const update = () => setCw(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const H = Math.round(Math.min(150, Math.max(96, cw / 3.2)));
-  const padL = 26; // levý žlábek pro popisky osy y (hodiny)
-  const padR = 8;
-  const padT = 8;
-  const padB = 18; // dolní pruh pro čísla měsíců
+function daylightTrend(lat: number, date: string): string {
   const DAYS = 365;
-
-  // Popisky měsíců jako čísla 1–12.
-  const CUM = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-
-  const { vals, lo, hi } = useMemo(() => {
-    const v = Array.from({ length: DAYS }, (_, i) => daylightHours(lat, i + 1));
-    return { vals: v, lo: Math.min(...v), hi: Math.max(...v) };
-  }, [lat]);
-
+  const vals = Array.from({ length: DAYS }, (_, i) => daylightHours(lat, i + 1));
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
   const idx = Math.max(0, Math.min(DAYS - 1, dayOfYear(date) - 1));
-  const range = Math.max(0.5, hi - lo);
-  const X = (i: number) => padL + (i / (DAYS - 1)) * (cw - padL - padR);
-  const Y = (v: number) => padT + (1 - (v - lo) / range) * (H - padT - padB);
-
-  // Ukotvení: posuneme celou křivku tak, aby vybraný den seděl přesně na hodnotu
-  // z východu/západu (todayHours). Posun je konstantní → tvar i pozice křivky se
-  // nemění, jen se zobrazované hodnoty srovnají s tím, co je napsané mimo graf.
-  const offset = Number.isFinite(todayHours) ? todayHours - vals[idx] : 0;
-  const dispVal = (i: number) => vals[i] + offset;
-
-  const linePath = vals
-    .map((v, i) => `${i === 0 ? "M" : "L"} ${X(i).toFixed(1)} ${Y(v).toFixed(1)}`)
-    .join(" ");
-  const areaPath = `${linePath} L ${X(DAYS - 1).toFixed(1)} ${H - padB} L ${X(0).toFixed(1)} ${H - padB} Z`;
-
-  // Vodorovné čáry osy y po celých hodinách (krok 4 h) s popiskem.
-  const yTicks: number[] = [];
-  for (let h = Math.ceil(lo / 4) * 4; h <= hi; h += 4) yTicks.push(h);
-
   const prev = vals[Math.max(0, idx - 1)];
   const next = vals[Math.min(DAYS - 1, idx + 1)];
   const deltaMin = Math.round(((next - prev) / 2) * 60);
-  let trend: string;
-  if (deltaMin > 0) trend = tr("prodlužuje se o {n} min/den", { n: deltaMin });
-  else if (deltaMin < 0)
-    trend = tr("zkracuje se o {n} min/den", { n: -deltaMin });
-  else
-    trend =
-      vals[idx] > (lo + hi) / 2
-        ? tr("nejdelší den v roce")
-        : tr("nejkratší den v roce");
+  if (deltaMin > 0) return tr("prodlužuje se o {n} min/den", { n: deltaMin });
+  if (deltaMin < 0) return tr("zkracuje se o {n} min/den", { n: -deltaMin });
+  return vals[idx] > (lo + hi) / 2
+    ? tr("nejdelší den v roce")
+    : tr("nejkratší den v roce");
+}
 
-  const markX = X(idx);
-  const markY = Y(vals[idx]);
+const TIER_RANK: Record<LevelTier, number> = {
+  good: 0,
+  fair: 1,
+  moderate: 2,
+  poor: 3,
+  verypoor: 4,
+  extreme: 5,
+};
 
-  const [hover, setHover] = useState<{
-    idx: number;
-    xPct: number;
-    yPct: number;
-  } | null>(null);
-  const year = Number(date.slice(0, 4)) || new Date().getFullYear();
-
-  // Mapování kurzoru na den v roce přes getScreenCTM – korektně i když je SVG
-  // kvůli poměru stran vycentrované s okraji (jinak by odchylka rostla od středu).
-  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const svg = svgRef.current;
-    const ctm = svg?.getScreenCTM();
-    const rect = svg?.getBoundingClientRect();
-    if (!svg || !ctm || !rect || rect.width === 0) return;
-    const userX = new DOMPoint(e.clientX, e.clientY).matrixTransform(
-      ctm.inverse(),
-    ).x;
-    const i = Math.max(
-      0,
-      Math.min(
-        DAYS - 1,
-        Math.round(((userX - padL) / (cw - padL - padR)) * (DAYS - 1)),
-      ),
-    );
-    const snap = new DOMPoint(X(i), Y(vals[i])).matrixTransform(ctm);
-    const xPct = ((snap.x - rect.left) / rect.width) * 100;
-    const yPct = ((snap.y - rect.top) / rect.height) * 100;
-    setHover({ idx: i, xPct, yPct });
-  };
-
-  const hi2 = hover ? hover.idx : null;
-  const hoverDate = hi2 != null ? new Date(Date.UTC(year, 0, 1 + hi2)) : null;
-  const hoverLabel = hoverDate
-    ? `${hoverDate.getUTCDate()}. ${hoverDate.getUTCMonth() + 1}.`
-    : "";
-  const hoverPct = hover ? hover.xPct : 0;
-  const xt = hoverPct < 18 ? "0" : hoverPct > 82 ? "-100%" : "-50%";
-  // Tooltip nad bodem; u horního okraje se překlopí pod něj, ať je vidět.
-  const flipDown = (hover?.yPct ?? 100) < 34;
-  const yt = flipDown ? "8px" : "calc(-100% - 8px)";
-
-  return (
-    <div className="dd-tile dd-daylight">
-      <div className="dd-daylight-head">
-        <span className="dd-tile-ico" aria-hidden="true">
-          <DetailIcon kind="daylight" />
-        </span>
-        <div className="dd-daylight-headtext">
-          <span className="dd-tile-label">{tr("Délka dne")}</span>
-          <div className="dd-daylight-now">
-            <span className="dd-tile-value">{lengthLabel}</span>
-            <span className="dd-daylight-trend">{trend}</span>
-          </div>
-        </div>
-      </div>
-      <div className="dd-daylight-plot" ref={plotRef}>
-        {cw > 0 && (
-        <svg
-          ref={svgRef}
-          className="dd-daylight-svg"
-          viewBox={`0 0 ${cw} ${H}`}
-          style={{ height: `${H}px` }}
-          role="img"
-          aria-label={tr("Délka dne během roku")}
-          onPointerMove={onMove}
-          onPointerDown={onMove}
-          onPointerLeave={() => setHover(null)}
-        >
-          <defs>
-            <linearGradient id="dd-day-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(255,209,102,0.35)" />
-              <stop offset="100%" stopColor="rgba(255,209,102,0)" />
-            </linearGradient>
-          </defs>
-          {yTicks.map((h) => (
-            <g key={`y${h}`}>
-              <line
-                x1={padL}
-                y1={Y(h)}
-                x2={cw - padR}
-                y2={Y(h)}
-                stroke="rgba(255,255,255,0.06)"
-                strokeWidth="1"
-              />
-              <text
-                x={padL - 5}
-                y={Y(h) + 3}
-                className="dd-daylight-axis"
-                textAnchor="end"
-              >
-                {h} h
-              </text>
-            </g>
-          ))}
-          {CUM.map((c, m) => (
-            <text
-              key={`m${m}`}
-              x={X(c + 15)}
-              y={H - 5}
-              className="dd-daylight-axis"
-              textAnchor="middle"
-            >
-              {m + 1}
-            </text>
-          ))}
-          <path d={areaPath} fill="url(#dd-day-grad)" />
-          <path
-            d={linePath}
-            fill="none"
-            stroke="#ffd166"
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <line
-            x1={markX}
-            y1={padT - 4}
-            x2={markX}
-            y2={H - padB}
-            stroke="var(--accent, #4aa8ff)"
-            strokeWidth="1.5"
-            strokeDasharray="3 3"
-          />
-          <circle
-            cx={markX}
-            cy={markY}
-            r="4.5"
-            fill="var(--accent, #4aa8ff)"
-            stroke="#0b1f33"
-            strokeWidth="1.5"
-          />
-          {hi2 != null && (
-            <g pointerEvents="none">
-              <line
-                x1={X(hi2)}
-                y1={padT - 4}
-                x2={X(hi2)}
-                y2={H - padB}
-                stroke="rgba(255,255,255,0.5)"
-                strokeWidth="1"
-              />
-              <circle
-                cx={X(hi2)}
-                cy={Y(vals[hi2])}
-                r="4"
-                fill="#fff"
-                stroke="#0b1f33"
-                strokeWidth="1.5"
-              />
-            </g>
-          )}
-        </svg>
-        )}
-        {hi2 != null && (
-          <div
-            className="dd-daylight-tip"
-            style={{
-              left: `${hoverPct}%`,
-              top: `${hover?.yPct ?? 0}%`,
-              transform: `translate(${xt}, ${yt})`,
-            }}
-          >
-            <strong>{fmtDur(dispVal(hi2))}</strong> · {hoverLabel}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function pollenSummary(items: AirQuality["pollen"]): {
+  text: string;
+  tier: LevelTier;
+} {
+  let best = pollenLevel(items[0].kind, items[0].value);
+  for (const p of items) {
+    const lvl = pollenLevel(p.kind, p.value);
+    if (TIER_RANK[lvl.tier] > TIER_RANK[best.tier]) best = lvl;
+  }
+  return best;
 }
 
 function Tile({
   icon,
   emoji,
   label,
+  value,
+  note,
+  tone,
+  toneOn,
   className,
-  children,
+  title,
 }: {
   icon?: DetailIconKind;
   emoji?: string;
   label: string;
+  value: ReactNode;
+  note?: ReactNode;
+  tone?: LevelTier;
+  toneOn?: "value" | "note";
   className?: string;
-  children: ReactNode;
+  title?: string;
 }) {
   return (
-    <div className={`dd-tile${className ? ` ${className}` : ""}`}>
-      <span className="dd-tile-ico" aria-hidden="true">
-        {emoji ? emoji : icon ? <DetailIcon kind={icon} /> : null}
+    <div className={`dd-tile${className ? ` ${className}` : ""}`} title={title}>
+      <span className="dd-tile-label">
+        <span className="dd-tile-ico" aria-hidden="true">
+          {emoji ? emoji : icon ? <DetailIcon kind={icon} /> : null}
+        </span>
+        {label}
       </span>
-      <div className="dd-tile-body">
-        <span className="dd-tile-label">{label}</span>
-        {children}
-      </div>
+      <span
+        className={`dd-tile-value${tone && toneOn !== "note" ? ` dd-tone-${tone}` : ""}`}
+      >
+        {value}
+      </span>
+      <span
+        className={`dd-tile-note${tone && toneOn === "note" ? ` dd-tone-${tone}` : ""}`}
+      >
+        {note ?? "\u00a0"}
+      </span>
     </div>
   );
 }
 
 type DetailIconKind =
   | "sunrise"
+  | "sunset"
   | "daylight"
   | "uv"
   | "air"
@@ -757,6 +477,13 @@ function DetailIcon({ kind }: { kind: DetailIconKind }) {
         <svg {...c}>
           <path d="M3 18h18M6 18a6 6 0 0 1 12 0" />
           <path d="M12 3v4M5 8l1.5 1.5M19 8l-1.5 1.5" />
+        </svg>
+      );
+    case "sunset":
+      return (
+        <svg {...c}>
+          <path d="M3 18h18M6 18a6 6 0 0 1 12 0" />
+          <path d="M12 11V7M5 8l1.5 1.5M19 8l-1.5 1.5" />
         </svg>
       );
     case "daylight":

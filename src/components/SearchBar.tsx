@@ -289,7 +289,7 @@ export default function SearchBar({
             ref={inputRef}
             type="text"
             value={query}
-            placeholder={tr("Adresa, město nebo GPS…")}
+            placeholder={tr("Adresa, vrchol nebo GPS…")}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onSearchKey}
             aria-label={tr("Hledat město")}
@@ -375,11 +375,17 @@ export default function SearchBar({
                           className="locpick-pick"
                           onClick={() => pick(r)}
                         >
-                          <PinGlyph />
+                          {r.kind === "peak" ? <PeakGlyph /> : <PinGlyph />}
                           <span className="locpick-rowtext">
                             <span className="locpick-name">{r.name}</span>
                             <span className="locpick-meta">
-                              {[r.admin1, r.country].filter(Boolean).join(", ")}
+                              {[
+                                r.kind === "peak" ? tr("vrchol") : null,
+                                r.admin1,
+                                r.country,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
                             </span>
                           </span>
                         </button>
@@ -661,6 +667,19 @@ function CloseX() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PeakGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 19h18L14.2 6.8a1.2 1.2 0 0 0-2.1 0L9.5 12 7.6 9.4a1.1 1.1 0 0 0-1.8 0L3 19z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

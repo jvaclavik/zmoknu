@@ -30,15 +30,21 @@ import {
   estimateRadarMotion,
   shiftCorners,
   shiftedChmiCoords,
+  CHMI_ECHO_COLORS,
   type RadarMotion,
 } from "../lib/radarMotion";
+import {
+  localPrecipFromFrame,
+  localPrecipText,
+  type LocalPrecip,
+} from "../lib/radarNowcast";
 import { tr, getLang } from "../lib/i18n";
 import { darkStyle, loadTouristStyle, loadTouristDarkStyle } from "../lib/mapStyle";
 import { useStoredState } from "../lib/useStoredState";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import { fetchWebcams, type Webcam } from "../lib/webcams";
 import { reverseGeocode } from "../lib/openMeteo";
-import WebcamModal, { WindyCourtesy } from "./WebcamModal";
+import WebcamModal from "./WebcamModal";
 import { sameLocation } from "./FavoritesBar";
 import LocationArrowGlyph from "./LocationArrowGlyph";
 
@@ -395,6 +401,7 @@ export default function RadarMap({
   const [motion, setMotion] = useState<RadarMotion | null>(null);
   const [cloudMotion, setCloudMotion] = useState<RadarMotion | null>(null);
   const [predImg, setPredImg] = useState<string | null>(null);
+  const [herePrecip, setHerePrecip] = useState<LocalPrecip | null>(null);
   const [omGrid, setOmGrid] = useState<OmForecastGrid | null>(null);
   const [omError, setOmError] = useState(false);
   const [accumPeriodId, setAccumPeriodId] = useStoredState<string>(
@@ -615,6 +622,43 @@ export default function RadarMap({
     return succeeded.has(radarLayerId(realFrames[i].time)) ? i : last;
   }, [realFrames.length, succeeded]);
   const anchor = realFrames[anchorIdx];
+
+  useEffect(() => {
+    if (!visible || source !== "chmi" || !inCz) {
+      if (source !== "chmi" || !inCz) setHerePrecip(null);
+      return;
+    }
+    const frame = anchor ?? realFrames[realFrames.length - 1];
+    if (!frame) {
+      setHerePrecip(null);
+      return;
+    }
+    let cancelled = false;
+    localPrecipFromFrame(
+      location.latitude,
+      location.longitude,
+      frame.path,
+      motion,
+    )
+      .then((p) => {
+        if (!cancelled) setHerePrecip(p);
+      })
+      .catch(() => {
+        if (!cancelled) setHerePrecip(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    visible,
+    source,
+    inCz,
+    location.latitude,
+    location.longitude,
+    motion,
+    anchor,
+    realFrames,
+  ]);
 
   // Predikované snímky rezervujeme ve slideru hned, ať osa neposkočí,
   // až dorazí odhad posunu. Vrstvy na mapu jdou až když je motion hotový.
@@ -1492,7 +1536,7 @@ export default function RadarMap({
   const fullscreen = modal || expanded;
 
   // Spolehlivé zamčení scrollu pozadí při celé obrazovce (i na iOS).
-  useBodyScrollLock(fullscreen && visible);
+  useBodyScrollLock(fullscreen && visible && !modal);
   // Esc při celé obrazovce + resize mapy. Skrytý tab neresize/nechytá klávesy.
   useEffect(() => {
     if (!visible) {
@@ -2009,6 +2053,13 @@ export default function RadarMap({
                 {isForecast ? tr("predikce · {t}", { t: timeLabel }) : timeLabel}
               </div>
             )}
+            {source === "chmi" &&
+              herePrecip &&
+              herePrecip.kind !== "dry" && (
+                <div className={`radar-here ${herePrecip.kind}`}>
+                  {localPrecipText(herePrecip)}
+                </div>
+              )}
           </div>
         )}
 
@@ -2033,6 +2084,24 @@ export default function RadarMap({
           </div>
         )}
 
+        {source === "chmi" && !errored && (
+          <div className="radar-human-legend" aria-hidden="true">
+            <div className="radar-human-legend-bar">
+              {CHMI_ECHO_COLORS.map(([r, g, b], i) => (
+                <span
+                  key={i}
+                  style={{ background: `rgb(${r},${g},${b})` }}
+                />
+              ))}
+            </div>
+            <div className="radar-human-legend-labels">
+              <span>{tr("Mrholení")}</span>
+              <span>{tr("Déšť")}</span>
+              <span>{tr("Liják")}</span>
+            </div>
+          </div>
+        )}
+
         {modal && <div className="radar-mapctl">{settingsControl}</div>}
 
         {errored ? (
@@ -2054,23 +2123,22 @@ export default function RadarMap({
         ) : null}
 
         <div className="radar-attr">
-          © OpenStreetMap · {basemap === "tourist" ? "MapTiler" : "CARTO"} ·{" "}
-          {source === "chmi"
-            ? predReady
-              ? "radar ČHMÚ (CZRAD) + predikce posunu"
-              : "radar ČHMÚ (CZRAD)"
-            : source === "omforecast"
-              ? "předpověď Open-Meteo (ICON)"
-              : source === "accum"
-                ? accumChmi
-                  ? "úhrn ČHMÚ (MERGE)"
-                  : "úhrn Open-Meteo"
-                : "RainViewer"}
-          {cloudsOn && " · družice ČHMÚ"}
+          © OSM · {basemap === "tourist" ? "MapTiler" : "CARTO"} ·{" "}
+          {source === "chmi" || (source === "accum" && accumChmi)
+            ? "ČHMÚ"
+            : source === "omforecast" || source === "accum"
+              ? "OM"
+              : "RainViewer"}
           {showWebcams && (
             <>
               {" · "}
-              <WindyCourtesy />
+              <a
+                href="https://www.windy.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Windy
+              </a>
             </>
           )}
         </div>

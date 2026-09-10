@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HourlyPoint } from "../types";
 import { describeWeather } from "../lib/weatherCodes";
 import {
   dayHeader,
-  hourLabel,
   isoDate,
   locDate,
   zonedNow,
@@ -84,11 +83,12 @@ function pickRep(pts: HourlyPoint[]): HourlyPoint {
 }
 
 function buildDetailRows(pts: HourlyPoint[], step: DetailStep): DetailRow[] {
+  const padH = (h: number) => String(h).padStart(2, "0");
   if (step === 1) {
     return pts.map((p) => ({
       key: p.time,
       iso: p.time,
-      timeLabel: hourLabel(p.time),
+      timeLabel: padH(locDate(p.time).getHours()),
       weatherCode: p.weatherCode,
       isDay: p.isDay,
       tempMax: p.temperature,
@@ -117,7 +117,6 @@ function buildDetailRows(pts: HourlyPoint[], step: DetailStep): DetailRow[] {
 
   return order.map((key) => {
     const group = buckets.get(key)!;
-    const padH = (h: number) => String(h).padStart(2, "0");
     const firstH = locDate(group[0].time).getHours();
     const lastH = locDate(group[group.length - 1].time).getHours();
     const precipitation = group.reduce((s, p) => s + p.precipitation, 0);
@@ -168,6 +167,19 @@ export default function HourlyForecast({
   );
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(DAY_STEP);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!settingsRef.current?.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [settingsOpen]);
 
   const dayRows = useMemo<DayRow[]>(() => {
     const todayStr = isoDate(zonedNow(utcOffset));
@@ -290,7 +302,44 @@ export default function HourlyForecast({
 
   return (
     <section className={`card yr-24 ${canMore ? "yr-has-more" : ""}`}>
-      <h2 className="card-title">{tr("Výhled")}</h2>
+      <div className="yr-headbar">
+        <h2 className="card-title">{tr("Výhled")}</h2>
+        <div className="yr-settings" ref={settingsRef}>
+          <button
+            type="button"
+            className={`mg-view-btn${settingsOpen ? " active" : ""}`}
+            onClick={() => setSettingsOpen((o) => !o)}
+            aria-expanded={settingsOpen}
+            aria-label={tr("Nastavení výhledu")}
+            title={tr("Nastavení výhledu")}
+          >
+            <GearGlyph />
+          </button>
+          {settingsOpen && (
+            <div className="yr-settings-menu" role="dialog">
+              <span className="yr-settings-label">{tr("Podrobnost výhledu")}</span>
+              <div
+                className="yr-seg"
+                role="tablist"
+                aria-label={tr("Podrobnost výhledu")}
+              >
+                {([1, 4, 6] as const).map((step) => (
+                  <button
+                    key={step}
+                    type="button"
+                    role="tab"
+                    className={detailStep === step ? "active" : ""}
+                    aria-selected={detailStep === step}
+                    onClick={() => setDetailStep(step)}
+                  >
+                    {step}h
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="yr-head">
         <span>{tr("Den")}</span>
@@ -298,6 +347,7 @@ export default function HourlyForecast({
         <span className="ta-r">{tr("Teplota")}</span>
         <span className="ta-r">{tr("Srážky")}</span>
         <span className="ta-r">{tr("Vítr (m/s)")}</span>
+        <span />
       </div>
 
       <div className="yr-list">
@@ -310,133 +360,69 @@ export default function HourlyForecast({
             : [];
 
           return (
-            <div key={p.key}>
+            <div
+              key={p.key}
+              className={`yr-day${open ? " is-open" : ""}${
+                selected ? " is-selected" : ""
+              }${isToday ? " is-today" : ""}`}
+            >
               <div
-                className={`yr-row clickable ${selected ? "selected" : ""} ${
-                  isToday ? "today" : ""
-                } ${open ? "expanded" : ""}`}
-                onClick={() => toggleDay(p.key)}
+                className={`yr-row clickable${selected ? " selected" : ""}${
+                  isToday ? " today" : ""
+                }${open ? " expanded" : ""}`}
+                role="button"
+                tabIndex={0}
                 aria-expanded={open}
+                onClick={(e) => {
+                  toggleDay(p.key);
+                  (e.currentTarget as HTMLElement).blur();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleDay(p.key);
+                  }
+                }}
               >
                 <span className="yr-time">{p.timeLabel}</span>
-                {open ? (
-                  <div
-                    className="yr-seg yr-seg-inline"
-                    role="tablist"
-                    aria-label={tr("Podrobnost výhledu")}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      role="tab"
-                      className={detailStep === 1 ? "active" : ""}
-                      aria-selected={detailStep === 1}
-                      onClick={() => setDetailStep(1)}
-                    >
-                      1h
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={detailStep === 4 ? "active" : ""}
-                      aria-selected={detailStep === 4}
-                      onClick={() => setDetailStep(4)}
-                    >
-                      4h
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={detailStep === 6 ? "active" : ""}
-                      aria-selected={detailStep === 6}
-                      onClick={() => setDetailStep(6)}
-                    >
-                      6h
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="yr-icon">
-                      {Number.isFinite(p.dayIcon.code) ? (
-                        <WeatherIcon
-                          className="yr-icon-solo"
-                          kind={describeWeather(p.dayIcon.code).icon}
-                          isDay={p.dayIcon.isDay}
-                          size={24}
-                        />
-                      ) : (
-                        <span className="yr-missing yr-icon-solo">?</span>
-                      )}
-                      {p.icons.map((ic, idx) =>
-                        Number.isFinite(ic.code) ? (
-                          <WeatherIcon
-                            key={idx}
-                            kind={describeWeather(ic.code).icon}
-                            isDay={ic.isDay}
-                            size={24}
-                          />
-                        ) : (
-                          <span key={idx} className="yr-missing">
-                            ?
-                          </span>
-                        ),
-                      )}
-                    </span>
-                    <span className="yr-temp">
-                      {Number.isFinite(p.tempMin) &&
-                        Number.isFinite(p.tempMax) &&
-                        p.tempMin !== p.tempMax && (
-                          <span className="yr-temp-min">
-                            <span style={{ color: tempColor(p.tempMin) }}>
-                              {Math.round(p.tempMin)}°
-                            </span>
-                            <span className="yr-temp-sep"> / </span>
-                          </span>
-                        )}
-                      <span
-                        style={
-                          Number.isFinite(p.tempMax)
-                            ? { color: tempColor(p.tempMax) }
-                            : undefined
-                        }
-                      >
-                        {Number.isFinite(p.tempMax)
-                          ? `${Math.round(p.tempMax)}°`
-                          : "?"}
+                <span className="yr-icon">
+                  {Number.isFinite(p.dayIcon.code) ? (
+                    <WeatherIcon
+                      className="yr-icon-solo"
+                      kind={describeWeather(p.dayIcon.code).icon}
+                      isDay={p.dayIcon.isDay}
+                      size={24}
+                    />
+                  ) : (
+                    <span className="yr-missing yr-icon-solo">?</span>
+                  )}
+                  {p.icons.map((ic, idx) =>
+                    Number.isFinite(ic.code) ? (
+                      <WeatherIcon
+                        key={idx}
+                        kind={describeWeather(ic.code).icon}
+                        isDay={ic.isDay}
+                        size={24}
+                      />
+                    ) : (
+                      <span key={idx} className="yr-missing">
+                        ?
                       </span>
-                    </span>
-                    <span
-                      className="yr-precip"
-                      style={
-                        p.precipitation > 0
-                          ? {
-                              opacity: precipOpacity(
-                                p.precipitationProbability,
-                              ),
-                            }
-                          : undefined
-                      }
-                      title={
-                        p.precipitation > 0 && p.precipitationProbability > 0
-                          ? tr("{prob}% šance na déšť", {
-                              prob: p.precipitationProbability,
-                            })
-                          : undefined
-                      }
-                    >
-                      {p.precipitation > 0 && (
-                        <>
-                          <strong>{p.precipitation.toFixed(1)}</strong>
-                          <em>mm</em>
-                        </>
-                      )}
-                    </span>
-                    <span className="yr-wind">
-                      <WindArrow deg={p.windDirection} />
-                      <strong>{p.windSpeed.toFixed(0)}</strong>
-                    </span>
-                  </>
-                )}
+                    ),
+                  )}
+                </span>
+                <TempCell min={p.tempMin} max={p.tempMax} />
+                <PrecipCell
+                  mm={p.precipitation}
+                  prob={p.precipitationProbability}
+                />
+                <span className="yr-wind">
+                  <WindArrow deg={p.windDirection} />
+                  <strong>{p.windSpeed.toFixed(0)}</strong>
+                </span>
+                <span className="yr-chevron" aria-hidden="true">
+                  <ChevronDown className="yr-chevron-ico" />
+                </span>
               </div>
 
               {open && (
@@ -450,7 +436,7 @@ export default function HourlyForecast({
                     return (
                       <div
                         key={d.key}
-                        className={`yr-row yr-detail-row ${isNow ? "now" : ""}`}
+                        className={`yr-row yr-hour${isNow ? " now" : ""}`}
                       >
                         <span className="yr-time">{d.timeLabel}</span>
                         <span className="yr-icon">
@@ -458,67 +444,26 @@ export default function HourlyForecast({
                             <WeatherIcon
                               kind={dInfo.icon}
                               isDay={d.isDay}
-                              size={30}
+                              size={22}
                             />
                           ) : (
                             <span className="yr-missing">?</span>
                           )}
                         </span>
-                        <span className="yr-temp">
-                          {d.grouped &&
-                            Number.isFinite(d.tempMin) &&
-                            Number.isFinite(d.tempMax) &&
-                            d.tempMin !== d.tempMax && (
-                              <span className="yr-temp-min">
-                                <span style={{ color: tempColor(d.tempMin) }}>
-                                  {Math.round(d.tempMin)}°
-                                </span>
-                                <span className="yr-temp-sep"> / </span>
-                              </span>
-                            )}
-                          <span
-                            style={
-                              Number.isFinite(d.tempMax)
-                                ? { color: tempColor(d.tempMax) }
-                                : undefined
-                            }
-                          >
-                            {Number.isFinite(d.tempMax)
-                              ? `${Math.round(d.tempMax)}°`
-                              : "?"}
-                          </span>
-                        </span>
-                        <span
-                          className="yr-precip"
-                          style={
-                            d.precipitation > 0
-                              ? {
-                                  opacity: precipOpacity(
-                                    d.precipitationProbability,
-                                  ),
-                                }
-                              : undefined
-                          }
-                          title={
-                            d.precipitation > 0 &&
-                            d.precipitationProbability > 0
-                              ? tr("{prob}% šance na déšť", {
-                                  prob: d.precipitationProbability,
-                                })
-                              : undefined
-                          }
-                        >
-                          {d.precipitation > 0 && (
-                            <>
-                              <strong>{d.precipitation.toFixed(1)}</strong>
-                              <em>mm</em>
-                            </>
-                          )}
-                        </span>
+                        <TempCell
+                          min={d.tempMin}
+                          max={d.tempMax}
+                          showMin={d.grouped}
+                        />
+                        <PrecipCell
+                          mm={d.precipitation}
+                          prob={d.precipitationProbability}
+                        />
                         <span className="yr-wind">
                           <WindArrow deg={d.windDirection} />
                           <strong>{d.windSpeed.toFixed(0)}</strong>
                         </span>
+                        <span />
                       </div>
                     );
                   })}
@@ -545,13 +490,84 @@ export default function HourlyForecast({
   );
 }
 
-function ChevronDown() {
+function TempCell({
+  min,
+  max,
+  showMin = true,
+}: {
+  min: number;
+  max: number;
+  showMin?: boolean;
+}) {
+  const range =
+    showMin &&
+    Number.isFinite(min) &&
+    Number.isFinite(max) &&
+    min !== max;
+  return (
+    <span className="yr-temp">
+      {range && (
+        <span className="yr-temp-min">
+          <span style={{ color: tempColor(min) }}>{Math.round(min)}°</span>
+          <span className="yr-temp-sep"> / </span>
+        </span>
+      )}
+      <span
+        style={Number.isFinite(max) ? { color: tempColor(max) } : undefined}
+      >
+        {Number.isFinite(max) ? `${Math.round(max)}°` : "?"}
+      </span>
+    </span>
+  );
+}
+
+function PrecipCell({ mm, prob }: { mm: number; prob: number }) {
+  return (
+    <span
+      className="yr-precip"
+      style={mm > 0 ? { opacity: precipOpacity(prob) } : undefined}
+      title={
+        mm > 0 && prob > 0
+          ? tr("{prob}% šance na déšť", { prob })
+          : undefined
+      }
+    >
+      {mm > 0 && (
+        <>
+          <strong>{mm.toFixed(1)}</strong>
+          <em>mm</em>
+        </>
+      )}
+    </span>
+  );
+}
+
+function GearGlyph() {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function ChevronDown({ className = "yr-more-ico" }: { className?: string }) {
   return (
     <svg
       width="16"
       height="16"
       viewBox="0 0 24 24"
-      className="yr-more-ico"
+      className={className}
       aria-hidden="true"
     >
       <path
@@ -577,7 +593,7 @@ function WindArrow({ deg }: { deg: number }) {
     >
       <path
         d="M12 3v15m0 0l-5-5m5 5l5-5"
-        stroke="#9aa7c4"
+        stroke="currentColor"
         strokeWidth="2"
         fill="none"
         strokeLinecap="round"

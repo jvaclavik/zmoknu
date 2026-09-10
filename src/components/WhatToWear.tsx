@@ -484,6 +484,8 @@ export default function WhatToWear({
         ))}
       </div>
 
+      <BestWindow hourly={hourly} date={date} />
+
       {detailsOpen && (
         <>
           <p className="wear-summary">{tr(outfit.summary)}</p>
@@ -499,7 +501,6 @@ export default function WhatToWear({
               />
             ))}
           </div>
-          <BestWindow hourly={hourly} date={date} />
         </>
       )}
 

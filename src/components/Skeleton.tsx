@@ -1,14 +1,10 @@
 import { useMemo, type CSSProperties } from "react";
 
-// Skeleton (placeholder) obrazovka místo prázdna při prvním načítání – tvarem
-// i rozměry co nejvíc kopíruje reálný layout (souhrn, meteogram, oblečení,
-// výhled, sbalené detaily), aby se po donačtení dispozice neposunuly.
-// Samotná kostra se neanimuje (žádný shimmer), pohyb dělá jen padající déšť.
+// Placeholder při přenačtení (změna lokality). První start drží HTML #boot
+// v index.html – tenhle skeleton se nesmí opírat o classy ostrých karet,
+// jinak ho globální layout (mřížky, záporné marginy) rozpadne.
 
 export default function Skeleton() {
-  // Kapky deště – částečně náhodné: rovnoměrné sloupce s náhodným posunem a
-  // náhodným časováním/velikostí. Generujeme jednou při mountu (useMemo), ať to
-  // během načítání neposkakuje, ale při každém otevření vypadá trochu jinak.
   const rain = useMemo(() => {
     const n = 26;
     return Array.from({ length: n }, (_, i) => {
@@ -43,51 +39,50 @@ export default function Skeleton() {
           />
         ))}
       </div>
-      <div className="col-main skeleton">
-        {/* Souhrn dne (SmartSummary): řádek s ikonou + spodní patka */}
-        <section className="card">
-          <div className="skel-daysum">
-            <div className="skel skel-circle sm" />
-            <div className="skel-daysum-main">
-              <div className="skel skel-line lg" style={{ width: 78 }} />
-              <div className="skel skel-line sm" style={{ width: 116 }} />
+      <div className="skeleton">
+        <section className="card skel-hero">
+          <div className="skel skel-hero-icon" />
+          <div className="skel-hero-body">
+            <div className="skel skel-hero-now" />
+            <div className="skel-hero-line">
+              <div className="skel skel-line" style={{ width: 168, height: 14 }} />
             </div>
-            <div className="skel-daysum-precip">
-              <div className="skel skel-line" style={{ width: 62, height: 16 }} />
-              <div className="skel skel-line sm" style={{ width: 46 }} />
+            <div className="skel-hero-facts">
+              <div className="skel-hero-scale">
+                <div className="skel skel-line sm" style={{ width: 28 }} />
+                <div className="skel skel-hero-track" />
+                <div className="skel skel-line sm" style={{ width: 28 }} />
+              </div>
+              <div className="skel-hero-rest">
+                <div className="skel skel-line sm" style={{ width: 108 }} />
+                <div className="skel skel-line sm" style={{ width: 40 }} />
+              </div>
             </div>
-          </div>
-          <div className="skel-foot">
-            <div className="skel skel-line" style={{ flex: 1 }} />
-            <div className="skel skel-line" style={{ width: 92 }} />
-            <div className="skel skel-pill" style={{ width: 52, height: 22 }} />
           </div>
         </section>
 
-        {/* Meteogram: hlavička → staty (8 dlaždic) → graf. Pořadí musí odpovídat
-            reálné komponentě (staty jsou NAD grafem), jinak layout po načtení skáče. */}
         <section className="card">
-          <div className="skel-split">
-            <div className="skel-daysum-main">
-              <div className="skel skel-line" style={{ width: 96, height: 16 }} />
-              <div className="skel skel-line sm" style={{ width: 120 }} />
-            </div>
+          <div className="skel-split" style={{ marginBottom: 10 }}>
+            <div className="skel skel-line" style={{ width: 96, height: 12 }} />
             <div className="skel skel-btn" />
           </div>
           <div className="skel-stats">
-            {Array.from({ length: 8 }).map((_, i) => (
+            {Array.from({ length: 4 }).map((_, i) => (
               <div className="skel skel-stat" key={i} />
             ))}
           </div>
-          <div className="skel skel-block" style={{ height: 267 }} />
+          <div className="skel skel-typeinfo" />
+          <div className="skel skel-block skel-mg-plot" />
         </section>
 
-        {/* Co si vzít na sebe: titulek → aktivita → dlaždice → shrnutí → nejlepší okno */}
-        <section className="card">
-          <div className="skel skel-line" style={{ width: "46%", height: 18 }} />
+        <section className="card skel-has-more">
+          <div className="skel-split" style={{ marginBottom: 14 }}>
+            <div className="skel skel-line" style={{ width: "46%", height: 12 }} />
+            <div className="skel skel-how" />
+          </div>
           <div className="skel-acts">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div className="skel skel-pill" style={{ width: 82, height: 34 }} key={i} />
+              <div className="skel skel-pill" style={{ width: 82, height: 28 }} key={i} />
             ))}
           </div>
           <div className="skel-wear-grid">
@@ -95,42 +90,53 @@ export default function Skeleton() {
               <div className="skel skel-wear-item" key={i} />
             ))}
           </div>
-          <div className="skel skel-line" style={{ width: "60%", height: 20 }} />
           <div className="skel skel-block skel-bestwin" />
         </section>
 
-        {/* Výhled (HourlyForecast): denní řádky; přepínač 1h/4h/6h až u rozbaleného dne. */}
-        <section className="card">
-          <div className="skel skel-line" style={{ width: 64, height: 18 }} />
+        <section className="card skel-has-more">
+          <div className="skel-split" style={{ marginBottom: 10 }}>
+            <div className="skel skel-line" style={{ width: 64, height: 12 }} />
+            <div className="skel skel-btn" />
+          </div>
           <div className="skel-yrhead">
-            <div className="skel skel-line sm" style={{ width: 34 }} />
+            <span className="skel skel-line sm" style={{ width: 34 }} />
             <span />
-            <div className="skel skel-line sm" style={{ width: 44, marginLeft: "auto" }} />
-            <div className="skel skel-line sm" style={{ width: 40, marginLeft: "auto" }} />
-            <div className="skel skel-line sm" style={{ width: 60, marginLeft: "auto" }} />
+            <span className="skel skel-line sm skel-end" style={{ width: 44 }} />
+            <span className="skel skel-line sm skel-end" style={{ width: 40 }} />
+            <span className="skel skel-line sm skel-end" style={{ width: 48 }} />
+            <span />
           </div>
-          <div className="skel-yrlist">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div className="skel-yrrow" key={i}>
-                <div className="skel skel-line sm" style={{ width: 88 }} />
-                <div className="skel skel-circle" style={{ width: 26, height: 26 }} />
-                <div className="skel skel-line sm" style={{ width: 40, marginLeft: "auto" }} />
-                <div className="skel skel-line sm" style={{ width: 28, marginLeft: "auto" }} />
-                <div className="skel skel-line sm" style={{ width: 44, marginLeft: "auto" }} />
-              </div>
-            ))}
-          </div>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="skel-yrrow" key={i}>
+              <span className="skel skel-line sm" style={{ width: 88 }} />
+              <span className="skel-yricon">
+                <span
+                  className="skel skel-circle skel-yricon-solo"
+                  style={{ width: 24, height: 24 }}
+                />
+                {Array.from({ length: 4 }).map((__, j) => (
+                  <span
+                    className="skel skel-circle"
+                    style={{ width: 24, height: 24 }}
+                    key={j}
+                  />
+                ))}
+              </span>
+              <span className="skel skel-line sm skel-end" style={{ width: 40 }} />
+              <span className="skel skel-line sm skel-end" style={{ width: 28 }} />
+              <span className="skel skel-line sm skel-end" style={{ width: 36 }} />
+              <span className="skel skel-circle" style={{ width: 14, height: 14 }} />
+            </div>
+          ))}
         </section>
 
-        {/* Další detaily (ve výchozím stavu sbalené) – karta bez paddingu, hlavička 14/16 */}
         <section className="card skel-details">
           <div className="skel-details-head">
             <div className="skel skel-line sm" style={{ width: 96 }} />
-            <div className="skel-details-peek">
-              <div className="skel skel-line sm" style={{ width: 40 }} />
-              <div className="skel skel-line sm" style={{ width: 54 }} />
-              <div className="skel skel-circle" style={{ width: 18, height: 18 }} />
-            </div>
+            <div
+              className="skel skel-circle"
+              style={{ width: 18, height: 18, marginLeft: "auto" }}
+            />
           </div>
         </section>
       </div>

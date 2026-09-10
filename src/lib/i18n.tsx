@@ -44,6 +44,14 @@ const EN: Record<string, string> = {
   Dnes: "Today",
   "Radar srážek": "Precipitation radar",
   Radar: "Radar",
+  "Ukázat na radaru": "Show on radar",
+  "Teď {n}°, dnes {min}° až {max}°": "Now {n}°, today {min}° to {max}°",
+  "{min}° až {max}°": "{min}° to {max}°",
+  "Bez dat": "No data",
+  Nastavení: "Settings",
+  "U tebe teď prší": "Rain at your location now",
+  "Déšť u tebe za ~{n} min": "Rain reaching you in ~{n} min",
+  "U tebe bez srážek": "No rain at your location",
   Zobrazení: "View",
   "Otevřít radar": "Open radar",
   "Načítám počasí…": "Loading weather…",
@@ -117,6 +125,7 @@ const EN: Record<string, string> = {
   "Silné mrznoucí mrholení": "Heavy freezing drizzle",
   "Slabý déšť": "Light rain",
   Déšť: "Rain",
+  Liják: "Downpour",
   "Vydatný déšť": "Heavy rain",
   "Mrznoucí déšť": "Freezing rain",
   "Silný mrznoucí déšť": "Heavy freezing rain",
@@ -198,7 +207,20 @@ const EN: Record<string, string> = {
   vysoká: "high",
   střední: "medium",
   nízká: "low",
+  Jistota: "Certain",
+  Možná: "Maybe",
+  Nevíme: "Unsure",
+  Nejisté: "Uncertain",
   "Shoda modelů": "Model agreement",
+  "Zatím nemáme s čím porovnat.": "Nothing to compare yet.",
+  "Modely se shodují. Denní maxima se liší jen o ~{n}° – předpovědi lze věřit.":
+    "The models agree. The day’s highs differ by only ~{n}° – the forecast is trustworthy.",
+  "Modely se mírně rozcházejí (~{n}°). Ber to s rezervou.":
+    "The models diverge a little (~{n}°). Take it with a grain of salt.",
+  "Modely se rozcházejí (~{n}°). Ber to jako hrubý odhad.":
+    "The models diverge (~{n}°). Treat it as a rough guess.",
+  "Modely se neshodují (~{n}°). Ber to jako hrubý odhad.":
+    "The models disagree (~{n}°). Treat it as a rough guess.",
   "Výstrahy ČHMÚ": "ČHMÚ weather alerts",
   Výstrahy: "Warnings",
   "Počet výstrah": "Number of warnings",
@@ -403,8 +425,8 @@ const EN: Record<string, string> = {
     "Notification sent. If you don’t see it, check permissions in your system and browser.",
   "Bez povolení nelze notifikaci zobrazit.":
     "A notification can’t be shown without permission.",
-  "Upozornění se vyhodnocují podle předpovědi pro aktuální lokaci, dokud je appka spuštěná (i na pozadí). Doručení, když je appka úplně zavřená, web negarantuje.":
-    "Alerts are evaluated against the forecast for the current location while the app is running (including in the background). Delivery when the app is fully closed isn’t guaranteed on the web.",
+  "Funguje, jen když máš appku otevřenou (i na pozadí). Když ji úplně zavřeš, nic nepřijde – web to negarantuje.":
+    "It only works while the app is open (including in the background). If you fully close it, nothing will arrive – the web can’t guarantee that.",
   "Vyhodnocené podmínky": "Evaluated conditions",
   "Oblečení se skládá podle pocitové teploty, na kterou pak navazují srážky, vítr, sníh a UV. Aktivní podmínky (zeleně) přidávají další kusy.":
     "The outfit is built from the feels-like temperature, then precipitation, wind, snow and UV are layered on. Active conditions (green) add more items.",
@@ -453,6 +475,7 @@ const EN: Record<string, string> = {
 
   // HourlyForecast
   Výhled: "Forecast",
+  "Nastavení výhledu": "Forecast settings",
   "Krok výhledu": "Forecast step",
   "Podrobnost výhledu": "Forecast detail",
   "Rozsah výhledu": "Forecast range",
@@ -712,6 +735,7 @@ const EN: Record<string, string> = {
   "Hledat město nebo obec…": "Search city or town…",
   "Město, obec nebo GPS…": "City, town or GPS…",
   "Adresa, město nebo GPS…": "Address, city or GPS…",
+  "Adresa, vrchol nebo GPS…": "Address, peak or GPS…",
   "Hledat město": "Search city",
   "GPS souřadnice": "GPS coordinates",
   "Zobrazit počasí pro tyto souřadnice":
@@ -722,6 +746,7 @@ const EN: Record<string, string> = {
   "Hledám…": "Searching…",
   Výsledky: "Results",
   "Nic nenalezeno": "Nothing found",
+  vrchol: "peak",
   "Odebrat z oblíbených": "Remove from favorites",
   "Přidat do oblíbených": "Add to favorites",
   "Zjišťuji polohu…": "Locating…",

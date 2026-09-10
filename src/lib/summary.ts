@@ -86,6 +86,7 @@ export function daySummary(
   day: DailyPoint,
   hours: HourlyPoint[],
   date: string,
+  opts?: { skipLead?: boolean },
 ): string {
   const en = getLang() === "en";
   const rows = hours.filter((h) => h.time.slice(0, 10) === date);
@@ -172,7 +173,88 @@ export function daySummary(
     extra = en ? "Morning fog." : "Ráno mlha.";
   }
 
-  return [sentence1, sentence2, extra].filter(Boolean).join(" ");
+  return [opts?.skipLead ? "" : sentence1, sentence2, extra]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function joinList(parts: string[], en: boolean): string {
+  if (parts.length === 0) return "";
+  const head = cap(parts[0]);
+  if (parts.length === 1) return head;
+  const rest = parts.slice(1);
+  const and = en ? "and" : "a";
+  if (rest.length === 1) return `${head} ${and} ${rest[0]}`;
+  return `${head}, ${rest.slice(0, -1).join(", ")} ${and} ${rest[rest.length - 1]}`;
+}
+
+// Krátký výčet toho podstatného: „Vedro, bouřky a silný déšť".
+export function dayHeadline(
+  day: DailyPoint,
+  hours: HourlyPoint[],
+  date: string,
+): string {
+  const en = getLang() === "en";
+  const rows = hours.filter((h) => h.time.slice(0, 10) === date);
+  const bits: string[] = [];
+
+  const max = day.tempMax;
+  const min = day.tempMin;
+  if (max >= 33) bits.push(en ? "extreme heat" : "silné vedro");
+  else if (max >= 29) bits.push(en ? "heat" : "vedro");
+  else if (max >= 26) bits.push(en ? "hot" : "horko");
+  else if (min <= -11) bits.push(en ? "severe frost" : "silný mráz");
+  else if (min < 0 && max < 8) bits.push(en ? "frost" : "mráz");
+
+  let hasThunder = [95, 96, 99].includes(day.weatherCode);
+  let hasSnow = [71, 73, 75, 77, 85, 86].includes(day.weatherCode);
+  let hasRain = [51, 53, 55, 61, 63, 65, 80, 81, 82].includes(day.weatherCode);
+  let maxHourPrecip = 0;
+  for (const h of rows) {
+    const t = precipType(h.weatherCode);
+    if (t === "thunder" || [95, 96, 99].includes(h.weatherCode)) hasThunder = true;
+    if (t === "snow") hasSnow = true;
+    if (t === "rain" || t === "showers" || t === "drizzle" || t === "sleet") {
+      hasRain = true;
+    }
+    if (h.precipitation > maxHourPrecip) maxHourPrecip = h.precipitation;
+  }
+  const heavyRain =
+    !hasSnow &&
+    ((day.precipitationSum ?? 0) >= 15 ||
+      maxHourPrecip >= 4 ||
+      [65, 82].includes(day.weatherCode));
+
+  if (hasThunder) bits.push(en ? "storms" : "bouřky");
+  if (heavyRain) bits.push(en ? "heavy rain" : "silný déšť");
+  else if (hasSnow) {
+    const heavySnow =
+      (day.precipitationSum ?? 0) >= 10 || [75, 86].includes(day.weatherCode);
+    bits.push(
+      en
+        ? heavySnow
+          ? "heavy snow"
+          : "snow"
+        : heavySnow
+          ? "vydatné sněžení"
+          : "sněžení",
+    );
+  } else if (hasRain && !hasThunder) {
+    bits.push(en ? "rain" : "déšť");
+  }
+
+  const gust = day.windGustsMax ?? 0;
+  const wind = day.windSpeedMax ?? 0;
+  if (bits.length < 3 && (gust >= 17 || wind >= 12)) {
+    bits.push(en ? "strong wind" : "silný vítr");
+  }
+
+  if (bits.length === 0) {
+    const info = describeWeather(day.weatherCode);
+    bits.push(en ? enSky(day.weatherCode) : info.label.toLowerCase());
+  }
+
+  return joinList(bits.slice(0, 3), en);
 }
 
 // Anglické popisy oblohy (kód → text), aby věta nezněla jen počesku.
