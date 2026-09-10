@@ -4615,10 +4615,14 @@ function StatTile({
               )}
             </strong>
             <span className="mg-stat-extras">
-              {tr("oblečení")}
-              {extras.map((k) => (
-                <ClothIcon key={k} kind={k} size={13} />
-              ))}
+              <span className="mg-stat-extras-lab">{tr("oblečení")}</span>
+              {extras.length > 0 && (
+                <span className="mg-stat-extra-icons">
+                  {extras.map((k) => (
+                    <ClothIcon key={k} kind={k} size={13} />
+                  ))}
+                </span>
+              )}
             </span>
           </div>
         </button>

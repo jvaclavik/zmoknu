@@ -43,8 +43,7 @@ export function chmiSatUrl(
 }
 
 // Družicový IR snímek (šedotón: mraky světlé, čistá obloha tmavá) přepočítáme
-// tak, aby průhlednost odpovídala jasu – čistá obloha zprůhlední, zůstanou jen
-// mraky, takže overlay nezakrývá celou mapu. Výsledkem je PNG data URL.
+// na průhledný overlay: jasno zmizí, mraky jsou ocelově modré podle hustoty.
 // Kešujeme podle URL, ať se to nepočítá znovu při přepínání času / vrstvy.
 const cloudCache = new Map<string, string>();
 
@@ -73,18 +72,25 @@ export async function cloudMaskUrl(
 
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
-  // Práh jasu → alfa. Pod LO (čistá obloha, tmavá) plně průhledné, nad HI plné
-  // mraky. Křivku umocníme (ease-in), ať slabý IR šum / opar nedělá „mlhu".
-  const LO = 45;
-  const HI = 150;
-  const MAX_A = 255; // husté mraky téměř plné, ať jsou dobře vidět
+  // IR 10.8: teplý povrch tmavý, studené mraky světlé. Původní šedý JPEG na
+  // světlé mapě splývá s terénem a slabý IR opar vypadá jako „všude zataženo".
+  // Tvrdší práh + S-křivka nechá jasno úplně průhledné; mraky přebarvíme na
+  // ocelově modrou, ať jsou poznat na světlé i tmavé podkladové mapě.
+  const LO = 96;
+  const HI = 176;
   for (let p = 0; p < d.length; p += 4) {
     const lum = d[p] * 0.299 + d[p + 1] * 0.587 + d[p + 2] * 0.114;
-    let a = (lum - LO) / (HI - LO);
-    a = a < 0 ? 0 : a > 1 ? 1 : a;
-    // Mírný ease-in (jen odfiltruje slabý IR opar), jinak už lineárně sílí.
-    a = Math.pow(a, 0.7);
-    d[p + 3] = Math.round(a * MAX_A);
+    let t = (lum - LO) / (HI - LO);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    t = t * t * (3 - 2 * t);
+    if (t < 0.05) {
+      d[p + 3] = 0;
+      continue;
+    }
+    d[p] = Math.round(118 + t * 110);
+    d[p + 1] = Math.round(138 + t * 100);
+    d[p + 2] = Math.round(175 + t * 80);
+    d[p + 3] = Math.round(36 + t * 172);
   }
   ctx.putImageData(img, 0, 0);
 
@@ -93,22 +99,25 @@ export async function cloudMaskUrl(
   return out;
 }
 
-// Snímky po 15 min za posledních `hours` hodin (ČHMÚ drží nedávné snímky).
+const SAT_STEP_SEC = 15 * 60;
+
+// Družice IR108 je po 15 min; radar má vlastní krok (10/30/60/120). Bereme
+// stejná razítka jako radar a soubor zarovnáme na 15 min dolů – overlay se
+// pak k radarovému času doreguluje posunem, ať krok ve slideru sedí 1:1.
 export function buildChmiSatFrames(
-  hours = 6,
+  radarTimes: number[],
   product = "ir108",
   region = "cz",
 ): SatFrame[] {
-  const step = 15 * 60 * 1000;
-  // Nejnovější snímek zarovnaný na 15 min, s rezervou 20 min (data mají zpoždění).
-  const latest = Math.floor((Date.now() - 20 * 60 * 1000) / step) * step;
-  const start = latest - hours * 60 * 60 * 1000;
-  const frames: SatFrame[] = [];
-  for (let t = start; t <= latest; t += step) {
-    frames.push({
-      time: Math.floor(t / 1000),
-      url: chmiSatUrl(new Date(t), product, region),
-    });
+  const snaps = new Set<number>();
+  for (const t of radarTimes) {
+    if (!Number.isFinite(t)) continue;
+    snaps.add(Math.floor(t / SAT_STEP_SEC) * SAT_STEP_SEC);
   }
-  return frames;
+  return [...snaps]
+    .sort((a, b) => a - b)
+    .map((time) => ({
+      time,
+      url: chmiSatUrl(new Date(time * 1000), product, region),
+    }));
 }

@@ -22,6 +22,13 @@
   --accent-ink: #08131f;
   --radius: 18px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  /* Dolní tab bar: výška obsahu + safe-area, ať radar i padding appky sedí. */
+  --tabbar-pad-y: 6px;
+  --tabbar-btn: 48px;
+  --tabbar-content: calc(var(--tabbar-pad-y) * 2 + var(--tabbar-btn));
+  --tabbar-h: calc(
+    var(--tabbar-content) + var(--sab, env(safe-area-inset-bottom, 0px))
+  );
   /* Barvy ikonek počasí (WeatherIcon). */
   --wi-sun: #ffd166;
   --wi-moon: #cfd8ff;
@@ -252,7 +259,7 @@ body::before {
   margin: 0 auto;
   /* Header je nahoře → žádný horní padding. Boční insety kvůli notchi v landscape. */
   padding: 0 calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px)))
-    40px calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
+    calc(24px + var(--tabbar-h)) calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
 }
 
 /* Nenápadný čas poslední aktualizace schovaný pod fixním headerem – odkryje se
@@ -430,9 +437,7 @@ body::before {
   margin-bottom: -2px;
   flex-shrink: 0;
   display: grid;
-  grid-auto-flow: column;
   place-items: center;
-  gap: 5px;
   width: 30px;
   height: 30px;
   border: 1px solid var(--card-border);
@@ -450,12 +455,6 @@ body::before {
   opacity: 0.72;
   cursor: wait;
 }
-.hb-locate-label {
-  display: none;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
 .hb-locate-spin {
   width: 16px;
   height: 16px;
@@ -468,14 +467,6 @@ body::before {
     height: 28px;
   }
   .hb-today-label {
-    display: inline;
-  }
-  .hb-locate {
-    width: auto;
-    padding: 0 10px;
-    height: 28px;
-  }
-  .hb-locate-label {
     display: inline;
   }
 }
@@ -497,84 +488,110 @@ body::before {
   }
 }
 
-/* Plovoucí tlačítko radaru vpravo dole */
-.radar-fab {
+/* Dolní taby: Předpověď | Radar. Vždy viditelné, i přes fullscreen radar. */
+.app-tabs {
   position: fixed;
-  right: calc(16px + var(--sar, env(safe-area-inset-right, 0px)));
-  bottom: calc(16px + var(--sab, env(safe-area-inset-bottom, 0px)));
-  /* Nad obsahem/headerem (1100), ale POD modály (2000+), ať je nepřekrývá. */
-  z-index: 1200;
-  width: 44px;
-  height: 44px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2100;
+  padding: var(--tabbar-pad-y)
+    calc(8px + var(--sar, env(safe-area-inset-right, 0px)))
+    calc(var(--tabbar-pad-y) + var(--sab, env(safe-area-inset-bottom, 0px)))
+    calc(8px + var(--sal, env(safe-area-inset-left, 0px)));
+  background:
+    linear-gradient(var(--card), var(--card)),
+    var(--sky-mid);
+  border-top: 1px solid var(--card-border);
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+}
+.app-tabs-inner {
   display: grid;
-  place-items: center;
-  border-radius: 50%;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.app-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tabbar-btn);
+  min-width: 0;
+  padding: 0 8px;
   border: none;
-  background: var(--accent);
-  color: #05203a;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
-.radar-fab svg {
-  width: 22px;
-  height: 22px;
+.app-tab svg {
+  display: block;
+  flex-shrink: 0;
 }
-/* Popisek se ukáže jen na velkých displejích – FAB se rozvine v „pill". */
-.radar-fab-label {
-  display: none;
-  font-weight: 700;
-  font-size: 0.9rem;
+.app-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-@media (min-width: 1280px) {
-  .radar-fab {
-    width: auto;
-    height: 48px;
-    grid-auto-flow: column;
-    gap: 9px;
-    padding: 0 20px;
-    border-radius: 999px;
-  }
-  .radar-fab-label {
-    display: inline;
-  }
+.app-tab.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
-/* Zavírací FAB v radaru – na stejném místě jako otevírací tlačítko. */
+.app-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 @media (hover: hover) {
-  .radar-fab:hover {
-    transform: scale(1.06);
+  .app-tab:hover {
+    color: var(--text);
+  }
+  .app-tab.active:hover {
+    color: var(--accent);
   }
 }
-/* Ovládací klastr vpravo dole v mapě (nastavení + zavřít), blízko FAB pro otevření */
+
+/* Stejné místo a vzhled jako .hb-locate v hlavičce předpovědi. */
 .radar-locatectl {
   position: absolute;
-  top: calc(10px + var(--sat, env(safe-area-inset-top, 0px)));
-  right: calc(12px + env(safe-area-inset-right));
+  top: calc(6px + var(--sat, env(safe-area-inset-top, 0px)));
+  right: calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px)));
   z-index: 800;
 }
-.radar-locatectl .radar-ctl-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  background: rgba(var(--panel-rgb), 0.72);
-  border-color: rgba(var(--ov-rgb), 0.14);
-  color: #fff;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.radar-locatectl .hb-locate {
+  margin: 0;
+  background:
+    linear-gradient(var(--card), var(--card)),
+    var(--sky-mid);
 }
-.radar-locatectl .radar-locatebtn.on {
-  background: rgba(91, 182, 255, 0.28);
-  color: var(--accent);
-  border-color: rgba(91, 182, 255, 0.35);
+.radar-locatectl .hb-locate.on {
+  background:
+    linear-gradient(rgba(91, 182, 255, 0.16), rgba(91, 182, 255, 0.16)),
+    var(--sky-mid);
 }
-.radar-locatectl .radar-locatebtn:disabled {
-  opacity: 0.72;
-  cursor: wait;
-}
-.radar-locatectl .radar-locatebtn .spinner {
-  width: 18px;
-  height: 18px;
+@media (hover: hover) {
+  .radar-locatectl .hb-locate:hover:not(:disabled) {
+    background:
+      linear-gradient(rgba(var(--ov-rgb), 0.08), rgba(var(--ov-rgb), 0.08)),
+      var(--sky-mid);
+  }
+  .radar-locatectl .hb-locate.on:hover:not(:disabled) {
+    background:
+      linear-gradient(rgba(91, 182, 255, 0.26), rgba(91, 182, 255, 0.26)),
+      var(--sky-mid);
+  }
 }
 .radar-mapctl {
   position: absolute;
@@ -594,11 +611,6 @@ body::before {
   color: #fff;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-}
-.radar-mapctl-close {
-  background: var(--accent) !important;
-  color: #05203a !important;
-  border-color: transparent !important;
 }
 .radar-mapctl .radar-settings-panel {
   bottom: calc(100% + 8px);
@@ -4628,11 +4640,27 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 2px 3px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  line-height: 1;
+  white-space: nowrap;
+}
+.mg-stat-extras-lab {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-stat-extra-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .mg-stat-v .mg-stat-extras svg {
+  display: block;
   opacity: 0.85;
   flex-shrink: 0;
 }
@@ -5869,8 +5897,12 @@ input[type="range"]::-moz-range-thumb {
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 2px 3px;
+    gap: 6px;
     min-width: 0;
+    max-width: 100%;
+    line-height: 1;
+    overflow: hidden;
+    white-space: nowrap;
   }
   .mg-stats:not(.shrink) .mg-stat > svg,
   .mg-stats:not(.shrink) .mg-stat-cloth svg {
@@ -5949,13 +5981,21 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   flex-direction: column;
 }
-/* Malý badge s aktuálním časem nahoře uprostřed mapy. */
-.radar-timebadge {
+/* Čas aktuálního snímku + nápověda rozsahu (pinch) – nad časovou osou. */
+.radar-map-captions {
   position: absolute;
-  top: calc(10px + var(--sat, env(safe-area-inset-top, 0px)));
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 650;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.radar-timebadge {
+  position: static;
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.78rem;
@@ -5967,7 +6007,6 @@ input[type="range"]::-moz-range-thumb {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   white-space: nowrap;
-  pointer-events: none;
 }
 .radar-timebadge.forecast {
   color: var(--accent-warm);
@@ -6043,10 +6082,13 @@ input[type="range"]::-moz-range-thumb {
   color: #2a2208;
 }
 
-/* Radar přes celou obrazovku (v rámci appky) */
+/* Radar přes celou obrazovku – nad obsahem, pod dolními taby */
 .radar-fullscreen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--tabbar-h);
   z-index: 2000;
   margin: 0;
   border-radius: 0;
@@ -6056,6 +6098,14 @@ input[type="range"]::-moz-range-thumb {
   overscroll-behavior: none;
   background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
 }
+.radar-fullscreen.radar-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+.radar-tab-bg {
+  z-index: 1999;
+  pointer-events: none;
+}
 .radar-fullscreen .radar-map {
   flex: 1;
   height: auto;
@@ -6063,11 +6113,11 @@ input[type="range"]::-moz-range-thumb {
   border: none;
 }
 /* Mapa je na celou šířku, ovládací lišty mají vlastní vnitřní okraje. */
-.radar-fullscreen .radar-scale {
-  padding: 6px 14px 0;
+.radar-fullscreen .radar-footer {
+  padding: 4px 12px 10px;
 }
 .radar-fullscreen .radar-bar {
-  padding: 0 14px calc(10px + env(safe-area-inset-bottom));
+  padding: 0 14px 10px;
 }
 .radar-map {
   position: relative;
@@ -6345,7 +6395,6 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
 }
 .radar-ctl-btn {
   display: grid;
@@ -6457,144 +6506,203 @@ input[type="range"]::-moz-range-thumb {
   color: var(--muted);
   line-height: 1.35;
 }
-/* Tažná zóna = celý footer (řádek s časy + řádek s ovládáním), od kraje ke kraji
-   a až k hornímu okraji footeru. Vizuál se nemění, jen se zvětší plocha pro prst. */
+/* Jedna tažná lišta: dny + dráha + hodiny. Chytit jde kdekoliv na footeru. */
 .radar-footer {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   touch-action: none;
-  cursor: pointer;
+  cursor: ew-resize;
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+}
+.radar-card:not(.radar-fullscreen) .radar-footer {
+  margin-top: 4px;
 }
 .radar-footer:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 12px;
 }
-/* V oblasti nastavení necháme normální dotyk (menu, posun). */
+.radar-footer button,
 .radar-footer .radar-settings {
   touch-action: auto;
+  cursor: pointer;
 }
-/* Vizuální posuvník (dráha, tečky, thumb). Tažení řeší footer, ne tento prvek. */
+.radar-footer.is-scrubbing {
+  cursor: grabbing;
+}
+.radar-zoomhint {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(var(--panel-rgb), 0.82);
+  border: 1px solid rgba(var(--ov-rgb), 0.14);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
 .radar-scrub {
   position: relative;
   flex: 1;
-  align-self: stretch;
-  min-height: 44px;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  padding: 0 9px; /* místo pro thumb na krajích */
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 2px 2px 0;
+}
+.radar-scrub-top,
+.radar-scrub-hours {
+  position: relative;
+  height: 12px;
+  pointer-events: none;
+}
+.radar-scrub-day {
+  position: absolute;
+  top: 0;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 12px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+.radar-scrub-nowlab {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 12px;
+  color: var(--accent-warm);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  white-space: nowrap;
 }
 .radar-scrub-track {
   position: relative;
   width: 100%;
-  height: 6px;
+  height: 22px;
+  display: flex;
+  align-items: center;
 }
-.radar-scrub-line,
-.radar-scrub-fill {
+.radar-scrub-cells {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(var(--ov-rgb), 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+.radar-footer.is-scrubbing .radar-scrub-cells {
+  height: 10px;
+}
+.radar-scrub-cell {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.radar-scrub-cell.ok {
+  background: rgba(var(--ov-rgb), 0.48);
+}
+.radar-scrub-cell.pending {
+  background: repeating-linear-gradient(
+    -55deg,
+    rgba(245, 197, 66, 0.22),
+    rgba(245, 197, 66, 0.22) 2px,
+    rgba(245, 197, 66, 0.55) 2px,
+    rgba(245, 197, 66, 0.55) 4px
+  );
+}
+.radar-scrub-cell.pred {
+  background: color-mix(in srgb, var(--accent-warm) 42%, transparent);
+}
+.radar-scrub-cell.ok.future {
+  background: color-mix(in srgb, var(--accent-warm) 55%, rgba(var(--ov-rgb), 0.35));
+}
+.radar-scrub-future {
   position: absolute;
-  top: 50%;
-  height: 6px;
-  transform: translateY(-50%);
-  border-radius: 999px;
-}
-.radar-scrub-line {
-  left: 0;
+  top: 0;
   right: 0;
-  background: rgba(var(--ov-rgb), 0.15);
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -55deg,
+    transparent,
+    transparent 3px,
+    color-mix(in srgb, var(--accent-warm) 18%, transparent) 3px,
+    color-mix(in srgb, var(--accent-warm) 18%, transparent) 6px
+  );
 }
-.radar-scrub-fill {
-  left: 0;
-  background: var(--accent);
-}
-.radar-scrub-dot {
+.radar-scrub-dayline {
   position: absolute;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: rgba(var(--ov-rgb), 0.45);
+  transform: translateX(-0.5px);
   z-index: 2;
   pointer-events: none;
 }
-.radar-scrub-dot.ok {
-  background: #34d17a;
-}
-.radar-scrub-dot.pending {
-  background: #f5c542;
-}
-.radar-scrub-dot.plain {
-  background: rgba(var(--ov-rgb), 0.55);
-}
-/* Predikce (extrapolace posunu) – prázdný kroužek, ať je odlišná od dat. */
-.radar-scrub-dot.pred {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px #34d17a;
-  opacity: 0.6;
-}
-.radar-scrub-label {
+.radar-scrub-nowline {
   position: absolute;
-  top: calc(50% + 9px);
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent-warm);
   transform: translateX(-50%);
-  font-size: 0.6rem;
-  line-height: 1;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  z-index: 4;
   pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-warm) 35%, transparent);
 }
 .radar-scrub-thumb {
   position: absolute;
   top: 50%;
-  width: 18px;
+  width: 3px;
   height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--accent);
+  border-radius: 2px;
+  background: var(--text);
   transform: translate(-50%, -50%);
-  z-index: 3;
+  z-index: 5;
   pointer-events: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--surface-0) 55%, transparent),
+    0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: height 0.12s ease;
 }
-.play-btn {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: none;
-  background: var(--accent);
-  color: #05203a;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.15s;
+.radar-footer.is-scrubbing .radar-scrub-thumb {
+  height: 22px;
+  width: 4px;
 }
-@media (hover: hover) {
-  .play-btn:hover {
-    transform: scale(1.06);
-  }
+.radar-scrub-hour {
+  position: absolute;
+  top: 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .radar-time {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   min-width: 48px;
   text-align: right;
-}
-.radar-scale {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-  min-height: 22px;
-  font-size: 0.7rem;
-  color: var(--muted);
-}
-.radar-scale-end {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 .radar-now-marker {
   position: absolute;
@@ -7633,7 +7741,7 @@ input[type="range"]::-moz-range-thumb {
 .dbg-modal {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: 3000;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -8199,10 +8307,6 @@ input[type="range"]::-moz-range-thumb {
     width: 16px;
     height: 16px;
   }
-  /* Víc místa dole kvůli plovoucímu tlačítku radaru. */
-  .app {
-    padding-bottom: calc(84px + var(--sab, env(safe-area-inset-bottom, 0px)));
-  }
   /* Výběr místa přes celou obrazovku na mobilu. */
   .locpick {
     align-items: stretch;
@@ -8279,9 +8383,9 @@ input[type="range"]::-moz-range-thumb {
 .update-prompt {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + var(--sab, 0px));
+  bottom: calc(12px + var(--tabbar-h));
   transform: translateX(-50%);
-  z-index: 1200;
+  z-index: 2200;
   width: min(440px, calc(100vw - 24px));
   display: flex;
   flex-wrap: wrap;

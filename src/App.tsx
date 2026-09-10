@@ -429,7 +429,7 @@ export default function App() {
 
   // Safe-area insety si nacachujeme do CSS proměnných. Na iOS totiž env(safe-area-*)
   // při scrollu/přetažení občas krátce spadne na 0 → header „vjede" pod výřez a
-  // FAB radaru poskočí. Čtená hodnota přes probe element je stabilní.
+  // taby dole poskočí. Čtená hodnota přes probe element je stabilní.
   useEffect(() => {
     const root = document.documentElement;
     const probe = document.createElement("div");
@@ -678,6 +678,7 @@ export default function App() {
       ".meteogram-plot",
       ".wear-grid",
       ".radar-card",
+      ".app-tabs",
       ".dayselect",
       ".tb-daypanel",
       ".search-panel",
@@ -1106,7 +1107,9 @@ export default function App() {
 
   // Rozbalovací výběr dnů přímo v hlavičce (toggle přes tb-day).
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
-  const [radarOpen, setRadarOpen] = useState(false);
+  const [tab, setTab] = useState<"forecast" | "radar">("forecast");
+  const [radarMounted, setRadarMounted] = useState(false);
+  const radarOpen = tab === "radar";
   const [searchOpen, setSearchOpen] = useState(false);
   const [shared, setShared] = useState(false);
 
@@ -1219,7 +1222,7 @@ export default function App() {
     }
   }, [location]);
 
-  // Klávesa "r" přepíná radar. Ignoruje psaní v inputech/textarea/contenteditable.
+  // Klávesa "r" přepíná tab radaru. Ignoruje psaní v inputech/textarea/contenteditable.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "r" && e.key !== "R") return;
@@ -1234,7 +1237,11 @@ export default function App() {
       )
         return;
       e.preventDefault();
-      setRadarOpen((v) => !v);
+      setTab((v) => {
+        const next = v === "radar" ? "forecast" : "radar";
+        if (next === "radar") posthog.capture("radar_opened");
+        return next;
+      });
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1288,6 +1295,8 @@ export default function App() {
   const dayHasData =
     (selectedDay != null && Number.isFinite(selectedDay.weatherCode)) ||
     dayHours.some((h) => Number.isFinite(h.temperature));
+
+  if (radarOpen && !radarMounted) setRadarMounted(true);
 
   return (
     <div
@@ -1372,21 +1381,22 @@ export default function App() {
                 <span className="hb-today-label">{tr("Dnes")}</span>
               </button>
             )}
-            <button
-              type="button"
-              className={`hb-locate${followLocation ? " on" : ""}`}
-              onClick={handleLocate}
-              disabled={locating}
-              title={tr("Použít moji polohu")}
-              aria-label={tr("Použít moji polohu")}
-            >
-              {locating ? (
-                <span className="spinner hb-locate-spin" />
-              ) : (
-                <LocationArrowGlyph size={16} />
-              )}
-              <span className="hb-locate-label">{tr("Použít moji polohu")}</span>
-            </button>
+            {!radarOpen && (
+              <button
+                type="button"
+                className={`hb-locate${followLocation ? " on" : ""}`}
+                onClick={handleLocate}
+                disabled={locating}
+                title={tr("Použít moji polohu")}
+                aria-label={tr("Použít moji polohu")}
+              >
+                {locating ? (
+                  <span className="spinner hb-locate-spin" />
+                ) : (
+                  <LocationArrowGlyph size={16} />
+                )}
+              </button>
+            )}
           </div>
         </div>
         <div className="hb-row2">
@@ -1499,19 +1509,6 @@ export default function App() {
         onPushHistory={pushHistory}
         onClearHistory={() => setHistory([])}
       />
-
-      {forecast && (
-        <button
-          type="button"
-          className="radar-fab"
-          onClick={() => { posthog.capture("radar_opened"); setRadarOpen(true); }}
-          title={tr("Radar srážek")}
-          aria-label={tr("Otevřít radar")}
-        >
-          <RadarGlyph />
-          <span className="radar-fab-label">{tr("Radar srážek")}</span>
-        </button>
-      )}
 
       {error && <div className="banner error">{error}</div>}
       {notice && forecast && <div className="banner notice">{notice}</div>}
@@ -1672,6 +1669,9 @@ export default function App() {
       ) : null}
 
       {radarOpen && (
+        <div className="radar-fullscreen radar-tab-bg" aria-hidden="true" />
+      )}
+      {radarMounted && (
         <Suspense fallback={null}>
           <RadarMap
             location={location}
@@ -1683,7 +1683,8 @@ export default function App() {
             followLocation={followLocation}
             locating={locating}
             modal
-            onClose={() => setRadarOpen(false)}
+            visible={radarOpen}
+            onClose={() => setTab("forecast")}
           />
         </Suspense>
       )}
@@ -1863,6 +1864,34 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <nav className="app-tabs" aria-label={tr("Zobrazení")}>
+        <div className="app-tabs-inner" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            className={`app-tab${tab === "forecast" ? " active" : ""}`}
+            aria-selected={tab === "forecast"}
+            onClick={() => setTab("forecast")}
+          >
+            <ForecastGlyph />
+            <span>{tr("Předpověď")}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`app-tab${tab === "radar" ? " active" : ""}`}
+            aria-selected={tab === "radar"}
+            onClick={() => {
+              if (tab !== "radar") posthog.capture("radar_opened");
+              setTab("radar");
+            }}
+          >
+            <RadarGlyph />
+            <span>{tr("Radar")}</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }
@@ -2008,11 +2037,36 @@ function GearGlyph() {
   );
 }
 
+function ForecastGlyph() {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M7.2 15.2h9.4a3.2 3.2 0 0 0 .3-6.4 4.5 4.5 0 0 0-8.5-1.2 3.4 3.4 0 0 0-1.2 7.6z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.4 18.2 7.6 21M12 17.8 11.2 20.6M15.6 18.2 14.8 21"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function RadarGlyph() {
   return (
     <svg
-      width="19"
-      height="19"
+      width="22"
+      height="22"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"

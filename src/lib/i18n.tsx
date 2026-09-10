@@ -43,6 +43,8 @@ const EN: Record<string, string> = {
   "Přejít na dnešek": "Go to today",
   Dnes: "Today",
   "Radar srážek": "Precipitation radar",
+  Radar: "Radar",
+  Zobrazení: "View",
   "Otevřít radar": "Open radar",
   "Načítám počasí…": "Loading weather…",
   "Zdroj dat (model)": "Data source (model)",
@@ -657,8 +659,8 @@ const EN: Record<string, string> = {
   "před {n} h": "{n} h ago",
   "za {n} h": "in {n} h",
   "za {n} min": "in {n} min",
-  "Za posledním snímkem je predikce na {n} min – pole se posouvá {v} km/h k {d}, extrapolujeme jeho posun. Čím dál dopředu, tím průhlednější.":
-    "The last frame is followed by a {n} min nowcast – the field moves {v} km/h towards {d} and we extrapolate that shift. The further ahead, the more transparent.",
+  "Za posledním snímkem je predikce na {n} min – srážky se posouvají {v} km/h k {d}. Mraky jedou podle družice, ne podle radaru. Čím dál dopředu, tím průhlednější.":
+    "The last frame is followed by a {n} min nowcast – rain moves {v} km/h towards {d}. Clouds follow the satellite, not the radar. The further ahead, the more transparent.",
   "Predikci spočítáme z posunu pole mezi dvěma posledními snímky – teď na ni nejsou data.":
     "The nowcast comes from the shift between the last two frames – there is no data for it right now.",
   Předpověď: "Forecast",

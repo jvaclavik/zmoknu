@@ -1,5 +1,6 @@
 import type { RadarFrame } from "../types";
 import { CHMI_BOUNDS } from "./chmi";
+import { CHMI_SAT_CZ_BOUNDS } from "./chmiSat";
 
 // Odhad posunu srážkového pole ze dvou po sobě jdoucích snímků radaru ČHMÚ.
 // Snímky jdou přes vlastní origin (/chmi-radar), takže je lze číst z canvasu
@@ -104,9 +105,25 @@ export async function echoOnlyImage(url: string): Promise<string | null> {
   return canvas.toDataURL();
 }
 
-// Převede snímek na hrubší mřížku intenzit – průměr vah odrazivosti v bloku
-// `scale`×`scale` px. Hrubší mřížka je rychlejší a odolnější vůči šumu.
-function toField(px: ImageData, scale: number): Field {
+type PixelScore = (d: Uint8ClampedArray, o: number) => number;
+
+function echoScore(d: Uint8ClampedArray, o: number): number {
+  if (d[o + 3] < 128) return 0;
+  const key = (d[o] << 16) | (d[o + 1] << 8) | d[o + 2];
+  return ECHO_WEIGHT.get(key) ?? 0;
+}
+
+// Stejný práh jako cloudMaskUrl – jen IR mraky, ne statický povrch (ten by
+// korelaci přitáhl k nule a mraky by jely vektorem ze srážek).
+function cloudScore(d: Uint8ClampedArray, o: number): number {
+  const lum = d[o] * 0.299 + d[o + 1] * 0.587 + d[o + 2] * 0.114;
+  if (lum < 96) return 0;
+  let t = (lum - 96) / (176 - 96);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return t * t * (3 - 2 * t);
+}
+
+function toField(px: ImageData, scale: number, score: PixelScore): Field {
   const w = Math.floor(px.width / scale);
   const h = Math.floor(px.height / scale);
   const data = new Float32Array(w * h);
@@ -117,10 +134,7 @@ function toField(px: ImageData, scale: number): Field {
       for (let j = 0; j < scale; j++) {
         const row = (y * scale + j) * px.width;
         for (let i = 0; i < scale; i++) {
-          const o = (row + x * scale + i) * 4;
-          if (d[o + 3] < 128) continue;
-          const key = (d[o] << 16) | (d[o + 1] << 8) | d[o + 2];
-          sum += ECHO_WEIGHT.get(key) ?? 0;
+          sum += score(d, (row + x * scale + i) * 4);
         }
       }
       data[y * w + x] = sum / (scale * scale);
@@ -233,46 +247,76 @@ function refine(a: Field, b: Field, s: Shift): { dx: number; dy: number } {
 // Hrubá mřížka pro první průchod (≈4 km/buňka) a jemná pro doladění (≈2 km).
 const COARSE = 4;
 const FINE = 2;
+const SAT_COARSE = 8;
+const SAT_FINE = 4;
 // Rozsah hledání na hrubé mřížce: ±6 buněk ≈ ±24 km za 10 min ≈ 145 km/h.
 const COARSE_RADIUS = 6;
 const MIN_COVERAGE = 0.002; // pod 0,2 % zasažené plochy nemá korelace smysl
 const MIN_SCORE = 0.35;
 
+interface GeoRect {
+  lonW: number;
+  lonE: number;
+  latS: number;
+  latN: number;
+}
+
+const [[CHMI_S, CHMI_W], [CHMI_N, CHMI_E]] = CHMI_BOUNDS;
+
+function mercY(lat: number): number {
+  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+}
+
+function invMercY(y: number): number {
+  return ((Math.atan(Math.exp(y)) - Math.PI / 4) * 360) / Math.PI;
+}
+
 function estimateFromPixels(
   older: ImageData,
   newer: ImageData,
   stepSec: number,
+  score: PixelScore,
+  geo: GeoRect,
+  coarseScale: number,
+  fineScale: number,
 ): RadarMotion | null {
-  const a4 = toField(older, COARSE);
-  const b4 = toField(newer, COARSE);
+  const a4 = toField(older, coarseScale, score);
+  const b4 = toField(newer, coarseScale, score);
   if (coverage(a4) < MIN_COVERAGE || coverage(b4) < MIN_COVERAGE) return null;
 
   const coarse = bestShift(a4, b4, 0, 0, COARSE_RADIUS);
   // Posun na okraji prohledávaného okna = pravděpodobně mimo rozsah, neriskuj.
   if (coarse.onEdge || coarse.score < MIN_SCORE) return null;
 
-  const a2 = toField(older, FINE);
-  const b2 = toField(newer, FINE);
-  const ratio = COARSE / FINE;
+  const a2 = toField(older, fineScale, score);
+  const b2 = toField(newer, fineScale, score);
+  const ratio = coarseScale / fineScale;
   const fine = bestShift(a2, b2, coarse.dx * ratio, coarse.dy * ratio, ratio);
   if (fine.score < MIN_SCORE) return null;
   const { dx, dy } = refine(a2, b2, fine);
 
-  const dxPx = dx * FINE;
-  const dyPx = dy * FINE;
+  const dxPx = dx * fineScale;
+  const dyPx = dy * fineScale;
 
-  const [[latS, lonW], [latN, lonE]] = CHMI_BOUNDS;
-  const midLat = ((latS + latN) / 2) * (Math.PI / 180);
+  const midLat = ((geo.latS + geo.latN) / 2) * (Math.PI / 180);
   const kmPerPxX =
-    ((lonE - lonW) * 111.32 * Math.cos(midLat)) / older.width;
-  const kmPerPxY = ((latN - latS) * 110.57) / older.height;
+    ((geo.lonE - geo.lonW) * 111.32 * Math.cos(midLat)) / older.width;
+  const kmPerPxY = ((geo.latN - geo.latS) * 110.57) / older.height;
   const km = Math.hypot(dxPx * kmPerPxX, dyPx * kmPerPxY);
+
+  // dxFrac/dyFrac jsou vždy podíl ČHMÚ radaru, ať shiftCorners posouvá
+  // srážky i mraky ve stejných zeměpisných kilometrech.
+  const lonOff = (dxPx / older.width) * (geo.lonE - geo.lonW);
+  const mercOff =
+    -(dyPx / older.height) * (mercY(geo.latN) - mercY(geo.latS));
+  const dxFrac = lonOff / (CHMI_E - CHMI_W);
+  const dyFrac = -mercOff / (mercY(CHMI_N) - mercY(CHMI_S));
 
   return {
     dxPx,
     dyPx,
-    dxFrac: dxPx / older.width,
-    dyFrac: dyPx / older.height,
+    dxFrac,
+    dyFrac,
     stepSec,
     score: fine.score,
     speedKmh: (km / stepSec) * 3600,
@@ -309,44 +353,99 @@ export async function estimateRadarMotion(
     if (!older) continue;
     const stepSec = newestFirst[i].time - newestFirst[i + 1].time;
     if (stepSec <= 0) continue;
-    const motion = estimateFromPixels(older, newer, stepSec);
+    const motion = estimateFromPixels(
+      older,
+      newer,
+      stepSec,
+      echoScore,
+      { lonW: CHMI_W, lonE: CHMI_E, latS: CHMI_S, latN: CHMI_N },
+      COARSE,
+      FINE,
+    );
     if (motion) return motion;
   }
   return null;
 }
 
-type Corners = [
+export async function estimateCloudMotion(
+  newestFirst: { time: number; url: string }[],
+): Promise<RadarMotion | null> {
+  const geo: GeoRect = {
+    lonW: CHMI_SAT_CZ_BOUNDS.w,
+    lonE: CHMI_SAT_CZ_BOUNDS.e,
+    latS: CHMI_SAT_CZ_BOUNDS.s,
+    latN: CHMI_SAT_CZ_BOUNDS.n,
+  };
+  const pixels = new Map<number, ImageData | null>();
+  const read = async (f: {
+    time: number;
+    url: string;
+  }): Promise<ImageData | null> => {
+    if (pixels.has(f.time)) return pixels.get(f.time) ?? null;
+    let px: ImageData | null = null;
+    try {
+      px = readPixels(await loadImage(f.url));
+    } catch {
+      px = null;
+    }
+    pixels.set(f.time, px);
+    return px;
+  };
+
+  for (let i = 0; i + 1 < newestFirst.length; i++) {
+    const newer = await read(newestFirst[i]);
+    if (!newer) continue;
+    const older = await read(newestFirst[i + 1]);
+    if (!older) continue;
+    const stepSec = newestFirst[i].time - newestFirst[i + 1].time;
+    if (stepSec <= 0) continue;
+    const motion = estimateFromPixels(
+      older,
+      newer,
+      stepSec,
+      cloudScore,
+      geo,
+      SAT_COARSE,
+      SAT_FINE,
+    );
+    if (motion) return motion;
+  }
+  return null;
+}
+
+export type Corners = [
   [number, number],
   [number, number],
   [number, number],
   [number, number],
 ];
 
-const [[CHMI_S, CHMI_W], [CHMI_N, CHMI_E]] = CHMI_BOUNDS;
-
-function mercY(lat: number): number {
-  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-}
-
-function invMercY(y: number): number {
-  return ((Math.atan(Math.exp(y)) - Math.PI / 4) * 360) / Math.PI;
-}
-
-// Rohy snímku ČHMÚ posunuté o `minutes` podle odhadnutého vektoru. Snímek je
-// v EPSG:3857, takže posouváme v Mercatoru – jinak by se pole na severu a jihu
-// posunulo o různou vzdálenost.
-export function shiftedChmiCoords(m: RadarMotion, minutes: number): Corners {
+// Rohy overlaye posunuté o `minutes` podle vektoru. Posun je geografický
+// (stejné km). V Mercatoru, ať se pole na severu a jihu neposune o různou
+// vzdálenost.
+export function shiftCorners(
+  corners: Corners,
+  m: RadarMotion,
+  minutes: number,
+): Corners {
   const steps = (minutes * 60) / m.stepSec;
   const lonOff = m.dxFrac * steps * (CHMI_E - CHMI_W);
   const mercOff = -m.dyFrac * steps * (mercY(CHMI_N) - mercY(CHMI_S));
-  const at = (lon: number, lat: number): [number, number] => [
+  return corners.map(([lon, lat]) => [
     lon + lonOff,
     invMercY(mercY(lat) + mercOff),
-  ];
-  return [
-    at(CHMI_W, CHMI_N),
-    at(CHMI_E, CHMI_N),
-    at(CHMI_E, CHMI_S),
-    at(CHMI_W, CHMI_S),
-  ];
+  ]) as Corners;
+}
+
+export function shiftedChmiCoords(m: RadarMotion, minutes: number): Corners {
+  return shiftCorners(
+    [
+      [CHMI_W, CHMI_N],
+      [CHMI_E, CHMI_N],
+      [CHMI_E, CHMI_S],
+      [CHMI_W, CHMI_S],
+    ],
+    m,
+    minutes,
+  );
 }
