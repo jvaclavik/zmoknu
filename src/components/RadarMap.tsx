@@ -11,7 +11,13 @@ import {
   type OmForecastGrid,
   type OmAccumDaily,
 } from "../lib/omRadar";
-import { buildChmiRadar, CHMI_BOUNDS, isInChmiCoverage } from "../lib/chmi";
+import {
+  buildChmiRadar,
+  chmiFrameCanvas,
+  releaseChmiFrameCanvases,
+  CHMI_BOUNDS,
+  isInChmiCoverage,
+} from "../lib/chmi";
 import {
   precipColor,
   PRECIP_SCALE,
@@ -779,27 +785,39 @@ export default function RadarMap({
       });
     };
     const onSourceData = (e: maplibregl.MapSourceDataEvent) => {
-      if (e.isSourceLoaded) settle(e.sourceId, true);
+      if (!e.sourceId?.startsWith("radar-t-")) return;
+      if (
+        e.isSourceLoaded ||
+        e.sourceDataType === "metadata" ||
+        e.sourceDataType === "content" ||
+        e.sourceDataType === "idle"
+      ) {
+        settle(e.sourceId, true);
+      }
     };
     const onError = (e: maplibregl.ErrorEvent) => {
-      settle((e as { sourceId?: string }).sourceId, false);
+      const sid = (e as { sourceId?: string }).sourceId;
+      if (sid) settle(sid, false);
     };
-    // Když mapa „zklidní" (idle), jsou dlaždice viditelného snímku načtené –
-    // bereme to jako dokončení přednačítání (spolehlivější než sourcedata
-    // u průhledných vrstev).
     const onIdle = () => {
       const map = mapRef.current;
       if (!map) return;
-      setLoaded((prev) => {
-        let next = prev;
-        for (const id of radarSrcIds.current) {
-          if (prev.has(id)) continue;
-          if (!map.getSource(id) || !map.isSourceLoaded(id)) continue;
-          if (next === prev) next = new Set(prev);
-          next.add(id);
-        }
-        return next;
-      });
+      const bump = (kind: "loaded" | "ok") => {
+        const setter = kind === "ok" ? setSucceeded : setLoaded;
+        setter((prev) => {
+          let next = prev;
+          for (const id of radarSrcIds.current) {
+            if (prev.has(id)) continue;
+            if (kind === "ok" && failedSrcIds.current.has(id)) continue;
+            if (!map.getSource(id) || map.isSourceLoaded(id) !== true) continue;
+            if (next === prev) next = new Set(prev);
+            next.add(id);
+          }
+          return next;
+        });
+      };
+      bump("loaded");
+      bump("ok");
     };
     map.on("sourcedata", onSourceData);
     map.on("error", onError);
@@ -816,6 +834,7 @@ export default function RadarMap({
       }
       mapRef.current = null;
       setMapReady(false);
+      releaseChmiFrameCanvases(new Set());
     };
   }, []);
 
@@ -857,8 +876,8 @@ export default function RadarMap({
     };
   }, [basemap]);
 
-  // Přidání radarových snímků. Už načtené vrstvy (stejný čas) necháme být –
-  // při změně rozsahu jen dokládáme chybějící a schováme ty mimo okno.
+  // Přidání radarových snímků. ČHMÚ nejdřív dekódujeme sami (paletové PNG
+  // MapLibre často nenačte), RainViewer necháme na dlaždicích.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -875,12 +894,14 @@ export default function RadarMap({
 
     if (source === "omforecast" || source === "accum") {
       dropAllRadar();
+      releaseChmiFrameCanvases(new Set());
       radarKindRef.current = source;
       return;
     }
 
     if (radarKindRef.current !== source) {
       dropAllRadar();
+      if (source !== "chmi") releaseChmiFrameCanvases(new Set());
       radarKindRef.current = source;
     }
 
@@ -893,46 +914,131 @@ export default function RadarMap({
       setSucceeded(new Set());
     }
 
-    const before = labelsBeforeId(map);
-    const addFrame = (f: RadarFrame, show: boolean) => {
+    const addFrame = (
+      f: RadarFrame,
+      show: boolean,
+      canvas?: HTMLCanvasElement,
+    ) => {
+      const m = mapRef.current;
+      if (!m) return;
       const id = radarLayerId(f.time);
-      if (map.getSource(id)) return id;
-      if (source === "chmi") {
-        map.addSource(id, { type: "image", url: f.path, coordinates: CHMI_COORDS });
-      } else if (radar) {
-        map.addSource(id, {
-          type: "raster",
-          tiles: [radarTileUrl(radar.host, f.path)],
-          tileSize: 256,
-          maxzoom: 7,
-        });
-      } else {
-        return id;
-      }
-      map.addLayer(
-        {
-          id: `lyr-${id}`,
-          type: "raster",
-          source: id,
-          paint: {
-            "raster-opacity": show ? RADAR_OPACITY : 0,
-            "raster-opacity-transition": { duration: 0 },
-            "raster-fade-duration": 0,
+      if (m.getSource(id)) return id;
+      try {
+        if (source === "chmi") {
+          if (!canvas) return id;
+          m.addSource(id, {
+            type: "canvas",
+            canvas,
+            animate: false,
+            coordinates: CHMI_COORDS,
+          });
+        } else if (radar) {
+          m.addSource(id, {
+            type: "raster",
+            tiles: [radarTileUrl(radar.host, f.path)],
+            tileSize: 256,
+            maxzoom: 7,
+          });
+        } else {
+          return id;
+        }
+        m.addLayer(
+          {
+            id: `lyr-${id}`,
+            type: "raster",
+            source: id,
+            paint: {
+              "raster-opacity": show ? RADAR_OPACITY : 0,
+              "raster-opacity-transition": { duration: 0 },
+              "raster-fade-duration": 0,
+            },
           },
-        },
-        before,
-      );
-      if (!allRadarIds.current.includes(id)) allRadarIds.current.push(id);
+          labelsBeforeId(m),
+        );
+        if (!allRadarIds.current.includes(id)) allRadarIds.current.push(id);
+      } catch {
+        /* styl se zrovna mění */
+      }
       return id;
     };
 
+    const mark = (id: string, ok: boolean) => {
+      if (ok) {
+        failedSrcIds.current.delete(id);
+        setSucceeded((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      } else {
+        failedSrcIds.current.add(id);
+      }
+      setLoaded((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+    };
+
+    radarSrcIds.current = realFrames.map((f) => radarLayerId(f.time));
     const startIdx = Math.max(0, nowcastStart - 1);
     const startF = realFrames[startIdx];
-    const missing = realFrames.filter((f) => !map.getSource(radarLayerId(f.time)));
-    radarSrcIds.current = realFrames.map((f) => radarLayerId(f.time));
 
+    if (source === "chmi") {
+      let cancelled = false;
+      const rest = realFrames
+        .filter((f) => f.time !== startF?.time)
+        .sort((a, b) => b.time - a.time);
+
+      const addDecoded = async (f: RadarFrame, show: boolean) => {
+        const id = radarLayerId(f.time);
+        const m = mapRef.current;
+        if (m?.getSource(id)) {
+          if (!failedSrcIds.current.has(id)) mark(id, true);
+          return;
+        }
+        try {
+          const canvas = await chmiFrameCanvas(f.path);
+          if (cancelled) return;
+          addFrame(f, show, canvas);
+          if (mapRef.current?.getSource(id)) mark(id, true);
+          else mark(id, false);
+        } catch {
+          if (!cancelled) mark(id, false);
+        }
+      };
+
+      (async () => {
+        if (startF) await addDecoded(startF, true);
+        if (cancelled) return;
+        let i = 0;
+        const n = Math.min(8, rest.length);
+        await Promise.all(
+          Array.from({ length: n }, async () => {
+            while (i < rest.length && !cancelled) {
+              const f = rest[i++];
+              await addDecoded(f, false);
+            }
+          }),
+        );
+        if (!cancelled) {
+          const m = mapRef.current;
+          if (m) moveCloudsUnderPrecip(m);
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const missing = realFrames.filter((f) => !map.getSource(radarLayerId(f.time)));
     const startMissing = !!startF && missing.some((f) => f.time === startF.time);
-    const rest = missing.filter((f) => f.time !== startF?.time).sort((a, b) => b.time - a.time);
+    const rest = missing
+      .filter((f) => f.time !== startF?.time)
+      .sort((a, b) => b.time - a.time);
 
     let safety: number | undefined;
     let flushed = false;
@@ -960,7 +1066,13 @@ export default function RadarMap({
     else if (startF) addFrame(startF, false);
 
     function onFirstData(e: maplibregl.MapSourceDataEvent) {
-      if (startF && e.sourceId === radarLayerId(startF.time) && e.isSourceLoaded)
+      if (
+        startF &&
+        e.sourceId === radarLayerId(startF.time) &&
+        (e.isSourceLoaded ||
+          e.sourceDataType === "metadata" ||
+          e.sourceDataType === "content")
+      )
         flushRest();
     }
     function onFirstError(e: maplibregl.ErrorEvent) {
@@ -1097,28 +1209,23 @@ export default function RadarMap({
         : index;
 
     const pairReady = (i: number): boolean => {
-      if (source === "chmi" || source === "rain") {
+      if (source === "chmi") {
+        if (i < realFrames.length) {
+          const id = radarLayerId(realFrames[i].time);
+          if (!map.getSource(id) && !failedSrcIds.current.has(id)) return false;
+        }
+      } else if (source === "rain") {
         if (i < realFrames.length) {
           const id = radarLayerId(realFrames[i].time);
           if (
             map.getSource(id) &&
             !failedSrcIds.current.has(id) &&
-            !map.isSourceLoaded(id)
+            map.isSourceLoaded(id) !== true
           )
-            return false;
-        } else {
-          const id = `pred-src-${i - realFrames.length}`;
-          if (predReady && map.getSource(id) && !map.isSourceLoaded(id))
             return false;
         }
       }
-      if (cloudsOn) {
-        if (!satPainted) return false;
-        const fr = frames[i];
-        if (!fr) return true;
-        const id = cloudFrameId(fr.time);
-        if (map.getSource(id) && !map.isSourceLoaded(id)) return false;
-      }
+      if (cloudsOn && !satPainted) return false;
       return true;
     };
 
@@ -1181,9 +1288,7 @@ export default function RadarMap({
     };
     map.on("sourcedata", onData);
     map.on("error", onData);
-    const kick = window.setTimeout(() => {
-      if (pairReady(visualIndex)) apply();
-    }, 2000);
+    const kick = window.setTimeout(apply, 2000);
     return () => {
       map.off("sourcedata", onData);
       map.off("error", onData);
@@ -1200,6 +1305,7 @@ export default function RadarMap({
     anchorIdx,
     cloudsOn,
     satPainted,
+    succeeded,
   ]);
 
   // Předpovědní radar: spojitý rastr srážek z mřížky Open-Meteo jako image
@@ -1574,7 +1680,11 @@ export default function RadarMap({
   const errored =
     (source === "rain" && radarStatus === "error") ||
     (source === "omforecast" && omError) ||
-    (source === "accum" && accumError);
+    (source === "accum" && accumError) ||
+    (source === "chmi" &&
+      realFrames.length > 0 &&
+      loaded.size >= realFrames.length &&
+      succeeded.size === 0);
 
   // Po dokončení přednačtení přistaň na nejnovějším úspěšně načteném snímku –
   // nejnovější snímek ČHMÚ někdy ještě není k dispozici (404) a byl by prázdný.

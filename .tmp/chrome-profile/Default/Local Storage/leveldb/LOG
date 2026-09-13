@@ -1,0 +1,13 @@
+2026/09/13-15:54:45.411 3a9b25d Reusing MANIFEST /Users/janvaclavik/dev/zmoknu/.tmp/chrome-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/09/13-15:54:45.411 3a9b25d Recovering log #10
+2026/09/13-15:54:45.412 3a9b25d Level-0 table #12: started
+2026/09/13-15:54:45.441 3a9b25d Level-0 table #12: 34739 bytes OK
+2026/09/13-15:54:45.445 3a9b25d Delete type=0 #10
+2026/09/13-15:54:45.447 3a9b260 Compacting 4@0 + 0@1 files
+2026/09/13-15:54:45.452 3a9b260 Generated table #14@0: 10 keys, 34988 bytes
+2026/09/13-15:54:45.452 3a9b260 Compacted 4@0 + 0@1 files => 34988 bytes
+2026/09/13-15:54:45.453 3a9b260 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/09/13-15:54:45.454 3a9b260 Delete type=2 #3
+2026/09/13-15:54:45.454 3a9b260 Delete type=2 #12
+2026/09/13-15:54:45.454 3a9b260 Delete type=2 #6
+2026/09/13-15:54:45.454 3a9b260 Delete type=2 #9

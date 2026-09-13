@@ -21,6 +21,51 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+function loadImg(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`chmi frame ${url}`));
+    img.src = url;
+  });
+}
+
+const canvasCache = new Map<string, HTMLCanvasElement>();
+const inflight = new Map<string, Promise<HTMLCanvasElement>>();
+
+// ČHMÚ PNG je indexovaná paleta + tRNS. MapLibre image source je tahá přes
+// fetch + createImageBitmap, což tyhle soubory (hlavně na WebKitu) nenačte.
+// Dekódujeme je Image+canvas a do mapy jdou jako canvas source.
+export function chmiFrameCanvas(path: string): Promise<HTMLCanvasElement> {
+  const hit = canvasCache.get(path);
+  if (hit) return Promise.resolve(hit);
+  const pending = inflight.get(path);
+  if (pending) return pending;
+  const job = (async () => {
+    const img = await loadImg(path);
+    if (!img.naturalWidth || !img.naturalHeight) throw new Error("empty frame");
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no 2d ctx");
+    ctx.drawImage(img, 0, 0);
+    canvasCache.set(path, canvas);
+    return canvas;
+  })().finally(() => {
+    inflight.delete(path);
+  });
+  inflight.set(path, job);
+  return job;
+}
+
+export function releaseChmiFrameCanvases(keep: Set<string>) {
+  for (const path of canvasCache.keys()) {
+    if (keep.has(path)) continue;
+    canvasCache.delete(path);
+  }
+}
+
 function frameUrl(d: Date): string {
   const y = d.getUTCFullYear();
   const stamp = `${y}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}.${pad(
