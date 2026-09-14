@@ -3,7 +3,7 @@ import { CHMI_BOUNDS } from "./chmi";
 import { CHMI_SAT_CZ_BOUNDS } from "./chmiSat";
 
 // Odhad posunu srážkového pole ze dvou po sobě jdoucích snímků radaru ČHMÚ.
-// Snímky jdou přes vlastní origin (/chmi-radar), takže je lze číst z canvasu
+// Snímky jdou přes /api/chmi-opendata (stejný origin), takže je lze číst z canvasu
 // bez CORS omezení. Výsledný vektor používá RadarMap na extrapolaci (predikci)
 // posledního snímku – klasická „Lagrangeovská perzistence": pole se nemění,
 // jen se posouvá.

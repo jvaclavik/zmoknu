@@ -2,9 +2,9 @@ import type { RadarData, RadarFrame } from "../types";
 
 // Radarová síť CZRAD (ČHMÚ) – sloučený snímek maximální odrazivosti.
 // Snímky jsou georeferencované PNG v projekci EPSG:3857 (kompatibilní s OSM).
-// ČHMÚ neposílá CORS hlavičky, takže obrázky tahá MapLibre přes proxy na
-// vlastním originu (/chmi-radar → opendata.chmi.cz; viz vercel.json a vite).
-const BASE = "/chmi-radar";
+// ČHMÚ neposílá CORS – taháme je přes /api/chmi-opendata (Vercel serverless,
+// lokálně vite dev-api), ať místo PNG nepřijde HTML ze SPA rewrite.
+const BASE = "/api/chmi-opendata";
 
 // Hranice celého obrázku (pro Leaflet ImageOverlay): [[jih, západ], [sever, východ]].
 export const CHMI_BOUNDS: [[number, number], [number, number]] = [
@@ -21,13 +21,29 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function loadImg(url: string): Promise<HTMLImageElement> {
+function loadImgEl(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`chmi frame ${url}`));
     img.src = url;
   });
+}
+
+async function loadImg(url: string): Promise<HTMLImageElement> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`chmi frame ${url} ${res.status}`);
+  const blob = await res.blob();
+  const type = blob.type || "";
+  if (type && !type.startsWith("image/") && type !== "application/octet-stream") {
+    throw new Error(`chmi frame not image: ${type}`);
+  }
+  const obj = URL.createObjectURL(blob);
+  try {
+    return await loadImgEl(obj);
+  } finally {
+    URL.revokeObjectURL(obj);
+  }
 }
 
 const canvasCache = new Map<string, HTMLCanvasElement>();
@@ -71,7 +87,9 @@ function frameUrl(d: Date): string {
   const stamp = `${y}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}.${pad(
     d.getUTCHours(),
   )}${pad(d.getUTCMinutes())}`;
-  return `${BASE}/pacz2gmaps3.z_max3d.${stamp}.0.png`;
+  return `${BASE}?kind=radar&file=${encodeURIComponent(
+    `pacz2gmaps3.z_max3d.${stamp}.0.png`,
+  )}`;
 }
 
 // Krok snímků podle stáří – u „teď" hustě, do minulosti řidčeji, ať nevzniká

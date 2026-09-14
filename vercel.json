@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/chmi-radar/:file",
-      "destination": "https://opendata.chmi.cz/meteorology/weather/radar/composite/maxz/png/:file"
+      "destination": "/api/chmi-opendata?kind=radar&file=:file"
     },
     {
       "source": "/chmi-sat/:path*",
-      "destination": "https://opendata.chmi.cz/meteorology/weather/satellite/geo/:path*"
+      "destination": "/api/chmi-opendata?kind=sat&file=:path*"
     },
     { "source": "/((?!api/).*)", "destination": "/" }
   ],

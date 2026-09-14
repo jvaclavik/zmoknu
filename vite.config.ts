@@ -7,6 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 const DEV_API_ROUTES = [
   "/api/precip-accum",
   "/api/chmi-alerts",
+  "/api/chmi-opendata",
   "/api/webcams",
 ];
 const devApi = (): PluginOption => ({
@@ -26,9 +27,8 @@ const devApi = (): PluginOption => ({
   },
 });
 
-// ČHMÚ opendata neposílá CORS hlavičky → obrázky radaru nejdou použít jako
-// WebGL textura. Proxujeme je přes vlastní origin (na Vercelu to řeší rewrite
-// ve vercel.json, lokálně tento dev proxy).
+// ČHMÚ opendata neposílá CORS. Klient tahá snímky z /api/chmi-opendata.
+// /chmi-radar a /chmi-sat proxy necháváme kvůli starým klientům / SW.
 export default defineConfig(({ mode }) => {
   // Non-VITE_ proměnné (např. WINDY_WEBCAMS_KEY) Vite do process.env sám nedává,
   // ale dev serverless funkce z /api je čtou odtud → zpřístupníme je ručně.
@@ -95,6 +95,20 @@ export default defineConfig(({ mode }) => {
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          {
+            urlPattern: /\/api\/chmi-opendata/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "chmi-opendata",
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/chmi-radar\//,
+          /^\/chmi-sat\//,
         ],
       },
     }),

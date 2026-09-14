@@ -1,9 +1,8 @@
 // Družicové kompozity ČHMÚ (Meteosat/SEVIRI) z opendata.chmi.cz. Snímky jsou
 // JPEG po 15 min v surové geostacionární projekci, takže je na web-mercator
 // mapu umisťujeme jen PŘIBLIŽNĚ (rohy odhadnuté, viz CHMI_SAT_CZ_BOUNDS).
-// ČHMÚ neposílá CORS hlavičky → obrázky tahá MapLibre přes proxy na vlastním
-// originu (/chmi-sat → …/satellite/geo; viz vercel.json a vite.config.ts).
-const BASE = "/chmi-sat";
+// ČHMÚ neposílá CORS – snímky jdou přes /api/chmi-opendata (stejný origin).
+const BASE = "/api/chmi-opendata";
 
 // Přibližné hranice výřezu „_cz" (GEOS projekce → orientační rámec).
 // Střed ~ (15° E, 49.8° N) ≈ ČR, poměr stran ladí s obrázkem 1160×800.
@@ -39,7 +38,9 @@ export function chmiSatUrl(
   const stamp =
     `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
     `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`;
-  return `${BASE}/${product}/${stamp}_geo_${product}_${region}.jpg`;
+  return `${BASE}?kind=sat&file=${encodeURIComponent(
+    `${product}/${stamp}_geo_${product}_${region}.jpg`,
+  )}`;
 }
 
 // Družicový IR snímek (šedotón: mraky světlé, čistá obloha tmavá) přepočítáme
