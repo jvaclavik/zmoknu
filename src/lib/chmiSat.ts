@@ -73,10 +73,8 @@ export async function cloudMaskUrl(
 
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
-  // IR 10.8: teplý povrch tmavý, studené mraky světlé. Původní šedý JPEG na
-  // světlé mapě splývá s terénem a slabý IR opar vypadá jako „všude zataženo".
-  // Tvrdší práh + S-křivka nechá jasno úplně průhledné; mraky přebarvíme na
-  // ocelově modrou, ať jsou poznat na světlé i tmavé podkladové mapě.
+  // IR 10.8: teplý povrch tmavý, studené mraky světlé. Jasno je průhledné,
+  // mraky plně kryté (hustota jen v barvě), ať přes ně neprosvítá mapa.
   const LO = 96;
   const HI = 176;
   for (let p = 0; p < d.length; p += 4) {
@@ -91,7 +89,7 @@ export async function cloudMaskUrl(
     d[p] = Math.round(118 + t * 110);
     d[p + 1] = Math.round(138 + t * 100);
     d[p + 2] = Math.round(175 + t * 80);
-    d[p + 3] = Math.round(36 + t * 172);
+    d[p + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
 

@@ -30,55 +30,62 @@ function loadImgEl(url: string): Promise<HTMLImageElement> {
   });
 }
 
-async function loadImg(url: string): Promise<HTMLImageElement> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`chmi frame ${url} ${res.status}`);
-  const blob = await res.blob();
-  const type = blob.type || "";
-  if (type && !type.startsWith("image/") && type !== "application/octet-stream") {
-    throw new Error(`chmi frame not image: ${type}`);
-  }
-  const obj = URL.createObjectURL(blob);
-  try {
-    return await loadImgEl(obj);
-  } finally {
-    URL.revokeObjectURL(obj);
-  }
+function isPng(buf: ArrayBuffer): boolean {
+  const u8 = new Uint8Array(buf);
+  return u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47;
 }
 
-const canvasCache = new Map<string, HTMLCanvasElement>();
-const inflight = new Map<string, Promise<HTMLCanvasElement>>();
-
-// ČHMÚ PNG je indexovaná paleta + tRNS. MapLibre image source je tahá přes
-// fetch + createImageBitmap, což tyhle soubory (hlavně na WebKitu) nenačte.
-// Dekódujeme je Image+canvas a do mapy jdou jako canvas source.
-export function chmiFrameCanvas(path: string): Promise<HTMLCanvasElement> {
-  const hit = canvasCache.get(path);
-  if (hit) return Promise.resolve(hit);
-  const pending = inflight.get(path);
-  if (pending) return pending;
-  const job = (async () => {
-    const img = await loadImg(path);
+// Paletové PNG + tRNS MapLibre přes createImageBitmap nenačte. Překreslíme
+// do RGBA a MapLibre dostane blob URL obyčejného PNG.
+async function rgbaPngUrl(path: string): Promise<string> {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`chmi frame ${path} ${res.status}`);
+  const buf = await res.arrayBuffer();
+  if (!isPng(buf)) throw new Error("chmi frame not png");
+  const src = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
+  try {
+    const img = await loadImgEl(src);
     if (!img.naturalWidth || !img.naturalHeight) throw new Error("empty frame");
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d ctx");
     ctx.drawImage(img, 0, 0);
-    canvasCache.set(path, canvas);
-    return canvas;
-  })().finally(() => {
-    inflight.delete(path);
-  });
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/png");
+    });
+    return URL.createObjectURL(blob);
+  } finally {
+    URL.revokeObjectURL(src);
+  }
+}
+
+const urlCache = new Map<string, string>();
+const inflight = new Map<string, Promise<string>>();
+
+export function chmiDisplayUrl(path: string): Promise<string> {
+  const hit = urlCache.get(path);
+  if (hit) return Promise.resolve(hit);
+  const pending = inflight.get(path);
+  if (pending) return pending;
+  const job = rgbaPngUrl(path)
+    .then((url) => {
+      urlCache.set(path, url);
+      return url;
+    })
+    .finally(() => {
+      inflight.delete(path);
+    });
   inflight.set(path, job);
   return job;
 }
 
-export function releaseChmiFrameCanvases(keep: Set<string>) {
-  for (const path of canvasCache.keys()) {
+export function releaseChmiDisplayUrls(keep: Set<string>) {
+  for (const [path, url] of urlCache) {
     if (keep.has(path)) continue;
-    canvasCache.delete(path);
+    URL.revokeObjectURL(url);
+    urlCache.delete(path);
   }
 }
 

@@ -661,9 +661,6 @@ const EN: Record<string, string> = {
   "ČHMÚ · ČR": "ČHMÚ · CZ",
   "RainViewer · svět": "RainViewer · world",
   Interval: "Interval",
-  Mapa: "Map",
-  Světlá: "Light",
-  Tmavá: "Dark",
   Vrstvy: "Layers",
   "Vrstva oblačnosti vyžaduje API klíč OpenWeatherMap.":
     "The cloud layer requires an OpenWeatherMap API key.",

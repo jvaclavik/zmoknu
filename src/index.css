@@ -6554,34 +6554,6 @@ html.radar-open body {
 .radar-canvas .maplibregl-ctrl-logo {
   display: none;
 }
-.radar-basemap {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 650;
-  display: flex;
-  gap: 3px;
-  padding: 3px;
-  background: rgba(var(--panel-rgb), 0.78);
-  border: 1px solid var(--card-border);
-  border-radius: 999px;
-  backdrop-filter: blur(6px);
-}
-.radar-basemap button {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 500;
-  padding: 5px 11px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.radar-basemap button.active {
-  background: var(--accent);
-  color: #05203a;
-}
 @media (min-width: 920px) {
   .radar-map {
     height: 520px;

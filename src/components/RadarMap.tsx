@@ -13,8 +13,8 @@ import {
 } from "../lib/omRadar";
 import {
   buildChmiRadar,
-  chmiFrameCanvas,
-  releaseChmiFrameCanvases,
+  chmiDisplayUrl,
+  releaseChmiDisplayUrls,
   CHMI_BOUNDS,
   isInChmiCoverage,
 } from "../lib/chmi";
@@ -45,7 +45,8 @@ import {
   type LocalPrecip,
 } from "../lib/radarNowcast";
 import { tr, getLang } from "../lib/i18n";
-import { darkStyle, loadTouristStyle, loadTouristDarkStyle } from "../lib/mapStyle";
+import { darkStyle, loadTouristStyle } from "../lib/mapStyle";
+import { fadeRadarBasemap } from "../lib/fadeMapStyle";
 import { useStoredState } from "../lib/useStoredState";
 import { useBodyScrollLock } from "../lib/scrollLock";
 import { fetchWebcams, type Webcam } from "../lib/webcams";
@@ -53,8 +54,6 @@ import { reverseGeocode } from "../lib/openMeteo";
 import WebcamModal from "./WebcamModal";
 import { sameLocation } from "./FavoritesBar";
 import LocationArrowGlyph from "./LocationArrowGlyph";
-
-type Basemap = "tourist" | "dark";
 
 interface Props {
   location: GeoLocation;
@@ -305,14 +304,32 @@ const MERGE_DATA_COORDINATES: Corners = [
   [11.266869, 48.047275],
 ];
 
-// ID první vrstvy podkladu, nad kterou chceme nechat hranice států a popisky
-// (města, země) – radar/oblačnost vkládáme PŘED ni, ať jsou popisky navrchu.
+// Nahoře zůstanou jen státní hranice a názvy měst/zemí. Kraje, silnice a
+// ostatní jdou pod radar a oblačnost.
+function isKeepOnTopLayer(l: { id: string; type?: string; "source-layer"?: string }) {
+  if (l.id.startsWith("lyr-")) return false;
+  if (/^boundary_country($|_)/i.test(l.id)) return true;
+  if (l.type !== "symbol") return false;
+  const sl = l["source-layer"] ?? "";
+  if (sl === "place" || sl === "country" || sl === "continent") return true;
+  return /^(place|country|continent)([-_]|$)/i.test(l.id);
+}
+
+function raiseLabelsAndBorders(map: maplibregl.Map) {
+  const layers = map.getStyle()?.layers ?? [];
+  for (const l of layers) {
+    if (!isKeepOnTopLayer(l)) continue;
+    try {
+      map.moveLayer(l.id);
+    } catch {
+      /* vrstva zrovna není ve stylu */
+    }
+  }
+}
+
 function labelsBeforeId(map: maplibregl.Map): string | undefined {
   const layers = map.getStyle()?.layers ?? [];
-  const hit = layers.find(
-    (l) => l.id.startsWith("boundary") || l.type === "symbol",
-  );
-  return hit?.id;
+  return layers.find(isKeepOnTopLayer)?.id;
 }
 
 function precipBottomLayerId(map: maplibregl.Map): string | undefined {
@@ -382,7 +399,7 @@ export default function RadarMap({
   const [chmiTick, setChmiTick] = useState(0);
   const [chmiHours, setChmiHours] = useStoredState<number>("zmoknu.chmiHours", 6);
   const [mapReady, setMapReady] = useState(false);
-  const [basemap, setBasemap] = useStoredState<Basemap>("zmoknu.basemap", "tourist");
+  const [mapFailed, setMapFailed] = useState(false);
   const [showClouds, setShowClouds] = useStoredState<boolean>(
     "zmoknu.radarClouds",
     false,
@@ -749,16 +766,22 @@ export default function RadarMap({
     };
   }, [source, anchor, motionReady]);
 
-  // Inicializace mapy (jednou).
+  // Inicializace mapy (jednou). Výjimka z WebGL nesmí shodit celou appku.
   useEffect(() => {
     if (!containerRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: { version: 8, sources: {}, layers: [] },
-      center: initialCenter.current,
-      zoom: 7,
-      attributionControl: false,
-    });
+    let map: maplibregl.Map;
+    try {
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: { version: 8, sources: {}, layers: [] },
+        center: initialCenter.current,
+        zoom: 7,
+        attributionControl: false,
+      });
+    } catch {
+      setMapFailed(true);
+      return;
+    }
     mapRef.current = map;
 
     // Snímek považujeme za „vyřízený", když se zdroj načte NEBO selže (404 ap.)
@@ -834,11 +857,11 @@ export default function RadarMap({
       }
       mapRef.current = null;
       setMapReady(false);
-      releaseChmiFrameCanvases(new Set());
+      releaseChmiDisplayUrls(new Set());
     };
   }, []);
 
-  // Aplikace stylu podle zvoleného podkladu (turistický / tmavý).
+  // Ztlumený turistický podklad (když MapTiler selže, spadne na tmavý CARTO).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -847,7 +870,9 @@ export default function RadarMap({
     setMapReady(false);
     radarSrcIds.current = [];
     const markReady = () => {
-      if (!cancelled) setMapReady(true);
+      if (cancelled) return;
+      raiseLabelsAndBorders(map);
+      setMapReady(true);
     };
     const applyStyle = (style: maplibregl.StyleSpecification) => {
       if (cancelled) return;
@@ -866,18 +891,18 @@ export default function RadarMap({
         }
       }, 150);
     };
-    const loader = basemap === "dark" ? loadTouristDarkStyle : loadTouristStyle;
-    loader()
-      .then(applyStyle)
+    loadTouristStyle()
+      .then((style) => applyStyle(fadeRadarBasemap(style)))
       .catch(() => applyStyle(darkStyle));
     return () => {
       cancelled = true;
       if (poll) window.clearInterval(poll);
     };
-  }, [basemap]);
+  }, []);
 
   // Přidání radarových snímků. ČHMÚ nejdřív dekódujeme sami (paletové PNG
-  // MapLibre často nenačte), RainViewer necháme na dlaždicích.
+  // MapLibre často nenačte) a na mapu jdou jako RGBA image source.
+  // RainViewer necháme na dlaždicích.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -894,14 +919,14 @@ export default function RadarMap({
 
     if (source === "omforecast" || source === "accum") {
       dropAllRadar();
-      releaseChmiFrameCanvases(new Set());
+      releaseChmiDisplayUrls(new Set());
       radarKindRef.current = source;
       return;
     }
 
     if (radarKindRef.current !== source) {
       dropAllRadar();
-      if (source !== "chmi") releaseChmiFrameCanvases(new Set());
+      if (source !== "chmi") releaseChmiDisplayUrls(new Set());
       radarKindRef.current = source;
     }
 
@@ -917,7 +942,7 @@ export default function RadarMap({
     const addFrame = (
       f: RadarFrame,
       show: boolean,
-      canvas?: HTMLCanvasElement,
+      url?: string,
     ) => {
       const m = mapRef.current;
       if (!m) return;
@@ -925,11 +950,10 @@ export default function RadarMap({
       if (m.getSource(id)) return id;
       try {
         if (source === "chmi") {
-          if (!canvas) return id;
+          if (!url) return id;
           m.addSource(id, {
-            type: "canvas",
-            canvas,
-            animate: false,
+            type: "image",
+            url,
             coordinates: CHMI_COORDS,
           });
         } else if (radar) {
@@ -1000,9 +1024,9 @@ export default function RadarMap({
           return;
         }
         try {
-          const canvas = await chmiFrameCanvas(f.path);
+          const url = await chmiDisplayUrl(f.path);
           if (cancelled) return;
-          addFrame(f, show, canvas);
+          addFrame(f, show, url);
           if (mapRef.current?.getSource(id)) mark(id, true);
           else mark(id, false);
         } catch {
@@ -1158,28 +1182,37 @@ export default function RadarMap({
     clear();
     if (!predKey || !motion || !predImg || !predFrames.length) return;
 
-    const before = labelsBeforeId(map);
+    let before: string | undefined;
+    try {
+      before = labelsBeforeId(map);
+    } catch {
+      before = undefined;
+    }
     predFrames.forEach((_f, k) => {
       const id = `pred-src-${k}`;
-      map.addSource(id, {
-        type: "image",
-        url: predImg,
-        coordinates: shiftedChmiCoords(motion, (k + 1) * PRED_STEP_MIN),
-      });
-      map.addLayer(
-        {
-          id: `lyr-${id}`,
-          type: "raster",
-          source: id,
-          paint: {
-            "raster-opacity": 0,
-            "raster-opacity-transition": { duration: 0 },
-            "raster-fade-duration": 0,
+      try {
+        map.addSource(id, {
+          type: "image",
+          url: predImg,
+          coordinates: shiftedChmiCoords(motion, (k + 1) * PRED_STEP_MIN),
+        });
+        map.addLayer(
+          {
+            id: `lyr-${id}`,
+            type: "raster",
+            source: id,
+            paint: {
+              "raster-opacity": 0,
+              "raster-opacity-transition": { duration: 0 },
+              "raster-fade-duration": 0,
+            },
           },
-        },
-        before,
-      );
-      predSrcIds.current.push(id);
+          before,
+        );
+        predSrcIds.current.push(id);
+      } catch {
+        /* styl se zrovna mění */
+      }
     });
     moveCloudsUnderPrecip(map);
     return clear;
@@ -1232,47 +1265,51 @@ export default function RadarMap({
     const apply = () => {
       const m = mapRef.current;
       if (!m) return;
-      if (source === "omforecast") {
-        const src = m.getSource(OMF_ID) as maplibregl.ImageSource | undefined;
-        const url = omfFrameUrl(index);
-        if (src && url) src.updateImage({ url });
-      } else if (source !== "accum") {
-        const visId =
-          visualIndex < realFrames.length
-            ? radarLayerId(realFrames[visualIndex].time)
-            : null;
-        for (const id of allRadarIds.current) {
-          const lyr = `lyr-${id}`;
-          if (!m.getLayer(lyr)) continue;
-          m.setPaintProperty(
-            lyr,
-            "raster-opacity",
-            visId === id ? RADAR_OPACITY : 0,
-          );
-        }
-        predFrames.forEach((_, k) => {
-          const lyr = `lyr-pred-src-${k}`;
-          if (m.getLayer(lyr)) {
+      try {
+        if (source === "omforecast") {
+          const src = m.getSource(OMF_ID) as maplibregl.ImageSource | undefined;
+          const url = omfFrameUrl(index);
+          if (src && url) src.updateImage({ url });
+        } else if (source !== "accum") {
+          const visId =
+            visualIndex < realFrames.length
+              ? radarLayerId(realFrames[visualIndex].time)
+              : null;
+          for (const id of allRadarIds.current) {
+            const lyr = `lyr-${id}`;
+            if (!m.getLayer(lyr)) continue;
             m.setPaintProperty(
               lyr,
               "raster-opacity",
-              predReady && realFrames.length + k === visualIndex
-                ? predOpacity(k + 1)
-                : 0,
+              visId === id ? RADAR_OPACITY : 0,
             );
           }
-        });
-      }
-      if (cloudsOn) {
-        const vis = frames[visualIndex];
-        const visCloud = vis ? cloudFrameId(vis.time) : null;
-        for (const id of cloudSrcIds.current) {
-          const lyr = `lyr-${id}`;
-          if (!m.getLayer(lyr)) continue;
-          m.setPaintProperty(lyr, "raster-opacity", id === visCloud ? 1 : 0);
+          predFrames.forEach((_, k) => {
+            const lyr = `lyr-pred-src-${k}`;
+            if (m.getLayer(lyr)) {
+              m.setPaintProperty(
+                lyr,
+                "raster-opacity",
+                predReady && realFrames.length + k === visualIndex
+                  ? predOpacity(k + 1)
+                  : 0,
+              );
+            }
+          });
         }
+        if (cloudsOn) {
+          const vis = frames[visualIndex];
+          const visCloud = vis ? cloudFrameId(vis.time) : null;
+          for (const id of cloudSrcIds.current) {
+            const lyr = `lyr-${id}`;
+            if (!m.getLayer(lyr)) continue;
+            m.setPaintProperty(lyr, "raster-opacity", id === visCloud ? 1 : 0);
+          }
+        }
+        m.triggerRepaint();
+      } catch {
+        /* styl se zrovna mění */
       }
-      m.triggerRepaint();
     };
 
     if (pairReady(visualIndex)) {
@@ -1345,7 +1382,7 @@ export default function RadarMap({
     );
     setIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, source, omKey, basemap]);
+  }, [mapReady, source, omKey]);
 
   // Úhrn srážek: image overlay (mm) – z ČHMÚ MERGE nebo z Open-Meteo fallbacku.
   const accKey = accumImg?.url ?? "";
@@ -1376,7 +1413,7 @@ export default function RadarMap({
       labelsBeforeId(map),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, source, accKey, basemap]);
+  }, [mapReady, source, accKey]);
 
   // Satelitní snímek platný v čase t (poslední načtený ≤ t). Když je radar
   // mezi 15min sloty družice, overlay se posune advekcí – viz cloudShiftMin.
@@ -1483,28 +1520,36 @@ export default function RadarMap({
             : CHMI_SAT_CZ_COORDS;
         const existing = m.getSource(id) as maplibregl.ImageSource | undefined;
         if (existing) {
-          existing.setCoordinates(coords);
+          try {
+            existing.setCoordinates(coords);
+          } catch {
+            /* styl se zrovna mění */
+          }
           continue;
         }
-        m.addSource(id, {
-          type: "image",
-          url,
-          coordinates: coords,
-        });
-        m.addLayer(
-          {
-            id: `lyr-${id}`,
-            type: "raster",
-            source: id,
-            paint: {
-              "raster-opacity": 0,
-              "raster-opacity-transition": { duration: 0 },
-              "raster-fade-duration": 0,
+        try {
+          m.addSource(id, {
+            type: "image",
+            url,
+            coordinates: coords,
+          });
+          m.addLayer(
+            {
+              id: `lyr-${id}`,
+              type: "raster",
+              source: id,
+              paint: {
+                "raster-opacity": 0,
+                "raster-opacity-transition": { duration: 0 },
+                "raster-fade-duration": 0,
+              },
             },
-          },
-          beforeId,
-        );
-        if (!cloudSrcIds.current.includes(id)) cloudSrcIds.current.push(id);
+            beforeId,
+          );
+          if (!cloudSrcIds.current.includes(id)) cloudSrcIds.current.push(id);
+        } catch {
+          /* styl se zrovna mění */
+        }
       }
       if (!cancelled) {
         moveCloudsUnderPrecip(m);
@@ -1517,7 +1562,7 @@ export default function RadarMap({
       ac.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, cloudsOn, satKey, basemap, framesKey, source, motion, cloudMotion]);
+  }, [mapReady, cloudsOn, satKey, framesKey, source, motion, cloudMotion]);
 
   useEffect(() => {
     return () => {
@@ -1526,7 +1571,7 @@ export default function RadarMap({
       cloudSrcIds.current = [];
       satLoadedRef.current = [];
     };
-  }, [source, basemap]);
+  }, [source]);
 
   // Markery: moje poloha (GPS) + oblíbená (hvězdička) + aktuální místo (puls).
   // Tři vizuálně odlišené typy, ať je jasné, co je co.
@@ -1678,6 +1723,7 @@ export default function RadarMap({
           (!cloudsOn || satPainted);
 
   const errored =
+    mapFailed ||
     (source === "rain" && radarStatus === "error") ||
     (source === "omforecast" && omError) ||
     (source === "accum" && accumError) ||
@@ -2087,24 +2133,6 @@ export default function RadarMap({
           )}
 
           <div className="radar-set-group">
-            <span className="radar-set-label">{tr("Mapa")}</span>
-            <div className="radar-seg">
-              <button
-                className={basemap === "tourist" ? "active" : ""}
-                onClick={() => setBasemap("tourist")}
-              >
-                {tr("Světlá")}
-              </button>
-              <button
-                className={basemap === "dark" ? "active" : ""}
-                onClick={() => setBasemap("dark")}
-              >
-                {tr("Tmavá")}
-              </button>
-            </div>
-          </div>
-
-          <div className="radar-set-group">
             <span className="radar-set-label">{tr("Vrstvy")}</span>
             <label className="radar-toggle">
               <input
@@ -2233,7 +2261,7 @@ export default function RadarMap({
         ) : null}
 
         <div className="radar-attr">
-          © OSM · {basemap === "tourist" ? "MapTiler" : "CARTO"} ·{" "}
+          © OSM · MapTiler ·{" "}
           {source === "chmi" || (source === "accum" && accumChmi)
             ? "ČHMÚ"
             : source === "omforecast" || source === "accum"

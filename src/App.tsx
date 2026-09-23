@@ -24,6 +24,7 @@ import InstallHint from "./components/InstallHint";
 import Meteogram from "./components/Meteogram";
 import NotifySettings from "./components/NotifySettings";
 import ReloadPrompt from "./components/ReloadPrompt";
+import RadarErrorBoundary from "./components/RadarErrorBoundary";
 import SearchBar from "./components/SearchBar";
 import Skeleton from "./components/Skeleton";
 import SmartSummary from "./components/SmartSummary";
@@ -1740,19 +1741,21 @@ export default function App() {
       )}
       {radarMounted && (
         <Suspense fallback={null}>
-          <RadarMap
-            location={location}
-            radar={radar}
-            radarStatus={radarStatus}
-            favorites={favorites}
-            onSelect={selectLocation}
-            onLocate={handleLocate}
-            followLocation={followLocation}
-            locating={locating}
-            modal
-            visible={radarOpen}
-            onClose={() => setTab("forecast")}
-          />
+          <RadarErrorBoundary>
+            <RadarMap
+              location={location}
+              radar={radar}
+              radarStatus={radarStatus}
+              favorites={favorites}
+              onSelect={selectLocation}
+              onLocate={handleLocate}
+              followLocation={followLocation}
+              locating={locating}
+              modal
+              visible={radarOpen}
+              onClose={() => setTab("forecast")}
+            />
+          </RadarErrorBoundary>
         </Suspense>
       )}
 
