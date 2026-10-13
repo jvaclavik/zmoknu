@@ -14,10 +14,12 @@ import {
 import {
   buildChmiRadar,
   chmiDisplayUrl,
+  peekChmiDisplayUrl,
   releaseChmiDisplayUrls,
   CHMI_BOUNDS,
   isInChmiCoverage,
 } from "../lib/chmi";
+import { isLowMemoryClient, mapPixelRatio } from "../lib/lowMemory";
 import {
   precipColor,
   PRECIP_SCALE,
@@ -86,6 +88,12 @@ const PRED_STEP_MIN = 10;
 const PRED_HORIZON_MIN = 60;
 const PRED_STEPS = PRED_HORIZON_MIN / PRED_STEP_MIN;
 const PRED_MIN_OPACITY = RADAR_OPACITY * 0.5;
+const PRED_ID = "pred-live";
+const LOW_MEM = isLowMemoryClient();
+// Na iOS Safari drží každá image-source celou GPU texturu. 6 h ČHMÚ = ~36
+// vrstev → jetsam (vypadá to jako reload appky). Na mapě necháme jen okno
+// kolem aktuálního snímku, zbytek zůstane jako blob URL.
+const GPU_KEEP = LOW_MEM ? 5 : Number.POSITIVE_INFINITY;
 
 const CHMI_HOURS_MIN = 3;
 const CHMI_HOURS_MAX = 72;
@@ -133,6 +141,21 @@ function ptDist(a: { x: number; y: number }, b: { x: number; y: number }) {
 
 function radarLayerId(time: number) {
   return `radar-t-${time}`;
+}
+
+function gpuKeepIndices(center: number, len: number, keep: number): Set<number> {
+  const out = new Set<number>();
+  if (len <= 0) return out;
+  if (!Number.isFinite(keep) || keep >= len) {
+    for (let i = 0; i < len; i++) out.add(i);
+    return out;
+  }
+  const half = Math.floor(keep / 2);
+  let from = Math.max(0, center - half);
+  let to = Math.min(len, from + keep);
+  from = Math.max(0, to - keep);
+  for (let i = from; i < to; i++) out.add(i);
+  return out;
 }
 
 function cloudFrameId(time: number) {
@@ -337,7 +360,7 @@ function precipBottomLayerId(map: maplibregl.Map): string | undefined {
   const hit = layers.find(
     (l) =>
       l.id.startsWith("lyr-radar-t-") ||
-      l.id.startsWith("lyr-pred-src-") ||
+      l.id.startsWith("lyr-pred-") ||
       l.id === `lyr-${OMF_ID}` ||
       l.id === `lyr-${ACC_ID}`,
   );
@@ -716,17 +739,22 @@ export default function RadarMap({
       return;
     }
     let cancelled = false;
-    estimateRadarMotion(
-      realFrames.slice(Math.max(0, anchorIdx - 3), anchorIdx + 1).reverse(),
-    )
-      .then((m) => {
-        if (!cancelled) setMotion(m);
-      })
-      .catch(() => {
-        if (!cancelled) setMotion(null);
-      });
+    const run = () => {
+      if (cancelled) return;
+      estimateRadarMotion(
+        realFrames.slice(Math.max(0, anchorIdx - 3), anchorIdx + 1).reverse(),
+      )
+        .then((m) => {
+          if (!cancelled) setMotion(m);
+        })
+        .catch(() => {
+          if (!cancelled) setMotion(null);
+        });
+    };
+    const t = window.setTimeout(run, LOW_MEM ? 1200 : 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, realFrames, anchorIdx, motionReady]);
@@ -758,35 +786,35 @@ export default function RadarMap({
       return;
     }
     let cancelled = false;
+    let created: string | null = null;
     echoOnlyImage(anchor.path).then((url) => {
-      if (!cancelled) setPredImg(url);
+      if (cancelled) {
+        if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+        return;
+      }
+      created = url;
+      setPredImg(url);
     });
     return () => {
       cancelled = true;
+      if (created?.startsWith("blob:")) URL.revokeObjectURL(created);
     };
   }, [source, anchor, motionReady]);
 
   // Inicializace mapy (jednou). Výjimka z WebGL nesmí shodit celou appku.
   useEffect(() => {
     if (!containerRef.current) return;
-    let map: maplibregl.Map;
-    try {
-      map = new maplibregl.Map({
-        container: containerRef.current,
-        style: { version: 8, sources: {}, layers: [] },
-        center: initialCenter.current,
-        zoom: 7,
-        attributionControl: false,
-      });
-    } catch {
+    let map: maplibregl.Map | null = null;
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
       setMapFailed(true);
-      return;
-    }
-    mapRef.current = map;
-
-    // Snímek považujeme za „vyřízený", když se zdroj načte NEBO selže (404 ap.)
-    // – jinak by se počítadlo zaseklo a přednačítání by nikdy neskončilo.
-    // U selhání (ok=false) si snímek značíme, ať na prázdný snímek nepřistaneme.
+      try {
+        map?.remove();
+      } catch {
+        /* už je pryč */
+      }
+      mapRef.current = null;
+    };
     const settle = (sourceId?: string, ok = true) => {
       if (!sourceId?.startsWith("radar-t-")) return;
       if (ok) {
@@ -823,8 +851,8 @@ export default function RadarMap({
       if (sid) settle(sid, false);
     };
     const onIdle = () => {
-      const map = mapRef.current;
-      if (!map) return;
+      const live = mapRef.current;
+      if (!live) return;
       const bump = (kind: "loaded" | "ok") => {
         const setter = kind === "ok" ? setSucceeded : setLoaded;
         setter((prev) => {
@@ -832,7 +860,7 @@ export default function RadarMap({
           for (const id of radarSrcIds.current) {
             if (prev.has(id)) continue;
             if (kind === "ok" && failedSrcIds.current.has(id)) continue;
-            if (!map.getSource(id) || map.isSourceLoaded(id) !== true) continue;
+            if (!live.getSource(id) || live.isSourceLoaded(id) !== true) continue;
             if (next === prev) next = new Set(prev);
             next.add(id);
           }
@@ -842,18 +870,47 @@ export default function RadarMap({
       bump("loaded");
       bump("ok");
     };
-    map.on("sourcedata", onSourceData);
-    map.on("error", onError);
-    map.on("idle", onIdle);
-
-    return () => {
-      map.off("sourcedata", onSourceData);
-      map.off("error", onError);
-      map.off("idle", onIdle);
+    const boot = () => {
+      if (!containerRef.current) return;
       try {
-        map.remove();
+        map = new maplibregl.Map({
+          container: containerRef.current,
+          style: { version: 8, sources: {}, layers: [] },
+          center: initialCenter.current,
+          zoom: 7,
+          attributionControl: false,
+          pixelRatio: mapPixelRatio(),
+          maxTileCacheSize: LOW_MEM ? 32 : 80,
+          fadeDuration: 0,
+          canvasContextAttributes: {
+            antialias: false,
+            powerPreference: LOW_MEM ? "low-power" : "default",
+            preserveDrawingBuffer: false,
+            failIfMajorPerformanceCaveat: false,
+          },
+        });
       } catch {
-        /* mapa už může být zničená */
+        setMapFailed(true);
+        return;
+      }
+      mapRef.current = map;
+      map.getCanvas().addEventListener("webglcontextlost", onContextLost);
+      map.on("sourcedata", onSourceData);
+      map.on("error", onError);
+      map.on("idle", onIdle);
+    };
+    boot();
+    return () => {
+      if (map) {
+        map.getCanvas().removeEventListener("webglcontextlost", onContextLost);
+        map.off("sourcedata", onSourceData);
+        map.off("error", onError);
+        map.off("idle", onIdle);
+        try {
+          map.remove();
+        } catch {
+          /* mapa už může být zničená */
+        }
       }
       mapRef.current = null;
       setMapReady(false);
@@ -1009,11 +1066,25 @@ export default function RadarMap({
     radarSrcIds.current = realFrames.map((f) => radarLayerId(f.time));
     const startIdx = Math.max(0, nowcastStart - 1);
     const startF = realFrames[startIdx];
+    const keepIdx = gpuKeepIndices(startIdx, realFrames.length, GPU_KEEP);
+    const keepTimes = new Set(
+      [...keepIdx].map((i) => realFrames[i]?.time).filter((t): t is number => t != null),
+    );
 
     if (source === "chmi") {
       let cancelled = false;
+      const prefetchIdx = gpuKeepIndices(
+        startIdx,
+        realFrames.length,
+        LOW_MEM ? 12 : Number.POSITIVE_INFINITY,
+      );
+      const prefetchTimes = new Set(
+        [...prefetchIdx]
+          .map((i) => realFrames[i]?.time)
+          .filter((t): t is number => t != null),
+      );
       const rest = realFrames
-        .filter((f) => f.time !== startF?.time)
+        .filter((f) => f.time !== startF?.time && prefetchTimes.has(f.time))
         .sort((a, b) => b.time - a.time);
 
       const addDecoded = async (f: RadarFrame, show: boolean) => {
@@ -1026,9 +1097,8 @@ export default function RadarMap({
         try {
           const url = await chmiDisplayUrl(f.path);
           if (cancelled) return;
-          addFrame(f, show, url);
-          if (mapRef.current?.getSource(id)) mark(id, true);
-          else mark(id, false);
+          if (keepTimes.has(f.time)) addFrame(f, show, url);
+          mark(id, true);
         } catch {
           if (!cancelled) mark(id, false);
         }
@@ -1038,12 +1108,15 @@ export default function RadarMap({
         if (startF) await addDecoded(startF, true);
         if (cancelled) return;
         let i = 0;
-        const n = Math.min(8, rest.length);
+        const n = Math.min(LOW_MEM ? 2 : 4, rest.length);
         await Promise.all(
           Array.from({ length: n }, async () => {
             while (i < rest.length && !cancelled) {
               const f = rest[i++];
               await addDecoded(f, false);
+              if (LOW_MEM) {
+                await new Promise((r) => window.setTimeout(r, 30));
+              }
             }
           }),
         );
@@ -1074,7 +1147,10 @@ export default function RadarMap({
       if (flushed) return;
       flushed = true;
       detach();
-      for (const f of rest) addFrame(f, false);
+      for (const f of rest) {
+        if (!keepTimes.has(f.time)) continue;
+        addFrame(f, false);
+      }
       moveCloudsUnderPrecip(map);
       const ids = radarSrcIds.current.slice();
       safety = window.setTimeout(() => {
@@ -1127,6 +1203,76 @@ export default function RadarMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, source, framesKey]);
+
+  // Na slabších telefonech držíme na GPU jen pár snímků kolem kurzoru.
+  useEffect(() => {
+    if (!Number.isFinite(GPU_KEEP)) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (source !== "chmi" && source !== "rain") return;
+    if (!realFrames.length) return;
+
+    const vis =
+      source === "chmi" && index >= realFrames.length
+        ? Math.max(0, realFrames.length - 1)
+        : Math.max(0, Math.min(index, realFrames.length - 1));
+    const keep = gpuKeepIndices(vis, realFrames.length, GPU_KEEP);
+    const keepIds = new Set<string>();
+
+    for (const i of keep) {
+      const f = realFrames[i];
+      if (!f) continue;
+      const id = radarLayerId(f.time);
+      keepIds.add(id);
+      if (map.getSource(id)) continue;
+      try {
+        if (source === "chmi") {
+          const url = peekChmiDisplayUrl(f.path);
+          if (!url) {
+            void chmiDisplayUrl(f.path);
+            continue;
+          }
+          map.addSource(id, {
+            type: "image",
+            url,
+            coordinates: CHMI_COORDS,
+          });
+        } else if (radar) {
+          map.addSource(id, {
+            type: "raster",
+            tiles: [radarTileUrl(radar.host, f.path)],
+            tileSize: 256,
+            maxzoom: 7,
+          });
+        } else {
+          continue;
+        }
+        map.addLayer(
+          {
+            id: `lyr-${id}`,
+            type: "raster",
+            source: id,
+            paint: {
+              "raster-opacity": 0,
+              "raster-opacity-transition": { duration: 0 },
+              "raster-fade-duration": 0,
+            },
+          },
+          labelsBeforeId(map),
+        );
+        if (!allRadarIds.current.includes(id)) allRadarIds.current.push(id);
+      } catch {
+        /* styl se zrovna mění */
+      }
+    }
+
+    allRadarIds.current = allRadarIds.current.filter((id) => {
+      if (keepIds.has(id)) return true;
+      dropMapSource(map, id);
+      return false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, mapReady, source, framesKey, succeeded, radar]);
 
   // Po změně okna zůstaň na stejném čase – jen přepočti index.
   useLayoutEffect(() => {
@@ -1188,32 +1334,29 @@ export default function RadarMap({
     } catch {
       before = undefined;
     }
-    predFrames.forEach((_f, k) => {
-      const id = `pred-src-${k}`;
-      try {
-        map.addSource(id, {
-          type: "image",
-          url: predImg,
-          coordinates: shiftedChmiCoords(motion, (k + 1) * PRED_STEP_MIN),
-        });
-        map.addLayer(
-          {
-            id: `lyr-${id}`,
-            type: "raster",
-            source: id,
-            paint: {
-              "raster-opacity": 0,
-              "raster-opacity-transition": { duration: 0 },
-              "raster-fade-duration": 0,
-            },
+    try {
+      map.addSource(PRED_ID, {
+        type: "image",
+        url: predImg,
+        coordinates: shiftedChmiCoords(motion, PRED_STEP_MIN),
+      });
+      map.addLayer(
+        {
+          id: `lyr-${PRED_ID}`,
+          type: "raster",
+          source: PRED_ID,
+          paint: {
+            "raster-opacity": 0,
+            "raster-opacity-transition": { duration: 0 },
+            "raster-fade-duration": 0,
           },
-          before,
-        );
-        predSrcIds.current.push(id);
-      } catch {
-        /* styl se zrovna mění */
-      }
-    });
+        },
+        before,
+      );
+      predSrcIds.current.push(PRED_ID);
+    } catch {
+      /* styl se zrovna mění */
+    }
     moveCloudsUnderPrecip(map);
     return clear;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1244,8 +1387,15 @@ export default function RadarMap({
     const pairReady = (i: number): boolean => {
       if (source === "chmi") {
         if (i < realFrames.length) {
-          const id = radarLayerId(realFrames[i].time);
-          if (!map.getSource(id) && !failedSrcIds.current.has(id)) return false;
+          const f = realFrames[i];
+          const id = radarLayerId(f.time);
+          if (failedSrcIds.current.has(id)) return true;
+          if (
+            !map.getSource(id) &&
+            !succeeded.has(id) &&
+            !peekChmiDisplayUrl(f.path)
+          )
+            return false;
         }
       } else if (source === "rain") {
         if (i < realFrames.length) {
@@ -1284,18 +1434,29 @@ export default function RadarMap({
               visId === id ? RADAR_OPACITY : 0,
             );
           }
-          predFrames.forEach((_, k) => {
-            const lyr = `lyr-pred-src-${k}`;
-            if (m.getLayer(lyr)) {
-              m.setPaintProperty(
-                lyr,
-                "raster-opacity",
-                predReady && realFrames.length + k === visualIndex
-                  ? predOpacity(k + 1)
-                  : 0,
-              );
+          const predLyr = `lyr-${PRED_ID}`;
+          const predK = visualIndex - realFrames.length;
+          if (m.getLayer(predLyr)) {
+            const showPred =
+              predReady && predK >= 0 && predK < predFrames.length;
+            if (showPred && motion) {
+              const src = m.getSource(PRED_ID) as
+                | maplibregl.ImageSource
+                | undefined;
+              try {
+                src?.setCoordinates(
+                  shiftedChmiCoords(motion, (predK + 1) * PRED_STEP_MIN),
+                );
+              } catch {
+                /* styl se zrovna mění */
+              }
             }
-          });
+            m.setPaintProperty(
+              predLyr,
+              "raster-opacity",
+              showPred ? predOpacity(predK + 1) : 0,
+            );
+          }
         }
         if (cloudsOn) {
           const vis = frames[visualIndex];
@@ -1343,6 +1504,7 @@ export default function RadarMap({
     cloudsOn,
     satPainted,
     succeeded,
+    motion,
   ]);
 
   // Předpovědní radar: spojitý rastr srážek z mřížky Open-Meteo jako image

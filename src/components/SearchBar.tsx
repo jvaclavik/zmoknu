@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import posthog from "posthog-js";
-import type { GeoLocation } from "../types";
-import { searchLocations, reverseGeocode } from "../lib/openMeteo";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { tr } from "../lib/i18n";
+import { reverseGeocode, searchLocations } from "../lib/openMeteo";
 import { useBodyScrollLock } from "../lib/scrollLock";
+import type { GeoLocation } from "../types";
 import { sameLocation } from "./FavoritesBar";
 import LocationArrowGlyph from "./LocationArrowGlyph";
 // MapPicker tahá maplibre-gl – načteme ho až při otevření mapy.
@@ -14,7 +15,7 @@ const MapPicker = lazy(() => import("./MapPicker"));
 function parseCoords(q: string): { lat: number; lon: number } | null {
   const s = q.trim().replace(/°/g, "");
   const m = s.match(
-    /^(-?\d{1,3}(?:\.\d+)?)\s*([NS])?\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*([EW])?$/i,
+    /^(-?\d{1,3}(?:\.\d+)?)\s*([NS])?\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*([EW])?$/i
   );
   if (!m) return null;
   let lat = parseFloat(m[1]);
@@ -56,6 +57,7 @@ interface Props {
   history: GeoLocation[];
   onPushHistory: (loc: GeoLocation) => void;
   onClearHistory: () => void;
+  title?: string;
 }
 
 export default function SearchBar({
@@ -76,6 +78,7 @@ export default function SearchBar({
   history,
   onPushHistory,
   onClearHistory,
+  title,
 }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoLocation[]>([]);
@@ -175,7 +178,10 @@ export default function SearchBar({
   }, [open, onClose, editingFav]);
 
   function pick(loc: GeoLocation) {
-    posthog.capture("location_selected", { location_name: loc.name, method: "search" });
+    posthog.capture("location_selected", {
+      location_name: loc.name,
+      method: "search",
+    });
     onPushHistory(loc);
     onSelect(loc);
     onClose();
@@ -190,7 +196,10 @@ export default function SearchBar({
       /* název necháme jako souřadnice */
     }
     const loc: GeoLocation = { name, latitude: lat, longitude: lon };
-    posthog.capture("location_selected", { location_name: loc.name, method: "coordinates" });
+    posthog.capture("location_selected", {
+      location_name: loc.name,
+      method: "coordinates",
+    });
     onPushHistory(loc);
     onSelect(loc);
     setMapOpen(false);
@@ -215,8 +224,7 @@ export default function SearchBar({
   // Při „Moje poloha" necháme pojmenované místo v historii (Praha, Berlín…),
   // ať jde offline vybrat i když je to právě aktuální GPS.
   const recent = history.filter(
-    (h) =>
-      followLocation || !(current && sameLocation(h, current)),
+    (h) => followLocation || !(current && sameLocation(h, current))
   );
 
   // Plochý seznam vybíratelných položek ve stejném pořadí, jak jsou vykreslené.
@@ -228,7 +236,7 @@ export default function SearchBar({
     });
   } else if (isSearching) {
     results.forEach((r) =>
-      navItems.push({ key: `r-${r.id}-${r.latitude}`, run: () => pick(r) }),
+      navItems.push({ key: `r-${r.id}-${r.latitude}`, run: () => pick(r) })
     );
   } else {
     if (current) navItems.push({ key: "current", run: onClose });
@@ -236,11 +244,11 @@ export default function SearchBar({
       navItems.push({
         key: `h-${h.latitude},${h.longitude}`,
         run: () => pick(h),
-      }),
+      })
     );
     if (!editingFav)
       favorites.forEach((f) =>
-        navItems.push({ key: favKey(f), run: () => pick(f) }),
+        navItems.push({ key: favKey(f), run: () => pick(f) })
       );
   }
 
@@ -262,7 +270,7 @@ export default function SearchBar({
     }
   };
 
-  return (
+  return createPortal(
     <div className="locpick" role="dialog" aria-modal="true">
       <button
         type="button"
@@ -272,7 +280,7 @@ export default function SearchBar({
       />
       <div className="locpick-sheet">
         <div className="locpick-head">
-          <h2 className="locpick-title">{tr("Vybrat místo")}</h2>
+          <h2 className="locpick-title">{title ?? tr("Vybrat místo")}</h2>
           <button
             type="button"
             className="locpick-close"
@@ -368,7 +376,9 @@ export default function SearchBar({
                     return (
                       <li
                         key={`${r.id}-${r.latitude}`}
-                        className={`locpick-row${navCls(`r-${r.id}-${r.latitude}`)}`}
+                        className={`locpick-row${navCls(
+                          `r-${r.id}-${r.latitude}`
+                        )}`}
                       >
                         <button
                           type="button"
@@ -497,7 +507,9 @@ export default function SearchBar({
                       return (
                         <li
                           key={`h-${h.latitude},${h.longitude}`}
-                          className={`locpick-row${navCls(`h-${h.latitude},${h.longitude}`)}`}
+                          className={`locpick-row${navCls(
+                            `h-${h.latitude},${h.longitude}`
+                          )}`}
                         >
                           <button
                             type="button"
@@ -586,7 +598,9 @@ export default function SearchBar({
                             <>
                               <button
                                 type="button"
-                                className={`locpick-pick ${active ? "active" : ""}`}
+                                className={`locpick-pick ${
+                                  active ? "active" : ""
+                                }`}
                                 onClick={() => pick(f)}
                               >
                                 <StarGlyph filled />
@@ -609,7 +623,9 @@ export default function SearchBar({
                                 type="button"
                                 className="locpick-remove"
                                 onClick={() => onRemove(f)}
-                                aria-label={tr("Odebrat {name}", { name: f.name })}
+                                aria-label={tr("Odebrat {name}", {
+                                  name: f.name,
+                                })}
                                 title={tr("Odebrat {name}", { name: f.name })}
                               >
                                 <CloseX />
@@ -644,36 +660,76 @@ export default function SearchBar({
           />
         </Suspense>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 
 function MapGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2z"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinejoin="round"
       />
-      <path d="M9 3v16M15 5v16" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path
+        d="M9 3v16M15 5v16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function CloseX() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <line
+        x1="6"
+        y1="6"
+        x2="18"
+        y2="18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <line
+        x1="18"
+        y1="6"
+        x2="6"
+        y2="18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
 function PeakGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M3 19h18L14.2 6.8a1.2 1.2 0 0 0-2.1 0L9.5 12 7.6 9.4a1.1 1.1 0 0 0-1.8 0L3 19z"
         stroke="currentColor"
@@ -686,7 +742,13 @@ function PeakGlyph() {
 
 function PinGlyph({ active = false }: { active?: boolean }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"
         fill={active ? "currentColor" : "none"}
@@ -694,14 +756,27 @@ function PinGlyph({ active = false }: { active?: boolean }) {
         strokeWidth="2"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="10" r="2.5" fill={active ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" />
+      <circle
+        cx="12"
+        cy="10"
+        r="2.5"
+        fill={active ? "#fff" : "none"}
+        stroke="currentColor"
+        strokeWidth="2"
+      />
     </svg>
   );
 }
 
 function ClockGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
       <path
         d="M12 7.5V12l3 2"
@@ -716,9 +791,23 @@ function ClockGlyph() {
 
 function SearchGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-      <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line
+        x1="16.5"
+        y1="16.5"
+        x2="21"
+        y2="21"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -739,7 +828,13 @@ function StarGlyph({ filled }: { filled: boolean }) {
 
 function PencilGlyph() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"
         stroke="currentColor"
@@ -752,7 +847,13 @@ function PencilGlyph() {
 
 function CheckGlyph() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M5 12.5l4.5 4.5L19 7"
         stroke="currentColor"
@@ -763,4 +864,3 @@ function CheckGlyph() {
     </svg>
   );
 }
-

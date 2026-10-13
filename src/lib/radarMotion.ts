@@ -1,6 +1,7 @@
 import type { RadarFrame } from "../types";
 import { CHMI_BOUNDS } from "./chmi";
 import { CHMI_SAT_CZ_BOUNDS } from "./chmiSat";
+import { isLowMemoryClient } from "./lowMemory";
 
 // Odhad posunu srážkového pole ze dvou po sobě jdoucích snímků radaru ČHMÚ.
 // Snímky jdou přes /api/chmi-opendata (stejný origin), takže je lze číst z canvasu
@@ -63,19 +64,31 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 function readPixels(img: HTMLImageElement): ImageData | null {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
+  let w = img.naturalWidth;
+  let h = img.naturalHeight;
   if (!w || !h) return null;
+  const maxEdge = isLowMemoryClient() ? 512 : 0;
+  if (maxEdge > 0) {
+    const edge = Math.max(w, h);
+    if (edge > maxEdge) {
+      const s = maxEdge / edge;
+      w = Math.max(1, Math.round(w * s));
+      h = Math.max(1, Math.round(h * s));
+    }
+  }
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, 0, 0, w, h);
   try {
     return ctx.getImageData(0, 0, w, h);
   } catch {
     return null; // tainted canvas (snímek zvenčí bez CORS)
+  } finally {
+    canvas.width = 1;
+    canvas.height = 1;
   }
 }
 
@@ -102,7 +115,13 @@ export async function echoOnlyImage(url: string): Promise<string | null> {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.putImageData(px, 0, 0);
-  return canvas.toDataURL();
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), "image/png");
+  });
+  canvas.width = 1;
+  canvas.height = 1;
+  if (!blob) return null;
+  return URL.createObjectURL(blob);
 }
 
 type PixelScore = (d: Uint8ClampedArray, o: number) => number;
@@ -474,9 +493,11 @@ export async function radarImageData(url: string): Promise<ImageData | null> {
       .then((img) => readPixels(img))
       .catch(() => null);
     echoPxCache.set(url, p);
-    if (echoPxCache.size > 24) {
+    const max = isLowMemoryClient() ? 4 : 24;
+    while (echoPxCache.size > max) {
       const first = echoPxCache.keys().next().value;
-      if (first) echoPxCache.delete(first);
+      if (first == null) break;
+      echoPxCache.delete(first);
     }
   }
   return p;

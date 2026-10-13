@@ -28,6 +28,110 @@ export function zonedNow(offsetSec?: number): Date {
   return new Date(wallUtcMs + tzMin * 60000);
 }
 
+const MONTH_SHORT_CS = [
+  "led",
+  "úno",
+  "bře",
+  "dub",
+  "kvě",
+  "čvn",
+  "čvc",
+  "srp",
+  "zář",
+  "říj",
+  "lis",
+  "pro",
+];
+const MONTH_SHORT_EN = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+const MONTH_LONG_CS = [
+  "Leden",
+  "Únor",
+  "Březen",
+  "Duben",
+  "Květen",
+  "Červen",
+  "Červenec",
+  "Srpen",
+  "Září",
+  "Říjen",
+  "Listopad",
+  "Prosinec",
+];
+const MONTH_LONG_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const MONTH_IN_CS = [
+  "v lednu",
+  "v únoru",
+  "v březnu",
+  "v dubnu",
+  "v květnu",
+  "v červnu",
+  "v červenci",
+  "v srpnu",
+  "v září",
+  "v říjnu",
+  "v listopadu",
+  "v prosinci",
+];
+const MONTH_IN_EN = [
+  "in January",
+  "in February",
+  "in March",
+  "in April",
+  "in May",
+  "in June",
+  "in July",
+  "in August",
+  "in September",
+  "in October",
+  "in November",
+  "in December",
+];
+
+function monthIndex(month: number): number {
+  return Math.max(1, Math.min(12, month)) - 1;
+}
+
+export function monthShort(month: number): string {
+  const i = monthIndex(month);
+  return getLang() === "en" ? MONTH_SHORT_EN[i] : MONTH_SHORT_CS[i];
+}
+
+export function monthLong(month: number): string {
+  const i = monthIndex(month);
+  return getLang() === "en" ? MONTH_LONG_EN[i] : MONTH_LONG_CS[i];
+}
+
+export function monthIn(month: number): string {
+  const i = monthIndex(month);
+  return getLang() === "en" ? MONTH_IN_EN[i] : MONTH_IN_CS[i];
+}
+
 const DAY_NAMES_CS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const DAY_NAMES_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_LONG_CS = [

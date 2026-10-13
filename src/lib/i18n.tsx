@@ -71,7 +71,7 @@ const EN: Record<string, string> = {
     "Showing a saved forecast ({rel}). Fresh data is still loading.",
   "Webkamery v okolí": "Nearby webcams",
   "Otevřít na Windy": "Open on Windy",
-  "živě": "live",
+  živě: "live",
   Webkamery: "Webcams",
   "Webkamery v okolí zobrazené na mapě (zdroj Windy).":
     "Nearby webcams shown on the map (source: Windy).",
@@ -158,7 +158,7 @@ const EN: Record<string, string> = {
     "What to wear hour by hour. The axis is the apparent temperature adjusted for your activity (moving keeps you warmer); the horizontal bands show when the recommendation changes.",
   "V pohybu je člověku tepleji. Aktivita posune pocitovou teplotu, ze které se oblečení skládá (sdílí se s kartou „Co si vzít na sebe“).":
     "Moving keeps you warmer. Activity shifts the apparent temperature the outfit is built from (shared with the “What to wear” card).",
-  "oblečení": "outfit",
+  oblečení: "outfit",
   Krém: "Sunscreen",
   "Nastavení meteogramu": "Meteogram settings",
   "Přetáhni pořadí. Špendlík připne hodnotu nad graf.":
@@ -177,15 +177,15 @@ const EN: Record<string, string> = {
   "nejkratší den v roce": "shortest day of the year",
   "Historický normál (30 let)": "Historical normal (30 yr)",
   Normál: "Normal",
-  "Průměrná teplota pro daný den z let 1995–2024 (ERA5). Zobrazí se u grafu teploty.":
-    "Average temperature for the given day from 1995–2024 (ERA5). Shown on the temperature chart.",
+  "Průměrná teplota pro daný den z let 2010–2024 (NASA POWER). Zobrazí se u grafu teploty.":
+    "Average temperature for the given day from 2010–2024 (NASA POWER). Shown on the temperature chart.",
   "Načítám…": "Loading…",
   "Historický normál se nepodařilo načíst. Zkus to prosím znovu.":
     "Couldn’t load the historical normal. Please try again.",
-  "Průměrná teplota pro daný den z let 1995–2024 (ERA5).":
-    "Average temperature for the given day from 1995–2024 (ERA5).",
+  "Průměrná teplota pro daný den z let 2010–2024 (NASA POWER).":
+    "Average temperature for the given day from 2010–2024 (NASA POWER).",
   Průměr: "Average",
-  "Průměr 1995–2024": "Average 1995–2024",
+  "Průměr 2010–2024": "Average 2010–2024",
   "Aktuální průměr": "Current average",
   Odchylka: "Anomaly",
   "Průměr předpovědi pro tento den.": "Forecast average for this day.",
@@ -292,7 +292,7 @@ const EN: Record<string, string> = {
   "Lehké kalhoty": "Light trousers",
   "Teplé kalhoty": "Warm trousers",
   Košile: "Shirt",
-  "Tělo": "Top",
+  Tělo: "Top",
   Nohy: "Bottoms",
   Bunda: "Jacket",
   Boty: "Shoes",
@@ -505,27 +505,25 @@ const EN: Record<string, string> = {
   "Krém netřeba.": "No sunscreen needed.",
   "Při delším pobytu venku SPF 30.": "SPF 30 for longer time outdoors.",
   vysoký: "high",
-  "Krém SPF 30+, brýle, stín v poledne.":
-    "SPF 30+, sunglasses, shade at noon.",
+  "Krém SPF 30+, brýle, stín v poledne.": "SPF 30+, sunglasses, shade at noon.",
   "velmi vysoký": "very high",
-  "Vyhni se slunci 11–15 h, krém SPF 50.":
-    "Avoid the sun 11–15h, SPF 50.",
+  "Vyhni se slunci 11–15 h, krém SPF 50.": "Avoid the sun 11–15h, SPF 50.",
   extrémní: "extreme",
   "Omez pobyt na slunci na minimum.": "Minimize time in the sun.",
   mírný: "mild",
   zvýšený: "elevated",
-  "Měsíc": "Moon",
+  Měsíc: "Moon",
   "osvětlení {n} %": "illuminated {n} %",
   nov: "new moon",
   "dorůstající srpek": "waxing crescent",
   "první čtvrť": "first quarter",
   "dorůstající měsíc": "waxing gibbous",
-  "úplněk": "full moon",
+  úplněk: "full moon",
   "couvající měsíc": "waning gibbous",
   "poslední čtvrť": "last quarter",
   "couvající srpek": "waning crescent",
   "Zlatá hodinka": "Golden hour",
-  "večer": "evening",
+  večer: "evening",
   Bouřky: "Thunderstorms",
   "Riziko bouřek": "Storm risk",
   "Bez bouřek": "No storms",
@@ -544,7 +542,7 @@ const EN: Record<string, string> = {
   "vrchol {d}: {n} m³/s": "peak {d}: {n} m³/s",
   normální: "normal",
   "mírně zvýšené": "slightly elevated",
-  "zvýšené": "elevated",
+  zvýšené: "elevated",
 
   // Barvy oblohy / duha (Acme Labs)
   "Barvy západu": "Sunset colors",
@@ -560,8 +558,6 @@ const EN: Record<string, string> = {
   "Alternativní předpovědi (modely)": "Alternate predictions (models)",
   "Plocha ukazuje rozpětí světových modelů v danou hodinu. Úzká = shoda, široká = modely se rozcházejí a předpověď je méně jistá.":
     "The area shows the range of global models at each hour. Narrow = agreement, wide = models diverge and the forecast is less certain.",
-  "Svislé úsečky ukazují rozpětí úhrnu srážek napříč modely v danou hodinu. Krátká = modely se shodují, dlouhá = rozcházejí se (někdy déšť, jindy sucho).":
-    "The vertical bars show the range of precipitation totals across models at each hour. Short = models agree, long = they diverge (rain in some, dry in others).",
 
   // airQuality
   Olše: "Alder",
@@ -585,8 +581,7 @@ const EN: Record<string, string> = {
   "Načíst další den historie": "Load one more day of history",
   "Načíst další dny": "Load more days",
   "Přizpůsobit obsah": "Customize content",
-  "Přepnout režim (systém/světlý/tmavý)":
-    "Switch mode (system/light/dark)",
+  "Přepnout režim (systém/světlý/tmavý)": "Switch mode (system/light/dark)",
   "Podle systému": "System",
   "Světlý režim": "Light mode",
   "Tmavý režim": "Dark mode",
@@ -598,6 +593,69 @@ const EN: Record<string, string> = {
   Přidat: "Add",
   Přetáhnout: "Drag",
   Souhrn: "Summary",
+  "Obvyklé počasí": "Typical weather",
+  "Počasí během roku": "Weather through the year",
+  "Odkud jsou průměrné hodnoty": "Where the averages come from",
+  "Průměr z let 2010–2024 (NASA POWER). Deštivý den = aspoň 1 mm srážek, slunečný den = oblačnost pod 50 %. Hodí se, když plánuješ výlet na konkrétní měsíc.":
+    "Average from 2010–2024 (NASA POWER). A wet day is at least 1 mm of precipitation, a sunny day is cloud cover below 50%. Useful when you’re planning a trip for a given month.",
+  "Obvyklé počasí se nepodařilo načíst. Zkus to prosím znovu.":
+    "Couldn’t load typical weather. Please try again.",
+  "Počasí během roku se nepodařilo načíst. Zkus to prosím znovu.":
+    "Couldn’t load weather through the year. Please try again.",
+  Porovnat: "Compare",
+  "Porovnat s místem": "Compare with a place",
+  "Zrušit porovnání": "Stop comparing",
+  "Změnit porovnávané místo": "Change compared place",
+  "Přidat místo ke srovnání": "Add a place to compare",
+  "Odebrat ze srovnání": "Remove from comparison",
+  "Odebrat {name} ze srovnání": "Remove {name} from comparison",
+  "Některá porovnávaná místa se nepodařilo načíst.":
+    "Couldn’t load some of the compared places.",
+  "Porovnávané místo se nepodařilo načíst.":
+    "Couldn’t load the compared place.",
+  "Sloupce ve srovnání": "Comparison columns",
+  "{place} {when} jako": "{place} {when} is like",
+  "{place} {when}: žádný podobný měsíc": "{place} {when}: no similar month",
+  "Žádný podobný měsíc": "No similar month",
+  "Vybrat jako výchozí ke srovnání měsíců":
+    "Use as the source for similar months",
+  Pocit: "Feel",
+  "Průměr denních minim za měsíc (2010–2024). Není to teplota jen v noci, ale typické nejnižší hodnoty.":
+    "Monthly mean of daily minima (2010–2024). Not night-only temperature — the typical lowest values.",
+  "Průměr denních maxim za měsíc (2010–2024). Typická odpolední teplota.":
+    "Monthly mean of daily maxima (2010–2024). Typical afternoon temperature.",
+  "Průměrný úhrn srážek za celý měsíc v milimetrech (déšť i sníh).":
+    "Average monthly precipitation total in millimetres (rain and snow).",
+  "Kolik dní v měsíci v průměru naprší aspoň 1 mm.":
+    "How many days a month typically see at least 1 mm of precipitation.",
+  "Kolik dní v měsíci v průměru má oblačnost pod 50 %.":
+    "How many days a month typically have cloud cover below 50%.",
+  "Orientační pocit podle průměrného denního maxima — horko, teplo, příjemně, svěží, chladno, studeno nebo mrazivo.":
+    "A rough feel from the mean daily maximum — hot, warm, pleasant, fresh, chilly, cold or freezing.",
+  Horko: "Hot",
+  Teplo: "Warm",
+  Příjemně: "Pleasant",
+  Svěží: "Fresh",
+  Chladno: "Chilly",
+  Studeno: "Cold",
+  Mrazivo: "Freezing",
+  "{n} slunečných dní": "{n} sunny days",
+  "Zkusit znovu": "Try again",
+  "Vybrat měsíc": "Choose month",
+  "teplota den / noc": "day / night temperature",
+  srážky: "rain",
+  "noc / den": "night / day",
+  Noc: "Night",
+  "Deštivých dní": "Rainy days",
+  "Slunečných dní": "Sunny days",
+  "{n} deštivých dní": "{n} wet days",
+  "sníh {n} cm": "snow {n} cm",
+  "{n} dní": "{n} days",
+  dní: "days",
+  "{n} h slunce denně": "{n} h of sun a day",
+  "slunečných dní": "sunny days",
+  "{in} tu ve dne bývá kolem {max}°, v noci {min}°. Prší zhruba {rain} dní ({mm} mm) a slunečných dní je asi {sun}.":
+    "{in}, days are around {max}°, nights {min}°. About {rain} wet days ({mm} mm) and {sun} sunny days.",
   "Co na sebe": "What to wear",
   Biopředpověď: "Bio forecast",
   "Co je biopředpověď": "What is the bio forecast",
@@ -625,14 +683,12 @@ const EN: Record<string, string> = {
   "Skupina B1-d modelu BMP.": "BMP group B1-d.",
   "Chladné podmínky – skupiny B2/B3 modelu BMP.":
     "Cold conditions – BMP groups B2/B3.",
-  "Teplotní kritéria BMP nejsou splněna.":
-    "BMP temperature criteria not met.",
+  "Teplotní kritéria BMP nejsou splněna.": "BMP temperature criteria not met.",
   "Index biotropie podle modelu ČHMÚ BMP IIIc pro oblast {n} – orientačně pro zvolené místo.":
     "Biotropy index per ČHMÚ BMP IIIc model for region {n} – approximate for the selected place.",
   "Index biotropie podle modelu ČHMÚ BMP IIIc – orientačně pro zvolené místo.":
     "Biotropy index per ČHMÚ BMP IIIc model – approximate for the selected place.",
-  "Bez splněných kritérií modelu BMP IIIc.":
-    "No BMP IIIc model criteria met.",
+  "Bez splněných kritérií modelu BMP IIIc.": "No BMP IIIc model criteria met.",
   "Nejde o oficiální BMP ČHMÚ – počítáme index lokálně z předpovědi; oficiální předpověď zohledňuje i synoptickou situaci a 7 regionálních oblastí.":
     "Not the official ČHMÚ BMP – index computed locally from forecast; the official forecast also includes synoptic assessment and 7 regional areas.",
   "Model BMP IIIc na chmi.cz": "BMP IIIc model on chmi.cz",
@@ -651,8 +707,7 @@ const EN: Record<string, string> = {
   "Vedro (Tmax ≥ 29 °C)": "Heat (max ≥ 29 °C)",
   "Silné vedro (Tmax ≥ 33 °C)": "Extreme heat (max ≥ 33 °C)",
   "Nárazy větru ≥ 25 m/s": "Wind gusts ≥ 25 m/s",
-  "Překročení limitu SO₂ (350 µg/m³)":
-    "SO₂ limit exceeded (350 µg/m³)",
+  "Překročení limitu SO₂ (350 µg/m³)": "SO₂ limit exceeded (350 µg/m³)",
   "Teplotní inverze ≥ 18 h": "Temperature inversion ≥ 18 h",
 
   // RadarMap
@@ -686,7 +741,7 @@ const EN: Record<string, string> = {
   Předpověď: "Forecast",
   "Předpověď srážek z modelu (Open-Meteo, ICON). Není to radar – ukazuje očekávaný vývoj na příštích 24 h.":
     "Model precipitation forecast (Open-Meteo, ICON). Not radar – shows the expected development over the next 24 h.",
-  "Úhrn": "Totals",
+  Úhrn: "Totals",
   Období: "Period",
   "Úhrn srážek z modelu Open-Meteo (mm za období).":
     "Precipitation totals from the Open-Meteo model (mm over the period).",
@@ -735,8 +790,7 @@ const EN: Record<string, string> = {
   "Adresa, vrchol nebo GPS…": "Address, peak or GPS…",
   "Hledat město": "Search city",
   "GPS souřadnice": "GPS coordinates",
-  "Zobrazit počasí pro tyto souřadnice":
-    "Show weather for these coordinates",
+  "Zobrazit počasí pro tyto souřadnice": "Show weather for these coordinates",
   "Vybrat na mapě": "Pick on map",
   "Vybrat toto místo": "Select this place",
   Vymazat: "Clear",
@@ -783,7 +837,7 @@ const EN: Record<string, string> = {
 // Přeloží text podle aktuálního jazyka. Podporuje {placeholder} náhrady.
 export function tr(
   key: string,
-  vars?: Record<string, string | number>,
+  vars?: Record<string, string | number>
 ): string {
   let out = currentLang === "en" ? EN[key] ?? key : key;
   if (vars) {

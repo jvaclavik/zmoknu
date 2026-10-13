@@ -29,9 +29,7 @@ export default function InfoHint({ label, children, wide }: Props) {
       let left = b.right - tw;
       left = Math.min(Math.max(m, left), vw - tw - m);
       const above = b.top - th - m >= m;
-      const top = above
-        ? b.top - th - m
-        : Math.min(b.bottom + m, vh - th - m);
+      const top = above ? b.top - th - m : Math.min(b.bottom + m, vh - th - m);
       setPos({ top, left });
     };
     place();
@@ -53,6 +51,7 @@ export default function InfoHint({ label, children, wide }: Props) {
         ref={btnRef}
         className="mg-info-btn"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           setOpen((o) => !o);
         }}
@@ -79,7 +78,7 @@ export default function InfoHint({ label, children, wide }: Props) {
           >
             {children}
           </div>,
-          document.body,
+          document.body
         )}
     </span>
   );

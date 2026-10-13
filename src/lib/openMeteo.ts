@@ -13,7 +13,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function fetchOmJson<T>(
   url: string,
   errMsg: string,
-  retries = 2,
+  retries = 2
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -108,10 +108,16 @@ function persistOfflineStore(store: OfflineStore, favKeys: Set<string>): void {
   const rest = entries.filter(([k]) => !favKeys.has(k)).sort(byAtDesc);
   // Priorita: nejnovější favority, pak nejnovější navštívená (na konci = první
   // kandidáti na zahození při nedostatku místa).
-  let keep = [...favs.slice(0, OFFLINE_FAVS), ...rest.slice(0, OFFLINE_RECENTS)];
+  let keep = [
+    ...favs.slice(0, OFFLINE_FAVS),
+    ...rest.slice(0, OFFLINE_RECENTS),
+  ];
   while (keep.length > 0) {
     try {
-      localStorage.setItem(OFFLINE_KEY, JSON.stringify(Object.fromEntries(keep)));
+      localStorage.setItem(
+        OFFLINE_KEY,
+        JSON.stringify(Object.fromEntries(keep))
+      );
       return;
     } catch {
       keep = keep.slice(0, -1); // odeber nejméně důležitý a zkus znovu
@@ -131,7 +137,7 @@ export function saveOfflineForecast(
   pastDays: number,
   model: string,
   forecast: Forecast,
-  favorites: GeoLocation[] = [],
+  favorites: GeoLocation[] = []
 ): void {
   const store = loadOfflineStore();
   store[offlineKey(location.latitude, location.longitude)] = {
@@ -142,7 +148,7 @@ export function saveOfflineForecast(
     forecast,
   };
   const favKeys = new Set(
-    favorites.map((f) => offlineKey(f.latitude, f.longitude)),
+    favorites.map((f) => offlineKey(f.latitude, f.longitude))
   );
   persistOfflineStore(store, favKeys);
 }
@@ -150,7 +156,7 @@ export function saveOfflineForecast(
 // Vrátí uloženou předpověď pro dané místo (nebo null).
 export function getOfflineForecast(
   lat: number,
-  lon: number,
+  lon: number
 ): SavedForecast | null {
   return loadOfflineStore()[offlineKey(lat, lon)] ?? null;
 }
@@ -159,7 +165,7 @@ export function getOfflineForecast(
 export function prefetchForecast(
   lat: number,
   lon: number,
-  model = "best_match",
+  model = "best_match"
 ): void {
   const key = fcKey(lat, lon, 1, model);
   const c = forecastCache.get(key);
@@ -172,7 +178,7 @@ export async function fetchForecast(
   lon: number,
   pastDays = 1,
   model = "best_match",
-  opts?: { force?: boolean },
+  opts?: { force?: boolean }
 ): Promise<Forecast> {
   const cacheKey = fcKey(lat, lon, pastDays, model);
   if (!opts?.force) {
@@ -244,7 +250,7 @@ export async function fetchForecast(
 
   const data = await fetchOmJson<RawForecast>(
     `${FORECAST_URL}?${params.toString()}`,
-    "Nepodařilo se načíst předpověď.",
+    "Nepodařilo se načíst předpověď."
   );
 
   const c = data.current;
@@ -261,11 +267,11 @@ export async function fetchForecast(
       | null
     )[];
     const hasData = rawTemps.some(
-      (v) => v != null && Number.isFinite(Number(v)),
+      (v) => v != null && Number.isFinite(Number(v))
     );
     if (!hasData) {
       throw new Error(
-        "Zvolený model nemá pro tuto lokalitu aktuálně data. Zkuste jiný model (např. Automaticky).",
+        "Zvolený model nemá pro tuto lokalitu aktuálně data. Zkuste jiný model (např. Automaticky)."
       );
     }
   }
@@ -323,7 +329,7 @@ const PRECIP_MODELS = ["icon_d2", "icon_eu", "ecmwf_ifs025"] as const;
 function pickByPriority(
   src: Record<string, (number | null)[] | undefined>,
   suffix: string,
-  i: number,
+  i: number
 ): number | null {
   for (const m of PRECIP_MODELS) {
     const arr = src[`${suffix}_${m}`];
@@ -342,7 +348,7 @@ async function applyHourlyPrecip(
   lon: number,
   pastDays: number,
   hourly: ReturnType<typeof mapHourly>,
-  daily: ReturnType<typeof mapDaily>,
+  daily: ReturnType<typeof mapDaily>
 ): Promise<void> {
   const params = new URLSearchParams({
     latitude: lat.toString(),
@@ -405,7 +411,7 @@ export async function fetchModelSeries(
   lon: number,
   hourlyVar: string,
   models: string[],
-  pastDays = 1,
+  pastDays = 1
 ): Promise<ModelSeries[]> {
   if (!models.length) return [];
   const params = new URLSearchParams({
@@ -435,7 +441,8 @@ export async function fetchModelSeries(
     if (arr) {
       for (let i = 0; i < times.length; i++) {
         const v = arr[i];
-        if (v != null && !Number.isNaN(Number(v))) byTime.set(times[i], Number(v));
+        if (v != null && !Number.isNaN(Number(v)))
+          byTime.set(times[i], Number(v));
       }
     }
     return { model: m, byTime };
@@ -465,7 +472,7 @@ function mapHourly(h: RawForecast["hourly"]) {
       dewPoint: Number(h.dew_point_2m[i]),
       pressure: Number(h.surface_pressure[i]),
       temperature850: num(
-        (h as Record<string, (number | null)[]>).temperature_850hPa?.[i],
+        (h as Record<string, (number | null)[]>).temperature_850hPa?.[i]
       ),
       cloudCover: Number(h.cloud_cover[i]),
       cloudLow: Number(h.cloud_cover_low[i]),
@@ -483,7 +490,7 @@ function mapHourly(h: RawForecast["hourly"]) {
 }
 
 function mapMinutely15(
-  m: RawForecast["minutely_15"],
+  m: RawForecast["minutely_15"]
 ): { time: string[]; precipitation: number[] } | undefined {
   const time = m?.time as string[] | undefined;
   const precip = m?.precipitation as (number | string | null)[] | undefined;
@@ -540,11 +547,7 @@ const LANDFORM_CODES = new Set([
 ]);
 
 function foldName(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .trim();
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 }
 
 function sameSpot(a: GeoLocation, b: GeoLocation): boolean {
@@ -605,7 +608,7 @@ export async function searchLocations(query: string): Promise<GeoLocation[]> {
 
   const places = mapped.length ? mapped : om;
   const peaks = [...om.filter((l) => l.kind === "peak"), ...photon].filter(
-    (p) => peakNameOk(p.name, q),
+    (p) => peakNameOk(p.name, q)
   );
   return mergeSearchResults(places, peaks, q);
 }
@@ -613,7 +616,7 @@ export async function searchLocations(query: string): Promise<GeoLocation[]> {
 function mergeSearchResults(
   places: GeoLocation[],
   peaks: GeoLocation[],
-  query: string,
+  query: string
 ): GeoLocation[] {
   const out: GeoLocation[] = [];
   const add = (g: GeoLocation) => {
@@ -642,7 +645,7 @@ interface MapTilerFeature {
 
 async function geocodeMapTiler(
   query: string,
-  key: string,
+  key: string
 ): Promise<GeoLocation[]> {
   const lang = getLang();
   const url =
@@ -678,7 +681,7 @@ async function geocodeMapTiler(
 
 async function geocodeOpenMeteo(
   query: string,
-  count = 8,
+  count = 8
 ): Promise<GeoLocation[]> {
   const params = new URLSearchParams({
     name: query,
@@ -696,7 +699,8 @@ async function geocodeOpenMeteo(
     longitude: r.longitude,
     country: r.country,
     admin1: r.admin1,
-    kind: r.feature_code && LANDFORM_CODES.has(r.feature_code) ? "peak" : undefined,
+    kind:
+      r.feature_code && LANDFORM_CODES.has(r.feature_code) ? "peak" : undefined,
   }));
 }
 
@@ -754,20 +758,102 @@ export function normalDoy(iso: string): number {
   return Math.max(0, Math.min(364, idx));
 }
 
-// Průměrná teplota (a min/max) pro každý den v roce z reanalýzy ERA5.
+// Průměrná teplota (a min/max) pro každý den v roce.
 export interface ClimateNormals {
   mean: (number | null)[]; // délka 365, °C
   max: (number | null)[];
   min: (number | null)[];
+  monthly: MonthlyClimate[];
 }
 
-const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
-const NORMAL_START = "1995-01-01";
-const NORMAL_END = "2024-12-31";
+// Měsíční klimatický normál (průměr ze stejných let jako denní řady).
+export interface MonthlyClimate {
+  month: number; // 1–12
+  tempMax: number | null;
+  tempMin: number | null;
+  tempMean: number | null;
+  precipMm: number | null;
+  rainyDays: number | null;
+  snowCm: number | null;
+  sunshineHours: number | null;
+  sunnyDays: number | null;
+}
+
+const RAINY_MM = 1;
+const SUNNY_CLOUD = 50;
+const NASA_FILL = -999;
+const NASA_URL = "https://power.larc.nasa.gov/api/temporal/daily/point";
+const NASA_START = "20100101";
+const NASA_END = "20241231";
+const CLIMATE_STORE = "zmoknu.climateNormals.v2";
+const CLIMATE_TTL = 90 * 24 * 60 * 60 * 1000;
+const CLIMATE_STORE_MAX = 20;
+
+function avgMap(m: Map<number, number>): number | null {
+  if (m.size === 0) return null;
+  let s = 0;
+  for (const v of m.values()) s += v;
+  return s / m.size;
+}
+
+function addYear(m: Map<number, number>, year: number, delta: number) {
+  m.set(year, (m.get(year) ?? 0) + delta);
+}
+
 const normalsCache = new Map<string, Promise<ClimateNormals>>();
 
+function nasaNum(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v) || v === NASA_FILL) {
+    return null;
+  }
+  return v;
+}
+
+type ClimateStore = Record<string, { at: number; data: ClimateNormals }>;
+
+function loadClimateStore(): ClimateStore {
+  try {
+    const raw = localStorage.getItem(CLIMATE_STORE);
+    if (raw) return JSON.parse(raw) as ClimateStore;
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
+function readStoredClimate(
+  key: string
+): { at: number; data: ClimateNormals } | null {
+  const row = loadClimateStore()[key];
+  if (!row?.data?.monthly?.length) return null;
+  return row;
+}
+
+function saveClimateStore(key: string, data: ClimateNormals) {
+  try {
+    const store = loadClimateStore();
+    store[key] = { at: Date.now(), data };
+    const keep = Object.entries(store)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, CLIMATE_STORE_MAX);
+    localStorage.setItem(
+      CLIMATE_STORE,
+      JSON.stringify(Object.fromEntries(keep))
+    );
+  } catch {
+    try {
+      localStorage.removeItem(CLIMATE_STORE);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 // Kruhové vyhlazení průměrů oknem ±win dní (klimatologie bývá po dnech zašuměná).
-function smoothCircular(arr: (number | null)[], win: number): (number | null)[] {
+function smoothCircular(
+  arr: (number | null)[],
+  win: number
+): (number | null)[] {
   const n = arr.length;
   return arr.map((_, i) => {
     let sum = 0;
@@ -783,59 +869,197 @@ function smoothCircular(arr: (number | null)[], win: number): (number | null)[] 
   });
 }
 
+type NasaSeries = Record<string, number>;
+
+interface NasaDaily {
+  properties?: {
+    parameter?: {
+      T2M?: NasaSeries;
+      T2M_MAX?: NasaSeries;
+      T2M_MIN?: NasaSeries;
+      PRECTOTCORR?: NasaSeries;
+      CLOUD_AMT?: NasaSeries;
+      PRECSNOLAND?: NasaSeries;
+    };
+  };
+}
+
+function aggregateNasaClimate(data: NasaDaily): ClimateNormals {
+  const p = data.properties?.parameter;
+  const tmax = p?.T2M_MAX ?? {};
+  const tmin = p?.T2M_MIN ?? {};
+  const tmean = p?.T2M ?? {};
+  const precip = p?.PRECTOTCORR ?? {};
+  const cloud = p?.CLOUD_AMT ?? {};
+  const snow = p?.PRECSNOLAND ?? {};
+  const keys = Object.keys(tmax);
+  if (keys.length < 365) throw new Error("Nepodařilo se načíst normál.");
+
+  const sum = {
+    mean: new Array(365).fill(0),
+    max: new Array(365).fill(0),
+    min: new Array(365).fill(0),
+  };
+  const cnt = {
+    mean: new Array(365).fill(0),
+    max: new Array(365).fill(0),
+    min: new Array(365).fill(0),
+  };
+
+  type MonthAcc = {
+    max: number;
+    min: number;
+    mean: number;
+    tCnt: number;
+    precip: Map<number, number>;
+    snow: Map<number, number>;
+    rainy: Map<number, number>;
+    sunny: Map<number, number>;
+  };
+  const acc: MonthAcc[] = Array.from({ length: 12 }, () => ({
+    max: 0,
+    min: 0,
+    mean: 0,
+    tCnt: 0,
+    precip: new Map(),
+    snow: new Map(),
+    rainy: new Map(),
+    sunny: new Map(),
+  }));
+
+  for (const k of keys) {
+    if (k.length !== 8) continue;
+    const iso = `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}`;
+    const month = Number(k.slice(4, 6)) - 1;
+    if (month < 0 || month > 11) continue;
+    const year = Number(k.slice(0, 4));
+    const doy = normalDoy(iso);
+    const a = acc[month];
+
+    const vmax = nasaNum(tmax[k]);
+    const vmin = nasaNum(tmin[k]);
+    const vmean = nasaNum(tmean[k]);
+    if (vmax != null) {
+      sum.max[doy] += vmax;
+      cnt.max[doy] += 1;
+    }
+    if (vmin != null) {
+      sum.min[doy] += vmin;
+      cnt.min[doy] += 1;
+    }
+    if (vmean != null) {
+      sum.mean[doy] += vmean;
+      cnt.mean[doy] += 1;
+    }
+    if (vmax != null && vmin != null && vmean != null) {
+      a.max += vmax;
+      a.min += vmin;
+      a.mean += vmean;
+      a.tCnt += 1;
+    }
+
+    const pr = nasaNum(precip[k]);
+    if (pr != null) {
+      addYear(a.precip, year, pr);
+      addYear(a.rainy, year, pr >= RAINY_MM ? 1 : 0);
+    }
+    const sn = nasaNum(snow[k]);
+    if (sn != null) addYear(a.snow, year, sn);
+    const cl = nasaNum(cloud[k]);
+    if (cl != null) addYear(a.sunny, year, cl <= SUNNY_CLOUD ? 1 : 0);
+  }
+
+  const finish = (s: number[], c: number[]) =>
+    smoothCircular(
+      s.map((v, i) => (c[i] ? v / c[i] : null)),
+      7
+    );
+
+  return {
+    mean: finish(sum.mean, cnt.mean),
+    max: finish(sum.max, cnt.max),
+    min: finish(sum.min, cnt.min),
+    monthly: acc.map((a, i) => ({
+      month: i + 1,
+      tempMax: a.tCnt ? a.max / a.tCnt : null,
+      tempMin: a.tCnt ? a.min / a.tCnt : null,
+      tempMean: a.tCnt ? a.mean / a.tCnt : null,
+      precipMm: avgMap(a.precip),
+      rainyDays: avgMap(a.rainy),
+      snowCm: avgMap(a.snow),
+      sunshineHours: null,
+      sunnyDays: avgMap(a.sunny),
+    })),
+  };
+}
+
+async function downloadNasaClimate(
+  lat: number,
+  lon: number
+): Promise<ClimateNormals> {
+  const params = new URLSearchParams({
+    parameters: "T2M_MAX,T2M_MIN,T2M,PRECTOTCORR,CLOUD_AMT,PRECSNOLAND",
+    community: "AG",
+    latitude: lat.toString(),
+    longitude: lon.toString(),
+    start: NASA_START,
+    end: NASA_END,
+    format: "JSON",
+  });
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(`${NASA_URL}?${params.toString()}`);
+      if (!res.ok) {
+        if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+          await sleep(600 * (attempt + 1));
+          continue;
+        }
+        throw new Error("Nepodařilo se načíst normál.");
+      }
+      const data = (await res.json()) as NasaDaily;
+      return aggregateNasaClimate(data);
+    } catch (e) {
+      lastErr = e;
+      if (e instanceof TypeError && attempt < 2) {
+        await sleep(600 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("Nepodařilo se načíst normál.");
+}
+
 export function fetchClimateNormals(
   lat: number,
-  lon: number,
+  lon: number
 ): Promise<ClimateNormals> {
-  // Zaokrouhlíme na ~0,25°, ať sdílíme cache i mezi blízkými body.
   const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   const cached = normalsCache.get(key);
   if (cached) return cached;
 
-  const p = (async (): Promise<ClimateNormals> => {
-    const params = new URLSearchParams({
-      latitude: lat.toString(),
-      longitude: lon.toString(),
-      start_date: NORMAL_START,
-      end_date: NORMAL_END,
-      daily: "temperature_2m_mean,temperature_2m_max,temperature_2m_min",
-      timezone: "auto",
+  const stored = readStoredClimate(key);
+  if (stored && Date.now() - stored.at < CLIMATE_TTL) {
+    const p = Promise.resolve(stored.data);
+    normalsCache.set(key, p);
+    return p;
+  }
+
+  const p = downloadNasaClimate(lat, lon)
+    .then((data) => {
+      saveClimateStore(key, data);
+      return data;
+    })
+    .catch((e) => {
+      if (stored) return stored.data;
+      throw e;
     });
-    const data = await fetchOmJson<{
-      daily?: {
-        time?: string[];
-        temperature_2m_mean?: (number | null)[];
-        temperature_2m_max?: (number | null)[];
-        temperature_2m_min?: (number | null)[];
-      };
-    }>(`${ARCHIVE_URL}?${params.toString()}`, "Nepodařilo se načíst normál.");
-
-    const time = data.daily?.time ?? [];
-    const src = {
-      mean: data.daily?.temperature_2m_mean ?? [],
-      max: data.daily?.temperature_2m_max ?? [],
-      min: data.daily?.temperature_2m_min ?? [],
-    };
-
-    const build = (values: (number | null)[]): (number | null)[] => {
-      const sum = new Array(365).fill(0);
-      const cnt = new Array(365).fill(0);
-      for (let i = 0; i < time.length; i++) {
-        const v = values[i];
-        if (v == null || !Number.isFinite(v)) continue;
-        const doy = normalDoy(time[i]);
-        sum[doy] += v;
-        cnt[doy] += 1;
-      }
-      const out = sum.map((s, i) => (cnt[i] ? s / cnt[i] : null));
-      return smoothCircular(out, 7);
-    };
-
-    return { mean: build(src.mean), max: build(src.max), min: build(src.min) };
-  })();
 
   normalsCache.set(key, p);
-  p.catch(() => normalsCache.delete(key)); // ať jde po chybě zkusit znovu
+  p.catch(() => normalsCache.delete(key));
   return p;
 }
 
@@ -860,7 +1084,7 @@ const REVERSE_PREF = [
 async function reverseMapTiler(
   lat: number,
   lon: number,
-  key: string,
+  key: string
 ): Promise<string | null> {
   const lang = getLang();
   const url =
@@ -884,7 +1108,7 @@ async function reverseMapTiler(
 
 export async function reverseGeocode(
   lat: number,
-  lon: number,
+  lon: number
 ): Promise<string> {
   const lang = getLang();
   // Nejdřív MapTiler – umí čtvrti/části města (např. „Břevnov“ místo „Praha“).
@@ -910,7 +1134,9 @@ export async function reverseGeocode(
       locality?: string;
       principalSubdivision?: string;
     };
-    return data.city || data.locality || data.principalSubdivision || "Moje poloha";
+    return (
+      data.city || data.locality || data.principalSubdivision || "Moje poloha"
+    );
   } catch {
     return "Moje poloha";
   }

@@ -1,40 +1,45 @@
+import posthog from "posthog-js";
 import type { CSSProperties, ReactNode } from "react";
 import {
   Fragment,
   lazy,
+  memo,
   Suspense,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import BioForecast from "./components/BioForecast";
+import Climate from "./components/Climate";
 import CustomizeContent, {
   type WidgetDef,
 } from "./components/CustomizeContent";
 import DayDetails from "./components/DayDetails";
-import BioForecast from "./components/BioForecast";
-import LocationArrowGlyph from "./components/LocationArrowGlyph";
 import DaySelector from "./components/DaySelector";
 import Donate from "./components/Donate";
 import { sameLocation } from "./components/FavoritesBar";
 import HourlyForecast from "./components/HourlyForecast";
 import InstallHint from "./components/InstallHint";
+import LocationArrowGlyph from "./components/LocationArrowGlyph";
 import Meteogram from "./components/Meteogram";
 import NotifySettings from "./components/NotifySettings";
-import ReloadPrompt from "./components/ReloadPrompt";
 import RadarErrorBoundary from "./components/RadarErrorBoundary";
+import ReloadPrompt from "./components/ReloadPrompt";
 import SearchBar from "./components/SearchBar";
 import Skeleton from "./components/Skeleton";
 import SmartSummary from "./components/SmartSummary";
-import Webcams from "./components/Webcams";
 import WeatherAlerts from "./components/WeatherAlerts";
+import Webcams from "./components/Webcams";
 import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
 import { dayHeader, isoDate, locDate, todayISO } from "./lib/format";
 import { tr, useLang } from "./lib/i18n";
-import { DEFAULT_MODEL, WEATHER_MODELS, modelLabel } from "./lib/models";
+import { DEFAULT_MODEL, modelLabel, WEATHER_MODELS } from "./lib/models";
+import { runAlertChecks } from "./lib/notify";
 import {
   fetchForecast,
   getOfflineForecast,
@@ -42,19 +47,27 @@ import {
   saveOfflineForecast,
   type SavedForecast,
 } from "./lib/openMeteo";
-import { runAlertChecks } from "./lib/notify";
+import { isLowMemoryClient } from "./lib/lowMemory";
 import { fetchRadar } from "./lib/rainviewer";
-import { tempTier, tierColor } from "./lib/tiers";
 import { setThemePalette } from "./lib/themeState";
+import { tempTier, tierColor } from "./lib/tiers";
 import { useStoredState } from "./lib/useStoredState";
 import { describeWeather } from "./lib/weatherCodes";
 import type { Forecast, GeoLocation, RadarData } from "./types";
-import posthog from "posthog-js";
 // RadarMap tahá maplibre-gl (~800 kB) – načteme ho až po zbytku appky, aby
 // počáteční bundle byl malý a layout/skeleton se vykreslil co nejdřív. Chunk pak
 // na pozadí přednačteme (viz efekt níže), ať je otevření radaru okamžité.
 const importRadarMap = () => import("./components/RadarMap");
 const RadarMap = lazy(importRadarMap);
+const ClimateMemo = memo(Climate);
+const MeteogramMemo = memo(Meteogram);
+const HourlyForecastMemo = memo(HourlyForecast);
+const WhatToWearMemo = memo(WhatToWear);
+const SmartSummaryMemo = memo(SmartSummary);
+const BioForecastMemo = memo(BioForecast);
+const DayDetailsMemo = memo(DayDetails);
+const WeatherAlertsMemo = memo(WeatherAlerts);
+const WebcamsMemo = memo(Webcams);
 
 type RadarStatus = "loading" | "ok" | "error";
 
@@ -151,6 +164,15 @@ function relUpdated(from: number, now: number): string {
   return tr("před {n} h", { n: h });
 }
 
+function RelUpdated({ from }: { from: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return <>{relUpdated(from, now)}</>;
+}
+
 // Posun ISO data (YYYY-MM-DD) o daný počet dní.
 function shiftIso(iso: string, days: number): string {
   const d = new Date(iso + "T12:00:00");
@@ -175,6 +197,7 @@ const WIDGET_DEFS: WidgetDef[] = [
   { id: "meteogram", label: "Meteogram" },
   { id: "wear", label: "Co na sebe" },
   { id: "outlook", label: "Výhled" },
+  { id: "climate", label: "Počasí během roku" },
   { id: "webcams", label: "Webkamery" },
   { id: "bio", label: "Biopředpověď" },
   { id: "details", label: "Další detaily" },
@@ -191,18 +214,18 @@ export default function App() {
   // offline použití – uložená místa jde otevřít bez sítě).
   const [history, setHistory] = useStoredState<GeoLocation[]>(
     "zmoknu.searchHistory",
-    [],
+    []
   );
   // „Sledovat moji polohu": když si uživatel zvolí „Použít moji polohu", zjistíme
   // ji i při příštím spuštění (dokud si ručně nevybere jiné místo).
   const [followLocation, setFollowLocation] = useStoredState<boolean>(
     "zmoknu.followLocation",
-    false,
+    false
   );
   // Při sledování GPS nejdřív počkáme na čerstvou polohu, ať se nenačte stará.
   // Skutečný deep-link (sdílený odkaz) má přednost a GPS nečeká.
   const [gpsReady, setGpsReady] = useState(
-    () => !loadFollowLocation() || isExternalDeepLink(),
+    () => !loadFollowLocation() || isExternalDeepLink()
   );
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [radar, setRadar] = useState<RadarData | null>(null);
@@ -211,6 +234,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
+  const viewDate = useDeferredValue(selectedDate);
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
   const [air, setAir] = useState<AirByDate>({});
   // Kolik dní historie načítáme (1–7) a den, na který skočit po donačtení.
   const [pastDays, setPastDays] = useState(1);
@@ -219,40 +245,37 @@ export default function App() {
     DEFAULT_MODEL
   );
   const [pendingDate, setPendingDate] = useState<string | null>(null);
-  // Vizuální stav swipe gesta (šipka vylézající z kraje jako „zpět" v Chrome).
-  const [swipe, setSwipe] = useState<{
-    dir: 1 | -1;
-    progress: number;
-    ready: boolean;
-  } | null>(null);
   // Zda lze v daném směru přepnout (čteme v gestu přes ref, ať je aktuální).
   const canPrevRef = useRef(true);
   const canNextRef = useRef(true);
   const swipeReadyRef = useRef(false);
-  // Pull-to-refresh: vzdálenost tažení (px), stav obnovování a „tik" pro refetch.
-  const [pull, setPull] = useState(0);
+  const swipeHintRef = useRef<HTMLDivElement>(null);
+  const swipeArrowRef = useRef<SVGPathElement>(null);
+  const swipeDayRef = useRef<HTMLSpanElement>(null);
+  const ptrRef = useRef<HTMLDivElement>(null);
+  const pullRef = useRef(0);
+  // Pull-to-refresh: stav obnovování a „tik" pro refetch.
   const [refreshing, setRefreshing] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
-  // Kdy byla naposledy načtena předpověď + „tik" pro průběžný relativní čas.
+  // Kdy byla naposledy načtena předpověď.
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   // Rozvržení hlavního obsahu (pořadí zapnutých sekcí + skryté sekce).
   const [widgetEnabled, setWidgetEnabled] = useStoredState<string[]>(
     "zmoknu.widgetsEnabled",
-    DEFAULT_WIDGETS,
+    DEFAULT_WIDGETS
   );
   const [widgetHidden, setWidgetHidden] = useStoredState<string[]>(
     "zmoknu.widgetsHidden",
-    DEFAULT_HIDDEN,
+    DEFAULT_HIDDEN
   );
   // Normalizace: jen známé sekce, chybějící (nově přidané) doplníme na konec.
   const { enabledOrder, hiddenOrder } = useMemo(() => {
     const known = ALL_WIDGET_IDS;
     const en = widgetEnabled.filter((id) => known.includes(id));
     const hi = widgetHidden.filter(
-      (id) => known.includes(id) && !en.includes(id),
+      (id) => known.includes(id) && !en.includes(id)
     );
     const missing = known.filter((id) => !en.includes(id) && !hi.includes(id));
     const missingShow = missing.filter((id) => !DEFAULT_HIDDEN.includes(id));
@@ -294,6 +317,23 @@ export default function App() {
     // Jen při prvním načtení po aktualizaci – záměrně bez deps na widgety.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Klima patří pod výhled (dřív se vkládalo za souhrn).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("zmoknu.layout.v3")) return;
+      localStorage.setItem("zmoknu.layout.v3", "1");
+    } catch {
+      return;
+    }
+    setWidgetEnabled((en) => {
+      if (!en.includes("climate") || !en.includes("outlook")) return en;
+      const next = en.filter((id) => id !== "climate");
+      const i = next.indexOf("outlook");
+      next.splice(i + 1, 0, "climate");
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Zobrazujeme uloženou (offline) předpověď, protože síť selhala?
   const [offline, setOffline] = useState(false);
   const lastReloadTick = useRef(0);
@@ -313,15 +353,14 @@ export default function App() {
   // První načtení: nechat HTML #boot (mimo #root), ať React skeleton
   // nesežere first-paint a layout nepřehodí. Další loady už jdou přes <Skeleton />.
   const [keepBoot, setKeepBoot] = useState(
-    () => typeof document !== "undefined" && !!document.getElementById("boot"),
+    () => typeof document !== "undefined" && !!document.getElementById("boot")
   );
   // Neblokující hláška (např. „starší historii se teď nepodařilo načíst").
   const [notice, setNotice] = useState<string | null>(null);
   // Uložená předpověď pro tuto lokalitu, kterou nabídneme, když se čerstvá data
   // načítají podezřele dlouho (pomalá síť) – ať uživatel nečeká na prázdno.
   const [slowSaved, setSlowSaved] = useState<SavedForecast | null>(null);
-  const showBoot =
-    keepBoot && loading && !forecast && !error && !slowSaved;
+  const showBoot = keepBoot && loading && !forecast && !error && !slowSaved;
 
   useLayoutEffect(() => {
     const boot = document.getElementById("boot");
@@ -337,9 +376,7 @@ export default function App() {
       return;
     }
     const t = window.setTimeout(() => {
-      setSlowSaved(
-        getOfflineForecast(location.latitude, location.longitude),
-      );
+      setSlowSaved(getOfflineForecast(location.latitude, location.longitude));
     }, SLOW_LOAD_MS);
     return () => window.clearTimeout(t);
   }, [loading, forecast, location.latitude, location.longitude]);
@@ -352,9 +389,12 @@ export default function App() {
     setError(null);
     setOffline(false);
     setNotice(
-      tr("Zobrazuji uloženou předpověď ({rel}). Čerstvá data se stále načítají.", {
-        rel: relUpdated(slowSaved.at, Date.now()),
-      }),
+      tr(
+        "Zobrazuji uloženou předpověď ({rel}). Čerstvá data se stále načítají.",
+        {
+          rel: relUpdated(slowSaved.at, Date.now()),
+        }
+      )
     );
     setSlowSaved(null);
   };
@@ -384,7 +424,13 @@ export default function App() {
           setFetchedAt(Date.now());
           setOffline(false);
           setNotice(null);
-          saveOfflineForecast(location, pastDays, model, f, favoritesRef.current);
+          saveOfflineForecast(
+            location,
+            pastDays,
+            model,
+            f,
+            favoritesRef.current
+          );
         }
       })
       .catch((e) => {
@@ -408,7 +454,7 @@ export default function App() {
           setPendingDate(null);
           setError(null);
           setNotice(
-            tr("Starší historii se teď nepodařilo načíst. Zkuste to znovu."),
+            tr("Starší historii se teď nepodařilo načíst. Zkuste to znovu.")
           );
         } else {
           setError(e instanceof Error ? e.message : tr("Chyba načítání"));
@@ -429,15 +475,16 @@ export default function App() {
   useEffect(() => {
     if (!loading) {
       setRefreshing(false);
-      setPull(0);
+      pullRef.current = 0;
+      const el = ptrRef.current;
+      if (el) {
+        el.classList.remove("is-pulling");
+        el.style.setProperty("--pull", "0px");
+        el.style.setProperty("--p", "0");
+        el.setAttribute("aria-hidden", "true");
+      }
     }
   }, [loading]);
-
-  // Průběžně přepočítávej „naposledy aktualizováno před …" (jednou za 30 s).
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
 
   // Neblokující hláška sama zmizí po chvíli.
   useEffect(() => {
@@ -592,7 +639,7 @@ export default function App() {
       .forEach((f) => {
         fetchForecast(f.latitude, f.longitude, pastDays, model)
           .then((fc) =>
-            saveOfflineForecast(f, pastDays, model, fc, favoritesRef.current),
+            saveOfflineForecast(f, pastDays, model, fc, favoritesRef.current)
           )
           .catch(() => {});
       });
@@ -690,7 +737,7 @@ export default function App() {
       }
       setPastDays(next);
     },
-    [pastDays],
+    [pastDays]
   );
 
   const changeDay = useCallback(
@@ -707,7 +754,7 @@ export default function App() {
       const next = dates[Math.min(dates.length - 1, Math.max(0, idx + delta))];
       if (next) setSelectedDate(next);
     },
-    [forecast, selectedDate, loadMoreHistory, pastDays],
+    [forecast, selectedDate, loadMoreHistory, pastDays]
   );
 
   // Na mobilu přepínej dny swipem do stran. Během vodorovného tažení zamkneme
@@ -746,13 +793,40 @@ export default function App() {
       "input[type='range']",
     ].join(",");
 
+    const hideSwipe = () => {
+      const el = swipeHintRef.current;
+      if (!el) return;
+      el.classList.add("is-off");
+      el.classList.remove("ready", "left", "right");
+    };
+
+    const paintSwipe = (nextDir: 1 | -1, progress: number, ready: boolean) => {
+      const el = swipeHintRef.current;
+      if (!el) return;
+      el.classList.remove("is-off");
+      el.classList.toggle("left", nextDir === -1);
+      el.classList.toggle("right", nextDir === 1);
+      el.classList.toggle("ready", ready);
+      el.style.setProperty("--p", String(progress));
+      const arrow = swipeArrowRef.current;
+      if (arrow) {
+        arrow.setAttribute(
+          "d",
+          nextDir === 1 ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"
+        );
+      }
+      const dayEl = swipeDayRef.current;
+      const iso = selectedDateRef.current;
+      if (dayEl && iso) dayEl.textContent = dayHeader(shiftIso(iso, nextDir));
+    };
+
     const reset = () => {
       track = false;
       horizontal = false;
       readyBuzzed = false;
       edgeBuzzed = false;
       swipeReadyRef.current = false;
-      setSwipe(null);
+      hideSwipe();
     };
 
     const onStart = (e: TouchEvent) => {
@@ -812,7 +886,7 @@ export default function App() {
         readyBuzzed = false;
       }
       swipeReadyRef.current = ready;
-      setSwipe({ dir, progress, ready });
+      paintSwipe(dir, progress, ready);
     };
 
     const onEnd = () => {
@@ -858,6 +932,16 @@ export default function App() {
       buzzed = false;
     };
 
+    const paintPull = (dist: number) => {
+      pullRef.current = dist;
+      const el = ptrRef.current;
+      if (!el) return;
+      el.classList.toggle("is-pulling", dist > 0);
+      el.style.setProperty("--pull", `${dist}px`);
+      el.style.setProperty("--p", String(Math.min(1, dist / THRESHOLD)));
+      el.setAttribute("aria-hidden", dist === 0 ? "true" : "false");
+    };
+
     const onMove = (e: TouchEvent) => {
       if (!active) return;
       const dy = e.touches[0].clientY - startY;
@@ -872,7 +956,7 @@ export default function App() {
         decided = true;
       }
       if (dy <= 0) {
-        setPull(0);
+        paintPull(0);
         return;
       }
       if (e.cancelable) e.preventDefault();
@@ -885,20 +969,20 @@ export default function App() {
       } else if (buzzed && dist < THRESHOLD) {
         buzzed = false;
       }
-      setPull(dist);
+      paintPull(dist);
     };
 
     const onEnd = () => {
       if (!active) return;
       active = false;
-      setPull((d) => {
-        if (d >= THRESHOLD) {
-          setRefreshing(true);
-          setReloadTick((t) => t + 1);
-          return THRESHOLD; // podrž indikátor, dokud běží načítání
-        }
-        return 0;
-      });
+      const d = pullRef.current;
+      if (d >= THRESHOLD) {
+        paintPull(THRESHOLD);
+        setRefreshing(true);
+        setReloadTick((t) => t + 1);
+        return;
+      }
+      paintPull(0);
     };
 
     window.addEventListener("touchstart", onStart, { passive: true });
@@ -973,22 +1057,25 @@ export default function App() {
       prev.map((f) =>
         f.latitude === loc.latitude && f.longitude === loc.longitude
           ? { ...f, name: trimmed }
-          : f,
-      ),
+          : f
+      )
     );
   }, []);
 
-  const toggleFavoriteFor = useCallback((loc: GeoLocation) => {
-    const isFav = favorites.some((f) => sameLocation(f, loc));
-    posthog.capture(isFav ? "favorite_removed" : "favorite_added", {
-      location_name: loc.name,
-    });
-    setFavorites((prev) =>
-      prev.some((f) => sameLocation(f, loc))
-        ? prev.filter((f) => !sameLocation(f, loc))
-        : [...prev, loc]
-    );
-  }, [favorites]);
+  const toggleFavoriteFor = useCallback(
+    (loc: GeoLocation) => {
+      const isFav = favorites.some((f) => sameLocation(f, loc));
+      posthog.capture(isFav ? "favorite_removed" : "favorite_added", {
+        location_name: loc.name,
+      });
+      setFavorites((prev) =>
+        prev.some((f) => sameLocation(f, loc))
+          ? prev.filter((f) => !sameLocation(f, loc))
+          : [...prev, loc]
+      );
+    },
+    [favorites]
+  );
 
   // Aktualizace barevného motivu pozadí podle aktuálního počasí. Motiv
   // ukládáme do localStorage a nastavujeme na <html>, aby ho preload v
@@ -1013,10 +1100,10 @@ export default function App() {
       setHistory(
         [loc, ...history.filter((h) => !sameLocation(h, loc))].slice(
           0,
-          HISTORY_MAX,
-        ),
+          HISTORY_MAX
+        )
       ),
-    [history, setHistory],
+    [history, setHistory]
   );
 
   // Ruční výběr místa (vyhledávání, oblíbené, mapa) → přestaneme sledovat polohu.
@@ -1026,7 +1113,7 @@ export default function App() {
       setGpsReady(true);
       setLocation(loc);
     },
-    [setFollowLocation],
+    [setFollowLocation]
   );
 
   // Zjistí aktuální polohu z prohlížeče. Při ručním spuštění (tlačítko) hlásíme
@@ -1082,10 +1169,10 @@ export default function App() {
           // Bez GPS zůstanou naposledy uložené souřadnice (offline fallback).
           finish();
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     },
-    [pushHistory, setFollowLocation],
+    [pushHistory, setFollowLocation]
   );
 
   const handleLocate = useCallback(() => runGeolocate(), [runGeolocate]);
@@ -1128,7 +1215,7 @@ export default function App() {
       setLocation((prev) =>
         prev.latitude === latitude && prev.longitude === longitude
           ? { ...prev, name }
-          : prev,
+          : prev
       );
       if (followLocation) {
         pushHistory({ name, latitude, longitude });
@@ -1155,30 +1242,45 @@ export default function App() {
 
   const selectedDay =
     forecast?.daily.find((d) => d.time === selectedDate) ?? forecast?.daily[0];
+  const viewDay =
+    viewDate === selectedDate
+      ? selectedDay
+      : forecast?.daily.find((d) => d.time === viewDate) ?? selectedDay;
 
   const today = todayISO(forecast?.utcOffsetSeconds);
-  const todayDayNum = today
-    ? Number(today.slice(8, 10))
-    : new Date().getDate();
+  const todayDayNum = today ? Number(today.slice(8, 10)) : new Date().getDate();
 
   // Rozbalovací výběr dnů přímo v hlavičce (toggle přes tb-day).
   const [dayPanelOpen, setDayPanelOpen] = useState(false);
   const [tab, setTab] = useState<"forecast" | "radar">("forecast");
   const [radarMounted, setRadarMounted] = useState(false);
   const radarOpen = tab === "radar";
+  // Na iPhonu WebGL mapa + předpověď v paměti najednou končí jetsamem
+  // (Safari tab zabije a „obnoví" appku). Mapu držíme jen když je radar otevřený.
+  useEffect(() => {
+    if (radarOpen) {
+      setRadarMounted(true);
+      return;
+    }
+    if (!isLowMemoryClient()) return;
+    setRadarMounted(false);
+  }, [radarOpen]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shared, setShared] = useState(false);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  const openRadar = useCallback(() => setTab("radar"), []);
+  const clearHistory = useCallback(() => setHistory([]), [setHistory]);
 
   // Motiv: "system" sleduje nastavení OS, "light"/"dark" je ruční volba.
   const [themeMode, setThemeMode] = useStoredState<ThemeMode>(
     "zmoknu.theme",
-    "dark",
+    "dark"
   );
   const [systemDark, setSystemDark] = useState(
     () =>
       typeof window === "undefined" ||
       !window.matchMedia ||
-      window.matchMedia("(prefers-color-scheme: dark)").matches,
+      window.matchMedia("(prefers-color-scheme: dark)").matches
   );
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -1198,7 +1300,7 @@ export default function App() {
     if (meta)
       meta.setAttribute(
         "content",
-        resolvedTheme === "light" ? "#eef2f8" : "#05080f",
+        resolvedTheme === "light" ? "#eef2f8" : "#05080f"
       );
   }, [resolvedTheme]);
   // Cyklus motivu (tlačítko): Systém → Světlý → Tmavý → Systém.
@@ -1330,15 +1432,16 @@ export default function App() {
   canPrevRef.current = canPrev;
   canNextRef.current = canNext;
 
-  // Pocitová teplota vybraného dne (pro doporučení oblečení).
+  // Pocitová teplota zobrazeného dne (pro doporučení oblečení).
+  // viewDate je deferred – hlavička se přepne hned, těžké karty doběhnou vzápětí.
   const dayHours =
-    forecast?.hourly.filter((h) => h.time.slice(0, 10) === selectedDate) ?? [];
+    forecast?.hourly.filter((h) => h.time.slice(0, 10) === viewDate) ?? [];
   const feelsMax = dayHours.length
     ? Math.max(...dayHours.map((h) => h.apparentTemperature))
-    : selectedDay?.tempMax ?? 0;
+    : viewDay?.tempMax ?? 0;
   const feelsMin = dayHours.length
     ? Math.min(...dayHours.map((h) => h.apparentTemperature))
-    : selectedDay?.tempMin ?? 0;
+    : viewDay?.tempMin ?? 0;
 
   // Srážky přes den (6–22 h) – brzká rána (0–6 h) a pozdní noc (22–24 h)
   // deštník neřeší (kromě extrémů, ty řeší WhatToWear přes celodenní úhrn).
@@ -1348,18 +1451,23 @@ export default function App() {
   });
   const wakeRainSum = wakeHours.length
     ? wakeHours.reduce((s, h) => s + h.precipitation, 0)
-    : selectedDay?.precipitationSum ?? 0;
+    : viewDay?.precipitationSum ?? 0;
   const wakeRainProb = wakeHours.length
     ? Math.max(...wakeHours.map((h) => h.precipitationProbability))
-    : selectedDay?.precipitationProbabilityMax ?? 0;
+    : viewDay?.precipitationProbabilityMax ?? 0;
 
   // Má vybraný den vůbec data? Krátkodobé/regionální modely (např. ČHMÚ) je
   // nemají pro vzdálené dny → skryjeme denní widgety a nabídneme jiný model.
   const dayHasData =
-    (selectedDay != null && Number.isFinite(selectedDay.weatherCode)) ||
+    (viewDay != null && Number.isFinite(viewDay.weatherCode)) ||
     dayHours.some((h) => Number.isFinite(h.temperature));
-
-  if (radarOpen && !radarMounted) setRadarMounted(true);
+  const selectedHasData =
+    (selectedDay != null && Number.isFinite(selectedDay.weatherCode)) ||
+    (forecast?.hourly.some(
+      (h) =>
+        h.time.slice(0, 10) === selectedDate && Number.isFinite(h.temperature)
+    ) ??
+      false);
 
   if (showBoot) return null;
 
@@ -1376,14 +1484,9 @@ export default function App() {
       }
     >
       <div
-        className={`ptr ${refreshing ? "refreshing" : ""}`}
-        style={
-          {
-            "--pull": `${pull}px`,
-            "--p": Math.min(1, pull / 70),
-          } as CSSProperties
-        }
-        aria-hidden={pull === 0 && !refreshing}
+        ref={ptrRef}
+        className={`ptr${refreshing ? " refreshing" : ""}`}
+        aria-hidden={!refreshing}
       >
         <span className="ptr-spinner">
           <RefreshGlyph />
@@ -1392,33 +1495,42 @@ export default function App() {
           {refreshing
             ? tr("Obnovuji…")
             : fetchedAt != null
-              ? `${tr("Aktualizováno")} ${relUpdated(fetchedAt, nowTick)}`
-              : ""}
+            ? (
+                <>
+                  {tr("Aktualizováno")} <RelUpdated from={fetchedAt} />
+                </>
+              )
+            : ""}
         </span>
       </div>
-      {swipe && (
-        <div
-          className={`swipe-hint ${swipe.dir === 1 ? "right" : "left"} ${
-            swipe.ready ? "ready" : ""
-          }`}
-          style={{ "--p": swipe.progress } as CSSProperties}
-          aria-hidden="true"
-        >
-          <span className="swipe-hint-circle">
-            <SwipeArrow dir={swipe.dir} />
-          </span>
-          <span className="swipe-hint-day">
-            {dayHeader(shiftIso(selectedDate || today, swipe.dir))}
-          </span>
-        </div>
-      )}
+      <div ref={swipeHintRef} className="swipe-hint is-off" aria-hidden="true">
+        <span className="swipe-hint-circle">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              ref={swipeArrowRef}
+              d="M9 6l6 6-6 6"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <span className="swipe-hint-day" ref={swipeDayRef} />
+      </div>
       {fetchedAt != null && (
         <div
           className="last-refresh"
           style={{ top: `${headerH}px` } as CSSProperties}
           aria-hidden="true"
         >
-          {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
+          {tr("Aktualizováno")} <RelUpdated from={fetchedAt} />
         </div>
       )}
       <header className="topbar" ref={headerRef}>
@@ -1469,7 +1581,9 @@ export default function App() {
             {tr("předpověď pro")}{" "}
             <button
               type="button"
-              className={`hb-pick hb-place${followLocation ? " hb-place-follow" : ""}`}
+              className={`hb-pick hb-place${
+                followLocation ? " hb-place-follow" : ""
+              }`}
               onClick={() => setSearchOpen(true)}
               title={
                 followLocation
@@ -1572,7 +1686,7 @@ export default function App() {
         onRename={renameFavorite}
         history={history}
         onPushHistory={pushHistory}
-        onClearHistory={() => setHistory([])}
+        onClearHistory={clearHistory}
       />
 
       {error && <div className="banner error">{error}</div>}
@@ -1585,10 +1699,15 @@ export default function App() {
                 {
                   when: new Date(fetchedAt).toLocaleString(
                     lang === "cs" ? "cs-CZ" : "en-GB",
-                    { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" },
+                    {
+                      day: "numeric",
+                      month: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
                   ),
-                  rel: relUpdated(fetchedAt, nowTick),
-                },
+                  rel: relUpdated(fetchedAt, Date.now()),
+                }
               )
             : tr("Jste offline – zobrazuji naposledy uloženou předpověď.")}
         </div>
@@ -1608,10 +1727,10 @@ export default function App() {
                         month: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
-                      },
+                      }
                     ),
-                    rel: relUpdated(slowSaved.at, nowTick),
-                  },
+                    rel: relUpdated(slowSaved.at, Date.now()),
+                  }
                 )}
               </span>
               <button
@@ -1625,15 +1744,15 @@ export default function App() {
           )}
           <Skeleton />
         </>
-      ) : forecast ? (
+      ) : forecast && !radarOpen ? (
         <main className="content">
           <div className="col-main">
-            {!dayHasData && (
+            {!selectedHasData && (
               <div className="banner notice nodata-notice">
                 <span>
                   {tr(
                     "Pro tento den nemá model {model} předpověď – nejde dál než jeho horizont.",
-                    { model: modelLabel(model) },
+                    { model: modelLabel(model) }
                   )}
                 </span>
                 {model !== DEFAULT_MODEL && (
@@ -1650,41 +1769,57 @@ export default function App() {
             {(() => {
               const els: Record<string, ReactNode> = {
                 alerts: (
-                  <WeatherAlerts
+                  <WeatherAlertsMemo
                     lat={location.latitude}
                     lon={location.longitude}
                   />
                 ),
-                summary: selectedDay && dayHasData ? (
-                  <SmartSummary
-                    day={selectedDay}
-                    hourly={forecast.hourly}
-                    date={selectedDate}
-                    isToday={selectedDate === today}
-                    isPast={selectedDate < today}
-                    minutely={forecast.minutely15}
-                    current={forecast.current}
-                    lat={location.latitude}
-                    lon={location.longitude}
-                    utcOffset={forecast.utcOffsetSeconds}
-                    feelsMax={feelsMax}
-                    feelsMin={feelsMin}
-                    onOpenRadar={() => setTab("radar")}
+                climate: (
+                  <ClimateMemo
+                    location={location}
+                    favorites={favorites}
+                    history={history}
+                    isCurrentFav={isCurrentFav}
+                    onToggleCurrent={toggleFavorite}
+                    onToggleFavorite={toggleFavoriteFor}
+                    onRemove={removeFavorite}
+                    onRename={renameFavorite}
+                    onPushHistory={pushHistory}
+                    onClearHistory={clearHistory}
+                    onChangeLocation={openSearch}
                   />
-                ) : null,
+                ),
+                summary:
+                  viewDay && dayHasData ? (
+                    <SmartSummaryMemo
+                      day={viewDay}
+                      hourly={forecast.hourly}
+                      date={viewDate}
+                      isToday={viewDate === today}
+                      isPast={viewDate < today}
+                      minutely={forecast.minutely15}
+                      current={forecast.current}
+                      lat={location.latitude}
+                      lon={location.longitude}
+                      utcOffset={forecast.utcOffsetSeconds}
+                      feelsMax={feelsMax}
+                      feelsMin={feelsMin}
+                      onOpenRadar={openRadar}
+                    />
+                  ) : null,
                 bio: dayHasData ? (
-                  <BioForecast
+                  <BioForecastMemo
                     hourly={forecast.hourly}
-                    date={selectedDate}
-                    air={air[selectedDate] ?? null}
+                    date={viewDate}
+                    air={air[viewDate] ?? null}
                     lat={location.latitude}
                     lon={location.longitude}
                   />
                 ) : null,
                 meteogram: dayHasData ? (
-                  <Meteogram
+                  <MeteogramMemo
                     hourly={forecast.hourly}
-                    activeDate={selectedDate}
+                    activeDate={viewDate}
                     lat={location.latitude}
                     lon={location.longitude}
                     model={model}
@@ -1692,41 +1827,43 @@ export default function App() {
                     utcOffset={forecast.utcOffsetSeconds}
                   />
                 ) : null,
-                wear: selectedDay && dayHasData ? (
-                  <WhatToWear
-                    day={selectedDay}
-                    feelsMax={feelsMax}
-                    feelsMin={feelsMin}
-                    wakeRainSum={wakeRainSum}
-                    wakeRainProb={wakeRainProb}
-                    hourly={forecast.hourly}
-                    date={selectedDate}
-                  />
-                ) : null,
+                wear:
+                  viewDay && dayHasData ? (
+                    <WhatToWearMemo
+                      day={viewDay}
+                      feelsMax={feelsMax}
+                      feelsMin={feelsMin}
+                      wakeRainSum={wakeRainSum}
+                      wakeRainProb={wakeRainProb}
+                      hourly={forecast.hourly}
+                      date={viewDate}
+                    />
+                  ) : null,
                 outlook: (
-                  <HourlyForecast
+                  <HourlyForecastMemo
                     hourly={forecast.hourly}
-                    activeDate={selectedDate}
+                    activeDate={viewDate}
                     utcOffset={forecast.utcOffsetSeconds}
                     onSelectDay={setSelectedDate}
                   />
                 ),
                 webcams: (
-                  <Webcams
+                  <WebcamsMemo
                     lat={location.latitude}
                     lon={location.longitude}
                   />
                 ),
-                details: selectedDay && dayHasData ? (
-                  <DayDetails
-                    day={selectedDay}
-                    air={air[selectedDate] ?? null}
-                    date={selectedDate}
-                    lat={location.latitude}
-                    lon={location.longitude}
-                    hourly={forecast.hourly}
-                  />
-                ) : null,
+                details:
+                  viewDay && dayHasData ? (
+                    <DayDetailsMemo
+                      day={viewDay}
+                      air={air[viewDate] ?? null}
+                      date={viewDate}
+                      lat={location.latitude}
+                      lon={location.longitude}
+                      hourly={forecast.hourly}
+                    />
+                  ) : null,
               };
               return enabledOrder.map((id) => (
                 <Fragment key={id}>{els[id]}</Fragment>
@@ -1762,178 +1899,200 @@ export default function App() {
       {!radarOpen && (
         <footer className="footer">
           <div className="footer-top">
-          <div className="footer-about">
-            <div className="footer-brand">
-              <img
-                src={resolvedTheme === "light" ? "/logo-light.svg" : "/logo.svg"}
-                alt=""
-                className="footer-logo"
-                aria-hidden="true"
-              />
-              <span className="footer-brandname">
-                zmoknu<span className="footer-brand-q">?</span>
-              </span>
-            </div>
-            <p className="footer-note">
-              {tr(
-                "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam."
-              )}
-            </p>
-            <p className="footer-contact">
-              — <span className="footer-name">Jan Václavík</span>
-              {" · "}
-              <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
-              {tr(", jak se vám líbí.")}
-            </p>
-          </div>
-
-          <div className="footer-actions">
-            <InstallHint />
-
-            <button
-              type="button"
-              className="footer-icon-btn"
-              onClick={() => { posthog.capture("notification_settings_opened"); setNotifyOpen(true); }}
-              title={tr("Upozornění na počasí")}
-              aria-label={tr("Upozornění na počasí")}
-            >
-              <BellGlyph />
-            </button>
-
-            <button
-              type="button"
-              className="footer-icon-btn"
-              onClick={shareLink}
-              title={shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
-              aria-label={shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
-            >
-              {shared ? <CheckGlyph /> : <ShareGlyph />}
-            </button>
-
-            <Donate />
-          </div>
-        </div>
-
-        <div className="footer-settings">
-          <span className="footer-settings-kicker">{tr("Nastavení")}</span>
-          <label className="settings-model">
-            <span className="settings-model-label">
-              {tr("Zdroj dat (model)")}
-            </span>
-            <select
-              className="settings-model-select"
-              value={model}
-              onChange={(e) => { posthog.capture("weather_model_changed", { model: e.target.value }); setModel(e.target.value); }}
-            >
-              {WEATHER_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.flag} {tr(m.label)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="footer-settings-right">
-            <button
-              type="button"
-              className="footer-customize"
-              onClick={() => {
-                posthog.capture("customize_opened");
-                setCustomizeOpen(true);
-              }}
-            >
-              <GearGlyph />
-              {tr("Přizpůsobit obsah")}
-            </button>
-            <div className="lang-switch" role="group" aria-label={tr("jazyk")}>
-              <button
-                type="button"
-                className={`lang-btn ${lang === "cs" ? "active" : ""}`}
-                onClick={() => { posthog.capture("language_changed", { language: "cs" }); setLang("cs"); }}
-                aria-pressed={lang === "cs"}
-                title="Čeština"
-              >
-                <FlagCZ />
-              </button>
-              <button
-                type="button"
-                className={`lang-btn ${lang === "en" ? "active" : ""}`}
-                onClick={() => { posthog.capture("language_changed", { language: "en" }); setLang("en"); }}
-                aria-pressed={lang === "en"}
-                title="English"
-              >
-                <FlagEN />
-              </button>
-            </div>
-            <button
-              type="button"
-              className="footer-icon-btn"
-              onClick={() => {
-                posthog.capture("theme_toggled", { from: themeMode });
-                cycleTheme();
-              }}
-              aria-label={
-                themeMode === "system"
-                  ? tr("Podle systému")
-                  : themeMode === "light"
-                    ? tr("Světlý režim")
-                    : tr("Tmavý režim")
-              }
-              title={
-                themeMode === "system"
-                  ? tr("Podle systému")
-                  : themeMode === "light"
-                    ? tr("Světlý režim")
-                    : tr("Tmavý režim")
-              }
-            >
-              {themeMode === "system" ? (
-                <SystemGlyph />
-              ) : themeMode === "light" ? (
-                <SunGlyph />
-              ) : (
-                <MoonGlyph />
-              )}
-            </button>
-          </div>
-        </div>
-
-        <div className="footer-bottom">
-          <div className="footer-links">
-            <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
-              Data: Open-Meteo (CC BY 4.0)
-            </a>
-            <span className="footer-sep">·</span>
-            <a
-              href="https://github.com/jvaclavik/zmoknu"
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub
-            </a>
-            <span className="footer-sep">·</span>
-            <a
-              href="https://github.com/jvaclavik/zmoknu/blob/main/LICENSE"
-              target="_blank"
-              rel="noreferrer"
-            >
-              AGPL-3.0
-            </a>
-          </div>
-
-          <div className="footer-meta">
-            {fetchedAt != null && (
-              <p
-                className="footer-updated"
-                title={new Date(fetchedAt).toLocaleString(
-                  lang === "en" ? "en-GB" : "cs-CZ"
+            <div className="footer-about">
+              <div className="footer-brand">
+                <img
+                  src={
+                    resolvedTheme === "light" ? "/logo-light.svg" : "/logo.svg"
+                  }
+                  alt=""
+                  className="footer-logo"
+                  aria-hidden="true"
+                />
+                <span className="footer-brandname">
+                  zmoknu<span className="footer-brand-q">?</span>
+                </span>
+              </div>
+              <p className="footer-note">
+                {tr(
+                  "Vzniklo z frustrace, že chybělo počasí s intuitivním UX a přehledným zobrazením dat bez paywallu a reklam."
                 )}
-              >
-                {tr("Aktualizováno")} {relUpdated(fetchedAt, nowTick)}
               </p>
-            )}
-            <ReloadPrompt />
+              <p className="footer-contact">
+                — <span className="footer-name">Jan Václavík</span>
+                {" · "}
+                <a href="mailto:jvaclavik@gmail.com">{tr("Dejte mi vědět")}</a>
+                {tr(", jak se vám líbí.")}
+              </p>
+            </div>
+
+            <div className="footer-actions">
+              <InstallHint />
+
+              <button
+                type="button"
+                className="footer-icon-btn"
+                onClick={() => {
+                  posthog.capture("notification_settings_opened");
+                  setNotifyOpen(true);
+                }}
+                title={tr("Upozornění na počasí")}
+                aria-label={tr("Upozornění na počasí")}
+              >
+                <BellGlyph />
+              </button>
+
+              <button
+                type="button"
+                className="footer-icon-btn"
+                onClick={shareLink}
+                title={shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")}
+                aria-label={
+                  shared ? tr("Odkaz zkopírován") : tr("Sdílet odkaz")
+                }
+              >
+                {shared ? <CheckGlyph /> : <ShareGlyph />}
+              </button>
+
+              <Donate />
+            </div>
           </div>
-        </div>
+
+          <div className="footer-settings">
+            <span className="footer-settings-kicker">{tr("Nastavení")}</span>
+            <label className="settings-model">
+              <span className="settings-model-label">
+                {tr("Zdroj dat (model)")}
+              </span>
+              <select
+                className="settings-model-select"
+                value={model}
+                onChange={(e) => {
+                  posthog.capture("weather_model_changed", {
+                    model: e.target.value,
+                  });
+                  setModel(e.target.value);
+                }}
+              >
+                {WEATHER_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.flag} {tr(m.label)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="footer-settings-right">
+              <button
+                type="button"
+                className="footer-customize"
+                onClick={() => {
+                  posthog.capture("customize_opened");
+                  setCustomizeOpen(true);
+                }}
+              >
+                <GearGlyph />
+                {tr("Přizpůsobit obsah")}
+              </button>
+              <div
+                className="lang-switch"
+                role="group"
+                aria-label={tr("jazyk")}
+              >
+                <button
+                  type="button"
+                  className={`lang-btn ${lang === "cs" ? "active" : ""}`}
+                  onClick={() => {
+                    posthog.capture("language_changed", { language: "cs" });
+                    setLang("cs");
+                  }}
+                  aria-pressed={lang === "cs"}
+                  title="Čeština"
+                >
+                  <FlagCZ />
+                </button>
+                <button
+                  type="button"
+                  className={`lang-btn ${lang === "en" ? "active" : ""}`}
+                  onClick={() => {
+                    posthog.capture("language_changed", { language: "en" });
+                    setLang("en");
+                  }}
+                  aria-pressed={lang === "en"}
+                  title="English"
+                >
+                  <FlagEN />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="footer-icon-btn"
+                onClick={() => {
+                  posthog.capture("theme_toggled", { from: themeMode });
+                  cycleTheme();
+                }}
+                aria-label={
+                  themeMode === "system"
+                    ? tr("Podle systému")
+                    : themeMode === "light"
+                    ? tr("Světlý režim")
+                    : tr("Tmavý režim")
+                }
+                title={
+                  themeMode === "system"
+                    ? tr("Podle systému")
+                    : themeMode === "light"
+                    ? tr("Světlý režim")
+                    : tr("Tmavý režim")
+                }
+              >
+                {themeMode === "system" ? (
+                  <SystemGlyph />
+                ) : themeMode === "light" ? (
+                  <SunGlyph />
+                ) : (
+                  <MoonGlyph />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="footer-bottom">
+            <div className="footer-links">
+              <a href="https://open-meteo.com" target="_blank" rel="noreferrer">
+                Data: Open-Meteo (CC BY 4.0)
+              </a>
+              <span className="footer-sep">·</span>
+              <a
+                href="https://github.com/jvaclavik/zmoknu"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub
+              </a>
+              <span className="footer-sep">·</span>
+              <a
+                href="https://github.com/jvaclavik/zmoknu/blob/main/LICENSE"
+                target="_blank"
+                rel="noreferrer"
+              >
+                AGPL-3.0
+              </a>
+            </div>
+
+            <div className="footer-meta">
+              {fetchedAt != null && (
+                <p
+                  className="footer-updated"
+                  title={new Date(fetchedAt).toLocaleString(
+                    lang === "en" ? "en-GB" : "cs-CZ"
+                  )}
+                >
+                  {tr("Aktualizováno")} <RelUpdated from={fetchedAt} />
+                </p>
+              )}
+              <ReloadPrompt />
+            </div>
+          </div>
         </footer>
       )}
 
@@ -2158,26 +2317,6 @@ function RadarGlyph() {
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function SwipeArrow({ dir }: { dir: 1 | -1 }) {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d={dir === 1 ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"}
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );

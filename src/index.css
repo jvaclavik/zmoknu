@@ -18,6 +18,7 @@
   --muted: #9aa7c4;
   --accent: #5bb6ff;
   --accent-warm: #ffd166;
+  --climate-alike: #c4b5fd;
   /* Barva textu, která kontrastuje na akcentové ploše (pilulky apod.). */
   --accent-ink: #08131f;
   --radius: 18px;
@@ -70,6 +71,7 @@
   --muted: #56617c;
   --accent: #1f7fd6;
   --accent-warm: #c07d00;
+  --climate-alike: #6d4aff;
   --accent-ink: #ffffff;
   --shadow: 0 10px 30px rgba(30, 50, 90, 0.14);
   /* Ikonky počasí – tmavší/sytější, aby měly na světlých kartách kontrast. */
@@ -226,6 +228,9 @@ body::before {
   pointer-events: none;
   transition: transform 0.12s ease-out, opacity 0.15s;
 }
+.ptr.is-pulling {
+  transition: none;
+}
 .ptr-label {
   position: absolute;
   top: calc(100% + 6px);
@@ -264,12 +269,19 @@ body::before {
 
 .app {
   --page-px: clamp(12px, 3vw, 28px);
-  max-width: 1460px;
+  --app-max: 1460px;
+  --app-pad-left: calc(
+    var(--page-px) + var(--sal, env(safe-area-inset-left, 0px))
+  );
+  --app-pad-right: calc(
+    var(--page-px) + var(--sar, env(safe-area-inset-right, 0px))
+  );
+  --col-max: calc(var(--app-max) - var(--app-pad-left) - var(--app-pad-right));
+  max-width: none;
   margin: 0 auto;
   /* Header je nahoře → žádný horní padding. Boční insety kvůli notchi v landscape. */
-  padding: 0 calc(var(--page-px) + var(--sar, env(safe-area-inset-right, 0px)))
-    calc(24px + var(--tabbar-h) + var(--vv-bottom, 0px))
-    calc(var(--page-px) + var(--sal, env(safe-area-inset-left, 0px)));
+  padding: 0 var(--app-pad-right)
+    calc(24px + var(--tabbar-h) + var(--vv-bottom, 0px)) var(--app-pad-left);
 }
 
 /* Nenápadný čas poslední aktualizace schovaný pod fixním headerem – odkryje se
@@ -290,15 +302,15 @@ body::before {
 }
 
 /* Topbar – fixed, aby „nereagoval" na bounce scrollu (rubber-band). Vycentrovaný
-   a s max-width jako .app, ať brand zůstane zarovnaný s obsahem i na širokých
-   obrazovkách; pozadí (::before) přeteče na plnou šířku okna. */
+   ve stejném sloupci jako běžné karty; pozadí (::before) přeteče na plnou
+   šířku okna. */
 .topbar {
   position: fixed;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
-  max-width: 1460px;
+  max-width: var(--app-max);
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -1956,6 +1968,16 @@ body::before {
   backdrop-filter: blur(10px);
   margin-bottom: 16px;
 }
+.climate-card,
+.bio-card,
+.webcams-card,
+.details-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+.climate-card {
+  contain-intrinsic-size: auto 520px;
+}
 .card-title {
   margin: 0 0 14px;
   font-size: 0.78rem;
@@ -1979,6 +2001,23 @@ body::before {
 /* Content */
 .content {
   display: block;
+}
+
+/* Běžné karty drží původní sloupec. Meteogram (a srovnání klimatu, když se
+   nevejde) můžou na širokém monitoru použít celou šířku. */
+.col-main > .card,
+.col-main > .banner,
+.app > .banner,
+.app > .footer,
+.skeleton-main {
+  max-width: var(--col-max);
+  width: 100%;
+  margin-inline: auto;
+}
+.col-main > .meteogram-card,
+.col-main > .meteogram-card-multi,
+.col-main > .climate-card.compare.climate-wide {
+  max-width: none;
 }
 
 /* Current weather */
@@ -3630,7 +3669,7 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 .mg-info-pop {
-  z-index: 1300;
+  z-index: 3200;
   width: max-content;
   max-width: 240px;
   padding: 8px 10px;
@@ -3871,16 +3910,9 @@ input[type="range"]::-moz-range-thumb {
   fill: #0f66c0;
 }
 
-/* Alternativní předpovědi (modely) – plocha obálky min–max */
+/* Alternativní předpovědi (modely) – vrstvené percentilové pásy. */
 .mg-spread {
   fill: rgb(var(--ov-rgb));
-  stroke: none;
-}
-/* Jemný pás rozptylu srážek napříč modely (nejistota) – nenápadný, jako plocha
-   nejistoty u teploty. Kreslí se pod sloupci, takže hlavní sloupce zůstanou ostré. */
-.mg-precip-spread {
-  fill: #3b9bff;
-  fill-opacity: 0.14;
   stroke: none;
 }
 .mg-uv-thlabel {
@@ -4005,9 +4037,6 @@ input[type="range"]::-moz-range-thumb {
   align-items: stretch;
   --stat-tile-h: 28px;
 }
-.mg-stats.shrink.no-icons {
-  --stat-tile-h: 24px;
-}
 .mg-stats.shrink .mg-stat {
   box-sizing: border-box;
   height: var(--stat-tile-h);
@@ -4020,9 +4049,6 @@ input[type="range"]::-moz-range-thumb {
   font-size: calc(0.74rem + 0.1rem * (1 - var(--stats-shrink)));
   line-height: 1;
 }
-.mg-stats.shrink.no-icons .mg-stat-v strong {
-  font-size: calc(0.68rem + 0.08rem * (1 - var(--stats-shrink)));
-}
 .mg-stats.shrink .mg-stat > svg,
 .mg-stats.shrink .mg-stat-cloth svg {
   width: 18px;
@@ -4032,8 +4058,9 @@ input[type="range"]::-moz-range-thumb {
   width: 18px;
   height: 18px;
 }
-.mg-stats.shrink .mg-stat-outfit .mg-stat-extras svg {
-  transform: scale(calc(0.92 + 0.08 * (1 - var(--stats-shrink))));
+.mg-stats.shrink .mg-stat-extra-icons svg {
+  width: 13px;
+  height: 13px;
 }
 .mg-stats.compact {
   --stat-tile-h: 34px;
@@ -4725,8 +4752,15 @@ input[type="range"]::-moz-range-thumb {
 .mg-plot-stack-item .mg-outfit-icon i {
   display: none;
 }
-/* Dlaždice „oblečení" v pásu hodnot – místo čísla je název vrstvy, takže musí
-   umět zkrátit text; doplňky (deštník, brýle…) jdou jako drobné ikonky pod něj. */
+.mg-stat-cloths {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  min-width: 0;
+}
 .mg-stat-cloth {
   display: grid;
   place-items: center;
@@ -4743,32 +4777,25 @@ input[type="range"]::-moz-range-thumb {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mg-stat-v .mg-stat-extras {
+.mg-stat-outfit-lab {
   display: flex;
-  flex-wrap: nowrap;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  line-height: 1;
-  white-space: nowrap;
-}
-.mg-stat-extras-lab {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: auto;
 }
 .mg-stat-extra-icons {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex-shrink: 0;
+  margin-left: auto;
 }
-.mg-stat-v .mg-stat-extras svg {
+.mg-stat-extra-icons svg {
   display: block;
-  opacity: 0.85;
+  opacity: 0.9;
   flex-shrink: 0;
 }
 
@@ -6004,15 +6031,11 @@ span.smart-hero-nowcast-btn {
 .mg-stats {
   --stat-tile-h: 30px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
   grid-auto-rows: var(--stat-tile-h);
   align-items: stretch;
   gap: 3px 4px;
   margin: 2px 0 16px;
-}
-.mg-stats.no-icons {
-  --stat-tile-h: 26px;
-  gap: 3px;
 }
 .mg-stats .mg-stat-btn {
   box-sizing: border-box;
@@ -6030,11 +6053,8 @@ span.smart-hero-nowcast-btn {
   padding: 1px 5px;
   border-radius: 7px;
   border: 1px solid transparent;
+  overflow: hidden;
   container-type: inline-size;
-}
-.mg-stats.no-icons .mg-stat {
-  justify-content: center;
-  padding: 1px 4px;
 }
 /* Klikatelné statistiky = přepínač grafu. */
 .mg-stat-btn {
@@ -6066,6 +6086,7 @@ span.smart-hero-nowcast-btn {
   flex-shrink: 0;
 }
 .mg-stats:not(.shrink) .mg-stat > svg,
+.mg-stats:not(.shrink) .mg-stat-cloths,
 .mg-stats:not(.shrink) .mg-stat-cloth,
 .mg-stats:not(.shrink) .mg-drops4,
 .mg-stats:not(.shrink) .mg-stat-missing {
@@ -6080,17 +6101,14 @@ span.smart-hero-nowcast-btn {
   width: 20px;
   height: 20px;
 }
+.mg-stats:not(.shrink) .mg-stat-extra-icons svg {
+  width: 14px;
+  height: 14px;
+}
 .mg-stats:not(.shrink) .mg-stat-missing {
   width: 20px;
   height: 20px;
   font-size: 0.78rem;
-}
-.mg-stats.no-icons .mg-stat > svg,
-.mg-stats.no-icons .mg-stat-cloth,
-.mg-stats.no-icons .mg-drops4,
-.mg-stats.no-icons .mg-stat-missing,
-.mg-stats.no-icons .mg-glyph {
-  display: none;
 }
 .mg-stat-v {
   display: flex;
@@ -6099,10 +6117,6 @@ span.smart-hero-nowcast-btn {
   justify-content: center;
   line-height: 1;
   min-width: 0;
-}
-.mg-stats.no-icons .mg-stat-v {
-  flex: none;
-  text-align: center;
 }
 .mg-stat-v strong {
   display: block;
@@ -6115,44 +6129,33 @@ span.smart-hero-nowcast-btn {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mg-stats.no-icons .mg-stat-v strong {
-  font-size: 0.7rem;
-  font-weight: 700;
-}
 .mg-stat-outfit .mg-stat-v strong {
   font-size: 0.74rem;
 }
-.mg-stats.no-icons .mg-stat-outfit .mg-stat-v strong {
-  font-size: 0.66rem;
-}
-.mg-stat-v span {
+.mg-stat-v > span {
   display: none;
 }
-.mg-stat-outfit .mg-stat-v span.mg-stat-extras {
+.mg-stat-v .mg-stat-outfit-lab {
+  display: flex;
+}
+.mg-stat-outfit-lab > span:not(.mg-stat-extra-icons) {
   display: none;
 }
-@container (max-width: 128px) {
-  .mg-stat-v strong {
-    font-size: 0.9rem;
-  }
-  .mg-stat-v span {
-    font-size: 0.62rem;
-  }
+.mg-stat-v .mg-stat-extra-icons {
+  display: flex;
 }
-@container (max-width: 96px) {
-  .mg-stat-v strong {
-    font-size: 0.84rem;
-  }
-  .mg-stat-v span {
-    font-size: 0.58rem;
-  }
+.mg-stat-outfit .mg-stat-v {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
 }
-@container (max-width: 80px) {
-  .mg-stat-v strong {
-    font-size: 0.8rem;
-  }
-  .mg-stat-v span {
-    font-size: 0.55rem;
+.mg-stat-outfit .mg-stat-v strong {
+  flex: 1;
+  min-width: 0;
+}
+@container (max-width: 108px) {
+  .mg-stat-extra-icons {
+    display: none;
   }
 }
 /* Ikona srážek: 4 kapky v mřížce 2×2 (po dvou na řádku). */
@@ -6248,7 +6251,8 @@ span.smart-hero-nowcast-btn {
     font-size: 1.08rem;
     font-weight: 900;
   }
-  .mg-stat-v span {
+  .mg-stat-v > span,
+  .mg-stat-outfit-lab > span:not(.mg-stat-extra-icons) {
     display: block;
     font-size: 0.72rem;
     color: var(--muted);
@@ -6258,16 +6262,44 @@ span.smart-hero-nowcast-btn {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .mg-stat-outfit .mg-stat-v span.mg-stat-extras {
+  .mg-stat-outfit .mg-stat-v {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .mg-stat-outfit .mg-stat-v strong {
+    flex: none;
+  }
+  .mg-stat-outfit-lab {
+    width: 100%;
+  }
+  .mg-stat-v .mg-stat-outfit-lab,
+  .mg-stat-v .mg-stat-extra-icons {
     display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
-    line-height: 1;
-    overflow: hidden;
-    white-space: nowrap;
+  }
+  @container (max-width: 128px) {
+    .mg-stat-v strong {
+      font-size: 0.9rem;
+    }
+    .mg-stat-v span {
+      font-size: 0.62rem;
+    }
+  }
+  @container (max-width: 96px) {
+    .mg-stat-v strong {
+      font-size: 0.84rem;
+    }
+    .mg-stat-v span {
+      font-size: 0.58rem;
+    }
+  }
+  @container (max-width: 80px) {
+    .mg-stat-v strong {
+      font-size: 0.8rem;
+    }
+    .mg-stat-v span {
+      font-size: 0.55rem;
+    }
   }
   .mg-stats:not(.shrink) .mg-stat > svg,
   .mg-stats:not(.shrink) .mg-stat-cloth svg {
@@ -6277,6 +6309,10 @@ span.smart-hero-nowcast-btn {
   .mg-stats:not(.shrink) .mg-stat-cloth {
     width: 30px;
     height: 30px;
+  }
+  .mg-stats:not(.shrink) .mg-stat-extra-icons svg {
+    width: 18px;
+    height: 18px;
   }
   .mg-stats:not(.shrink) .mg-stat-missing {
     width: 30px;
@@ -6290,10 +6326,15 @@ span.smart-hero-nowcast-btn {
     padding: 4px 6px;
     gap: calc(4px + 2px * (1 - var(--stats-shrink)));
   }
-  .mg-stats.shrink .mg-stat-v span {
+  .mg-stats.shrink .mg-stat-v > span,
+  .mg-stats.shrink .mg-stat-outfit-lab > span:not(.mg-stat-extra-icons) {
     display: block;
     font-size: calc(0.66rem + 0.08rem * (1 - var(--stats-shrink)));
     line-height: 1.25;
+  }
+  .mg-stats.shrink .mg-stat-v .mg-stat-outfit-lab,
+  .mg-stats.shrink .mg-stat-v .mg-stat-extra-icons {
+    display: flex;
   }
   .mg-stats.shrink .mg-stat-v strong {
     font-size: calc(0.94rem + 0.18rem * (1 - var(--stats-shrink)));
@@ -6309,7 +6350,7 @@ span.smart-hero-nowcast-btn {
     height: 30px;
   }
   .mg-stats.shrink .mg-stat > svg,
-  .mg-stats.shrink .mg-stat-cloth,
+  .mg-stats.shrink .mg-stat-cloths,
   .mg-stats.shrink .mg-drops4,
   .mg-stats.shrink .mg-stat-missing {
     transform: scale(calc(0.82 + 0.1 * (1 - var(--stats-shrink))));
@@ -7651,6 +7692,9 @@ html.radar-open body {
   align-items: center;
   gap: 8px;
   opacity: calc(0.35 + 0.65 * var(--p));
+}
+.swipe-hint.is-off {
+  display: none;
 }
 .swipe-hint.left {
   left: 6px;
@@ -9023,5 +9067,616 @@ html.radar-open body {
   }
   .update-prompt-btn:hover {
     filter: brightness(1.08);
+  }
+}
+
+/* Počasí během roku (měsíční klimatický normál) */
+.climate-card {
+  container-type: inline-size;
+}
+.climate-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.climate-title {
+  margin: 0;
+  min-width: 0;
+}
+.climate-title-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  display: inline-flex;
+}
+.climate-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.climate-compare-lab {
+  display: none;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+@container (min-width: 480px) {
+  .climate-card:not(.compare) .climate-compare-btn {
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    padding: 0 11px 0 8px;
+    gap: 6px;
+  }
+  .climate-card:not(.compare) .climate-compare-lab {
+    display: inline;
+  }
+}
+.climate-cols-settings {
+  position: relative;
+  flex-shrink: 0;
+}
+.climate-cols-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 15.5rem;
+  padding: 10px 8px 8px;
+  border-radius: 14px;
+  background: rgba(var(--panel-rgb), 0.98);
+  border: 1px solid rgba(var(--ov-rgb), 0.12);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.climate-cols-menu .yr-settings-label {
+  padding: 0 8px 6px;
+}
+.climate-cols-menu .mg-view-toggle {
+  margin: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+.climate-cols-menu .mg-view-toggle > span:not(.mg-info) {
+  flex: 1;
+  min-width: 0;
+}
+.climate-cols-menu .mg-info {
+  margin-left: auto;
+  flex: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .climate-cols-menu .mg-view-toggle:hover {
+    background: rgba(var(--ov-rgb), 0.06);
+  }
+}
+.climate-compare-x {
+  appearance: none;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  opacity: 0.72;
+  border-radius: 6px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .climate-compare-x:hover {
+    opacity: 1;
+    background: rgba(var(--ov-rgb), 0.08);
+  }
+}
+.climate-table {
+  display: flex;
+  flex-direction: column;
+}
+.climate-cols,
+.climate-row {
+  display: grid;
+  grid-template-columns: minmax(3.2rem, max-content) var(
+      --climate-tracks,
+      3rem 3.2rem minmax(4.2rem, 1fr)
+    );
+  column-gap: 16px;
+  align-items: center;
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+  padding-left: var(--card-px);
+  padding-right: var(--card-px);
+}
+.climate-cols {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 2px;
+  padding-bottom: 6px;
+}
+.climate-h-temp,
+.climate-temp {
+  text-align: right;
+}
+.climate-h-mm,
+.climate-h-sun,
+.climate-h-rain,
+.climate-h-feel,
+.climate-mm,
+.climate-sun,
+.climate-rain,
+.climate-feel {
+  text-align: right;
+}
+.climate-row {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  --climate-row-py: 8px;
+  width: calc(100% + 2 * var(--card-px));
+  max-width: none;
+  text-align: left;
+  padding-top: var(--climate-row-py);
+  padding-bottom: var(--climate-row-py);
+  border-bottom: 1px solid rgba(var(--ov-rgb), 0.04);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.climate-row:last-of-type {
+  border-bottom: none;
+}
+.climate-skel .climate-row:last-of-type {
+  border-bottom: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .climate-row:hover {
+    background: rgba(var(--ov-rgb), 0.03);
+  }
+  .climate-card.compare .climate-scroll .climate-row:hover {
+    background: transparent;
+  }
+}
+.climate-row.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.climate-row.now {
+  box-shadow: inset 3px 0 0 rgba(255, 209, 102, 0.9);
+}
+.climate-row.now:not(.active) .climate-name {
+  color: var(--accent-warm);
+}
+.climate-name {
+  font-weight: 650;
+  font-size: 0.78rem;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.climate-name-full {
+  display: none;
+}
+.climate-temp {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+.climate-mm {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--accent);
+  line-height: 1;
+}
+.climate-mm strong {
+  font-style: normal;
+  line-height: 1;
+  color: var(--accent);
+}
+.climate-mm em {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.62rem;
+  color: var(--accent);
+  opacity: 0.72;
+}
+.climate-rain strong,
+.climate-rain em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.climate-sun {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--accent-warm);
+}
+.climate-rain {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--accent);
+}
+.climate-feel {
+  font-weight: 650;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.climate-h-sun,
+.climate-sun,
+.climate-h-feel,
+.climate-feel {
+  display: none;
+}
+.climate-card:not(.compare) .climate-h-temp,
+.climate-card:not(.compare) .climate-h-mm,
+.climate-card:not(.compare) .climate-h-sun,
+.climate-card:not(.compare) .climate-h-rain,
+.climate-card:not(.compare) .climate-h-feel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: calc(2 * 1.15em);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+.climate-card:not(.compare) .climate-sun,
+.climate-card:not(.compare) .climate-rain,
+.climate-card:not(.compare) .climate-feel {
+  display: flex;
+}
+.climate-loc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.climate-loc-name,
+.climate-loc-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.climate-loc-name {
+  appearance: none;
+  flex: 0 1 auto;
+  max-width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 1px 6px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .climate-loc-name:hover {
+    background: color-mix(in srgb, var(--accent) 26%, transparent);
+    text-decoration: none;
+  }
+}
+.climate-h-pair,
+.climate-side {
+  display: grid;
+  grid-template-columns: var(
+    --climate-tracks,
+    3rem 3rem 3.5rem minmax(4.8rem, 1fr)
+  );
+  column-gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+.climate-split {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-rows: auto repeat(12, auto);
+  margin-left: calc(-1 * var(--card-px));
+  margin-right: calc(-1 * var(--card-px));
+}
+.climate-frozen {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  grid-column: 1;
+  z-index: 2;
+  justify-items: stretch;
+  padding-left: var(--card-px);
+}
+.climate-frozen-h {
+  min-height: 0;
+}
+.climate-scroll {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  grid-column: 2;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-right: var(--card-px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--ov-rgb), 0.22) transparent;
+}
+.climate-card.compare .climate-table {
+  display: grid;
+  grid-template-columns: repeat(var(--climate-places, 2), max-content);
+  grid-template-rows: subgrid;
+  grid-row: 1 / -1;
+  column-gap: 0;
+  min-width: 100%;
+  width: max-content;
+}
+.climate-card.compare .climate-scroll .climate-cols,
+.climate-card.compare .climate-scroll .climate-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  column-gap: 0;
+  justify-items: stretch;
+  align-items: stretch;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+  width: auto;
+  min-width: 0;
+}
+.climate-card.compare .climate-cols {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.climate-card.compare .climate-row {
+  width: auto;
+  min-width: 0;
+}
+.climate-card.compare .climate-frozen .climate-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 1.25rem;
+}
+.climate-card.compare .climate-frozen .climate-row.now,
+.climate-card.compare .climate-scroll .climate-row.now {
+  box-shadow: none;
+}
+.climate-card.compare .climate-row.active {
+  background: transparent;
+  border-bottom-color: rgba(var(--ov-rgb), 0.04);
+}
+.climate-place-head {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  padding: 2px 16px 8px 6px;
+}
+.climate-card.compare .climate-h-pair,
+.climate-card.compare .climate-side {
+  display: grid;
+  column-gap: 16px;
+  align-items: center;
+  padding: 0;
+}
+.climate-card.compare .climate-side {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+  margin-top: calc(-1 * var(--climate-row-py, 8px));
+  margin-bottom: calc(-1 * var(--climate-row-py, 8px));
+  padding: var(--climate-row-py, 8px) 16px var(--climate-row-py, 8px) 6px;
+}
+.climate-card.compare .climate-side.climate-alike-src,
+.climate-card.compare .climate-side.climate-alike {
+  transition: background 0.18s ease;
+}
+.climate-card.compare .climate-side.climate-alike-src {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.climate-card.compare .climate-side.climate-alike {
+  background: color-mix(
+    in srgb,
+    var(--climate-alike) calc(7% + var(--alike, 0.5) * 18%),
+    transparent
+  );
+}
+.climate-card.compare .climate-frozen .climate-row.alike .climate-name {
+  color: color-mix(
+    in srgb,
+    var(--climate-alike) calc(36% + var(--alike, 0.5) * 50%),
+    var(--text)
+  );
+}
+.climate-alike-note {
+  margin: 12px 0 0;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.climate-alike-note strong {
+  color: var(--text);
+  font-weight: 650;
+}
+.climate-card.compare .climate-place-head.climate-side-b,
+.climate-card.compare .climate-side.climate-side-b {
+  border-left: 1px solid rgba(var(--ov-rgb), 0.12);
+  padding-left: 18px;
+  padding-right: 16px;
+}
+.climate-card.compare .climate-h-pair {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  align-items: end;
+}
+.climate-card.compare .climate-h-pair > span {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: calc(2 * 1.15em);
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+.climate-card.compare .climate-h-sun,
+.climate-card.compare .climate-h-rain,
+.climate-card.compare .climate-h-feel,
+.climate-card.compare .climate-feel {
+  display: flex;
+}
+.climate-card.compare .climate-sun,
+.climate-card.compare .climate-rain {
+  display: flex;
+}
+.climate-extra {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(var(--ov-rgb), 0.06);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.climate-extra-cmp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.climate-extra-cmp p {
+  margin: 0;
+}
+.climate-extra-when {
+  font-weight: 650;
+  color: var(--text);
+}
+.climate-extra-cmp strong {
+  color: var(--text);
+  font-weight: 650;
+}
+.climate-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.climate-skel {
+  pointer-events: none;
+}
+.climate-skel .skel-line {
+  justify-self: stretch;
+}
+@container (min-width: 340px) {
+  .climate-card.compare .climate-scroll .climate-cols,
+  .climate-card.compare .climate-scroll .climate-row {
+    grid-template-columns: subgrid;
+  }
+}
+@container (min-width: 420px) {
+  .climate-name-short {
+    display: none;
+  }
+  .climate-name-full {
+    display: inline;
+  }
+  .climate-card:not(.compare) .climate-cols,
+  .climate-card:not(.compare) .climate-row {
+    grid-template-columns: minmax(6.4rem, 8.6rem) var(--climate-tracks);
+  }
+  .climate-card.compare .climate-scroll .climate-cols,
+  .climate-card.compare .climate-scroll .climate-row {
+    grid-template-columns: subgrid;
+  }
+}
+@media (max-width: 420px) {
+  .climate-cols,
+  .climate-row {
+    column-gap: 12px;
+  }
+  .climate-card.compare .climate-scroll .climate-cols,
+  .climate-card.compare .climate-scroll .climate-row {
+    grid-template-columns: subgrid;
+  }
+  .climate-card.compare .climate-h-pair,
+  .climate-card.compare .climate-side {
+    column-gap: 12px;
+  }
+  .climate-place-head {
+    padding: 2px 10px 6px 4px;
+  }
+  .climate-card.compare .climate-side {
+    padding-left: 4px;
+    padding-right: 10px;
+  }
+  .climate-card.compare .climate-place-head.climate-side-b,
+  .climate-card.compare .climate-side.climate-side-b {
+    padding-left: 12px;
+    padding-right: 10px;
   }
 }

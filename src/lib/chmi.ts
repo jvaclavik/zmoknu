@@ -1,4 +1,5 @@
 import type { RadarData, RadarFrame } from "../types";
+import { isLowMemoryClient } from "./lowMemory";
 
 // Radarová síť CZRAD (ČHMÚ) – sloučený snímek maximální odrazivosti.
 // Snímky jsou georeferencované PNG v projekci EPSG:3857 (kompatibilní s OSM).
@@ -35,43 +36,98 @@ function isPng(buf: ArrayBuffer): boolean {
   return u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47;
 }
 
+let decodeActive = 0;
+const decodeWait: Array<() => void> = [];
+
+function acquireDecode(): Promise<void> {
+  const max = isLowMemoryClient() ? 2 : 4;
+  if (decodeActive < max) {
+    decodeActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => decodeWait.push(resolve));
+}
+
+function releaseDecode() {
+  const next = decodeWait.shift();
+  if (next) next();
+  else decodeActive--;
+}
+
+function capUrlCache() {
+  const max = isLowMemoryClient() ? 20 : 80;
+  while (urlCache.size > max) {
+    const first = urlCache.keys().next().value;
+    if (first == null) break;
+    const url = urlCache.get(first);
+    if (url) URL.revokeObjectURL(url);
+    urlCache.delete(first);
+  }
+}
+
 // Paletové PNG + tRNS MapLibre přes createImageBitmap nenačte. Překreslíme
 // do RGBA a MapLibre dostane blob URL obyčejného PNG.
 async function rgbaPngUrl(path: string): Promise<string> {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`chmi frame ${path} ${res.status}`);
-  const buf = await res.arrayBuffer();
-  if (!isPng(buf)) throw new Error("chmi frame not png");
-  const src = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
+  await acquireDecode();
+  const canvas = document.createElement("canvas");
+  const srcBlob = { url: "" };
   try {
-    const img = await loadImgEl(src);
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`chmi frame ${path} ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (!isPng(buf)) throw new Error("chmi frame not png");
+    srcBlob.url = URL.createObjectURL(new Blob([buf], { type: "image/png" }));
+    const img = await loadImgEl(srcBlob.url);
     if (!img.naturalWidth || !img.naturalHeight) throw new Error("empty frame");
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+    const maxEdge = isLowMemoryClient() ? 1024 : 0;
+    if (maxEdge > 0) {
+      const edge = Math.max(w, h);
+      if (edge > maxEdge) {
+        const s = maxEdge / edge;
+        w = Math.max(1, Math.round(w * s));
+        h = Math.max(1, Math.round(h * s));
+      }
+    }
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d ctx");
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, w, h);
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/png");
     });
     return URL.createObjectURL(blob);
   } finally {
-    URL.revokeObjectURL(src);
+    canvas.width = 1;
+    canvas.height = 1;
+    if (srcBlob.url) URL.revokeObjectURL(srcBlob.url);
+    releaseDecode();
   }
 }
 
 const urlCache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
-export function chmiDisplayUrl(path: string): Promise<string> {
+export function peekChmiDisplayUrl(path: string): string | undefined {
   const hit = urlCache.get(path);
+  if (!hit) return undefined;
+  urlCache.delete(path);
+  urlCache.set(path, hit);
+  return hit;
+}
+
+export function chmiDisplayUrl(path: string): Promise<string> {
+  const hit = peekChmiDisplayUrl(path);
   if (hit) return Promise.resolve(hit);
   const pending = inflight.get(path);
   if (pending) return pending;
   const job = rgbaPngUrl(path)
     .then((url) => {
+      urlCache.delete(path);
       urlCache.set(path, url);
+      capUrlCache();
       return url;
     })
     .finally(() => {
