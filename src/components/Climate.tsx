@@ -385,6 +385,7 @@ export default function Climate({
   const [colsOpen, setColsOpen] = useState(false);
   const colsRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   const compareCols = useMemo(
     () => sanitizeCompareCols(storedCols),
@@ -581,6 +582,51 @@ export default function Climate({
       window.removeEventListener("resize", schedule);
     };
   }, [comparing, placeCount, compareTracks, rows]);
+
+  // iOS u overflow na subgridu nativně nescrolluje; vodorovné tažení proto
+  // posouvá scrollLeft ručně, svislé necháme stránce.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !rows) return;
+    let axis: "pending" | "x" | "y" | null = null;
+    let x0 = 0;
+    let y0 = 0;
+    let left0 = 0;
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+      axis = "pending";
+      x0 = e.touches[0].clientX;
+      y0 = e.touches[0].clientY;
+      left0 = el.scrollLeft;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!axis || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - x0;
+      const dy = e.touches[0].clientY - y0;
+      if (axis === "pending") {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        axis = Math.abs(dx) > Math.abs(dy) * 1.1 ? "x" : "y";
+      }
+      if (axis !== "x") return;
+      if (e.cancelable) e.preventDefault();
+      const max = el.scrollWidth - el.clientWidth;
+      el.scrollLeft = Math.max(0, Math.min(max, left0 - dx));
+    };
+    const onEnd = () => {
+      axis = null;
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [rows, comparing, compareTracks, placeCount]);
   const current = rows?.find((r) => r.month === selected) ?? null;
   const extraHide = useMemo(() => new Set(compareCols), [compareCols]);
   const otherFailed = compareList.some((loc) => others[placeKey(loc)]?.failed);
@@ -683,9 +729,7 @@ export default function Climate({
         {
           "--climate-tracks": compareTracks,
           "--climate-n": String(compareCols.length),
-          ...(comparing
-            ? { "--climate-places": String(placeCount) }
-            : {}),
+          ...(comparing ? { "--climate-places": String(placeCount) } : {}),
         } as CSSProperties
       }
     >
@@ -709,14 +753,10 @@ export default function Climate({
               className="mg-view-btn climate-compare-btn"
               onClick={() => openPicker(null)}
               aria-label={
-                comparing
-                  ? tr("Přidat místo ke srovnání")
-                  : tr("Porovnat")
+                comparing ? tr("Přidat místo ke srovnání") : tr("Porovnat")
               }
               title={
-                comparing
-                  ? tr("Přidat místo ke srovnání")
-                  : tr("Porovnat")
+                comparing ? tr("Přidat místo ke srovnání") : tr("Porovnat")
               }
             >
               <PlusGlyph />
@@ -818,7 +858,7 @@ export default function Climate({
         </div>
       )}
 
-      {rows && comparing && (
+      {rows && (
         <div className="climate-split">
           <div className="climate-frozen" aria-hidden="true">
             <div className="climate-frozen-h" />
@@ -840,7 +880,11 @@ export default function Climate({
                       ? ({ ["--alike"]: String(alikeN) } as CSSProperties)
                       : undefined
                   }
-                  onClick={() => pickCluster(srcKey, r.month)}
+                  onClick={() =>
+                    comparing
+                      ? pickCluster(srcKey, r.month)
+                      : selectMonth(r.month)
+                  }
                 >
                   <span className="climate-name">
                     <span className="climate-name-short">
@@ -854,34 +898,42 @@ export default function Climate({
               );
             })}
           </div>
-          <div className="climate-scroll">
+          <div className="climate-scroll" ref={scrollRef}>
             <div
               className="climate-table"
               role="listbox"
               aria-label={tr("Vybrat měsíc")}
             >
-              <div className="climate-cols">
-                <PlaceClusterHead
-                  loc={location}
-                  cols={compareCols}
-                  onChange={() => {
-                    setPickerOpen(false);
-                    setReplaceIndex(null);
-                    setColsOpen(false);
-                    onChangeLocation();
-                  }}
-                />
-                {compareList.map((loc, i) => (
+              {comparing ? (
+                <div className="climate-cols">
                   <PlaceClusterHead
-                    key={placeKey(loc)}
-                    loc={loc}
+                    loc={location}
                     cols={compareCols}
-                    other
-                    onChange={() => openPicker(i)}
-                    onRemove={() => removeCompare(i)}
+                    onChange={() => {
+                      setPickerOpen(false);
+                      setReplaceIndex(null);
+                      setColsOpen(false);
+                      onChangeLocation();
+                    }}
                   />
-                ))}
-              </div>
+                  {compareList.map((loc, i) => (
+                    <PlaceClusterHead
+                      key={placeKey(loc)}
+                      loc={loc}
+                      cols={compareCols}
+                      other
+                      onChange={() => openPicker(i)}
+                      onRemove={() => removeCompare(i)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="climate-cols" aria-hidden="true">
+                  {compareCols.map((id) => (
+                    <ColHead key={id} id={id} />
+                  ))}
+                </div>
+              )}
               {rows.map((r) => {
                 const active = r.month === selected;
                 const isNow = r.month === nowMonth;
@@ -895,45 +947,63 @@ export default function Climate({
                     className={`climate-row${active ? " active" : ""}${
                       isNow ? " now" : ""
                     }`}
-                    onClick={() => pickCluster(srcKey, r.month)}
+                    onClick={() =>
+                      comparing
+                        ? pickCluster(srcKey, r.month)
+                        : selectMonth(r.month)
+                    }
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        pickCluster(srcKey, r.month);
+                        comparing
+                          ? pickCluster(srcKey, r.month)
+                          : selectMonth(r.month);
                       }
                     }}
                   >
-                    <PlacePair
-                      cols={compareCols}
-                      row={r}
-                      {...pairAlike(hereKey, r.month)}
-                      onPick={() => pickCluster(hereKey, r.month)}
-                    />
-                    {compareList.map((loc) => {
-                      const k = placeKey(loc);
-                      const load = others[k];
-                      if (!load || load.loading) {
-                        return (
-                          <span key={k} className="climate-side climate-side-b">
-                            {compareCols.map((id) => (
-                              <span key={id} className="skel skel-line sm" />
-                            ))}
-                          </span>
-                        );
-                      }
-                      const otherRow =
-                        load.rows?.find((o) => o.month === r.month) ?? null;
-                      return (
+                    {comparing ? (
+                      <>
                         <PlacePair
-                          key={k}
                           cols={compareCols}
-                          row={otherRow}
-                          other
-                          {...pairAlike(k, r.month)}
-                          onPick={() => pickCluster(k, r.month)}
+                          row={r}
+                          {...pairAlike(hereKey, r.month)}
+                          onPick={() => pickCluster(hereKey, r.month)}
                         />
-                      );
-                    })}
+                        {compareList.map((loc) => {
+                          const k = placeKey(loc);
+                          const load = others[k];
+                          if (!load || load.loading) {
+                            return (
+                              <span
+                                key={k}
+                                className="climate-side climate-side-b"
+                              >
+                                {compareCols.map((id) => (
+                                  <span
+                                    key={id}
+                                    className="skel skel-line sm"
+                                  />
+                                ))}
+                              </span>
+                            );
+                          }
+                          const otherRow =
+                            load.rows?.find((o) => o.month === r.month) ?? null;
+                          return (
+                            <PlacePair
+                              key={k}
+                              cols={compareCols}
+                              row={otherRow}
+                              other
+                              {...pairAlike(k, r.month)}
+                              onPick={() => pickCluster(k, r.month)}
+                            />
+                          );
+                        })}
+                      </>
+                    ) : (
+                      compareCols.map((id) => compareCell(id, r))
+                    )}
                   </div>
                 );
               })}
@@ -954,47 +1024,6 @@ export default function Climate({
             }))
             .filter((m) => m.months.length)}
         />
-      )}
-
-      {rows && !comparing && (
-        <div
-          className="climate-table"
-          role="listbox"
-          aria-label={tr("Vybrat měsíc")}
-        >
-          <div className="climate-cols" aria-hidden="true">
-            <span />
-            {compareCols.map((id) => (
-              <ColHead key={id} id={id} />
-            ))}
-          </div>
-          {rows.map((r) => {
-            const active = r.month === selected;
-            const isNow = r.month === nowMonth;
-            return (
-              <button
-                key={r.month}
-                type="button"
-                role="option"
-                aria-selected={active}
-                className={`climate-row${active ? " active" : ""}${
-                  isNow ? " now" : ""
-                }`}
-                onClick={() => selectMonth(r.month)}
-              >
-                <span className="climate-name">
-                  <span className="climate-name-short">
-                    {monthShort(r.month)}
-                  </span>
-                  <span className="climate-name-full">
-                    {monthLong(r.month)}
-                  </span>
-                </span>
-                {compareCols.map((id) => compareCell(id, r))}
-              </button>
-            );
-          })}
-        </div>
       )}
 
       {current && !here.loading && (

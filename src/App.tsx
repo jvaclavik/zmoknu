@@ -38,6 +38,7 @@ import WhatToWear from "./components/WhatToWear";
 import { fetchAirQuality, type AirByDate } from "./lib/airQuality";
 import { dayHeader, isoDate, locDate, todayISO } from "./lib/format";
 import { tr, useLang } from "./lib/i18n";
+import { isLowMemoryClient } from "./lib/lowMemory";
 import { DEFAULT_MODEL, modelLabel, WEATHER_MODELS } from "./lib/models";
 import { runAlertChecks } from "./lib/notify";
 import {
@@ -47,7 +48,6 @@ import {
   saveOfflineForecast,
   type SavedForecast,
 } from "./lib/openMeteo";
-import { isLowMemoryClient } from "./lib/lowMemory";
 import { fetchRadar } from "./lib/rainviewer";
 import { setThemePalette } from "./lib/themeState";
 import { tempTier, tierColor } from "./lib/tiers";
@@ -788,6 +788,7 @@ export default function App() {
       ".mg-view-menu",
       ".dbg-modal",
       ".webcams-scroll",
+      ".climate-split",
       ".mg-compare-legend-wrap",
       ".dd-daylight-plot",
       "input[type='range']",
@@ -1492,15 +1493,15 @@ export default function App() {
           <RefreshGlyph />
         </span>
         <span className="ptr-label">
-          {refreshing
-            ? tr("Obnovuji…")
-            : fetchedAt != null
-            ? (
-                <>
-                  {tr("Aktualizováno")} <RelUpdated from={fetchedAt} />
-                </>
-              )
-            : ""}
+          {refreshing ? (
+            tr("Obnovuji…")
+          ) : fetchedAt != null ? (
+            <>
+              {tr("Aktualizováno")} <RelUpdated from={fetchedAt} />
+            </>
+          ) : (
+            ""
+          )}
         </span>
       </div>
       <div ref={swipeHintRef} className="swipe-hint is-off" aria-hidden="true">
