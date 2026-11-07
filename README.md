@@ -21,6 +21,15 @@ Postavená v Reactu + Vite, připravená k nasazení na **Vercel**.
 
 ## Spuštění lokálně
 
+Projekt používá Node.js 26. Je doporučeno použít [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+nvm install
+nvm use
+```
+
+Pro instalaci závislostí používej npm:
+
 ```bash
 npm install
 npm run dev
